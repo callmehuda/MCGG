@@ -10,8 +10,9 @@ event, collection, and string layouts are kept in
 
 `jni/Main.cpp` contains the process gate, setup thread, IL2CPP helpers, feature
 binding resolver, runtime caches, Dobby hooks, ImGui rendering, and feature
-logic. Keep feature work in this file unless the user explicitly requests a
-multi-file refactor.
+logic. It also owns the Info, Combat, Appearance, Settings, Shop, Arena, and
+Test overlay tabs. Keep feature work in this file unless the user explicitly
+requests a multi-file refactor.
 
 `dump/dump.cs` is the IL2CPP signature reference. Use it before changing native
 method pointers, hook signatures, value-type layouts, or field offsets.
@@ -38,6 +39,9 @@ ndk-build -C jni
 ```
 
 Builds the native `main` module and outputs `libs/arm64-v8a/libmain.so`.
+The current build uses ABI `arm64-v8a`, platform `android-21`, STL
+`c++_static`, optimization `release`, thin archives disabled, PIE enabled, and
+C++ mode `c++26`.
 
 ## Coding Style & Naming Conventions
 
@@ -48,9 +52,10 @@ the `UNITY_` prefix. Prefer `void*` for managed object instances unless a local
 structure layout is required.
 
 Keep runtime sections clear and local: IL2CPP resolution, managed reference
-refresh, table caches, feature ticks, hooks, and ImGui tabs should remain easy
-to scan. Add concise comments for risky IL2CPP calls or value-type assumptions,
-not for obvious control flow.
+refresh, table caches, appearance setup, Settings persistence, feature ticks,
+hooks, test diagnostics, and ImGui tabs should remain easy to scan. Add concise
+comments for risky IL2CPP calls or value-type assumptions, not for obvious
+control flow.
 
 Do not convert retryable lookups into one-shot failures. Method and field
 resolution can happen before the target metadata is ready, so missing entries
@@ -67,7 +72,8 @@ ndk-build -C jni
 ```
 
 When changing IL2CPP calls, verify signatures against `dump/dump.cs` and confirm
-the target remains `arm64-v8a` and Unity `2019.4.22f1`.
+the target remains `arm64-v8a`, Unity `2019.4.22f1`, and native C++ mode
+`c++26`.
 
 For documentation-only changes, at minimum inspect the rendered Markdown diff.
 For native or mixed changes, also run:
@@ -92,6 +98,10 @@ Keep changes scoped. Do not modify vendored directories such as
 `jni/Il2CppVersions/`, `jni/imgui/`, or `jni/xDL/` unless explicitly requested.
 Do not revert unrelated local changes in the working tree.
 
-Current user-facing feature areas are Info, Combat, Shop, and Arena. If a
-feature binding is missing at runtime, the overlay should show a `Waiting for
-...` state rather than failing silently.
+Current user-facing feature areas are Info, Combat, Appearance, Settings, Shop,
+Arena, and Test. If a feature binding is missing at runtime, the overlay should
+show a `Waiting for ...` state rather than failing silently. Use the Runtime
+Status and Test tabs when checking binding readiness, managed references, round
+state, battle manager fields, behavior API state, or opponent prediction logic.
+Settings config should default to the running game package directory as
+`/data/data/<game-package>/files/mcgg_config.ini`.

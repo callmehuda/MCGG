@@ -55,19 +55,35 @@ The default supported target is:
 - Unity version: `2019.4.22f1`
 - Android NDK: `r29`
 - Build system: `ndk-build`
+- C++ standard: `c++26`
 - Primary branch: `master`
+- Current overlay tabs: Info, Combat, Appearance, Settings, Shop, Arena, and Test
 
 ## Features
 
 ### Info
 
-- Player table and next-enemy table.
+- Runtime status table for battle data, GGC, shop, arena, test, spectator, synergy, and placement bindings.
+- Player and next-enemy table sorted with the local player first.
 - GGC quality readout for round 7 and round 13.
 - Overlay status indicators for delayed or unavailable bindings.
 
 ### Combat
 
 - Invisible Scout toggle.
+
+### Appearance
+
+- ImGui Dark and Catppuccin Mocha theme selector.
+- Default font and optional Roboto font selector.
+- Font readiness status when `Roboto-Medium.ttf` is unavailable from the ImGui font directory.
+
+### Settings
+
+- Menu size, optional fixed position, and window interaction controls.
+- Font scale, opacity, rounding, border, padding, spacing, scrollbar, and indentation controls.
+- Save and load for visual settings plus Combat, Shop, and Arena state.
+- Default config path under the running game package, resolved as `/data/data/<game-package>/files/mcgg_config.ini`.
 
 ### Shop
 
@@ -88,6 +104,13 @@ The default supported target is:
 - Enemy HP 1 helper.
 - Gold grant helper.
 
+### Test
+
+- Manual binding retry and managed reference refresh controls.
+- Account inspection by self, opponent, or explicit account ID.
+- Fight prediction table with direct, manager-derived, invasion-pair, and round-robin signals.
+- Runtime readouts for round state, battle manager fields, behavior API state, and all manager entries.
+
 Feature bindings are resolved against local reference artifacts and runtime IL2CPP metadata. Missing methods and fields are retried periodically instead of being permanently cached as unavailable. When a binding is not ready, the overlay reports a `Waiting for ...` state.
 
 ## Architecture
@@ -102,6 +125,8 @@ At a high level, the project contains:
 - Dobby-based function hook integration.
 - Dear ImGui rendering through OpenGL ES.
 - Unity touch input forwarding into ImGui mouse input.
+- Runtime appearance setup with disabled ImGui `.ini` persistence.
+- Project-owned configuration persistence for overlay and feature state.
 - Local reference artifacts used for method, field, and type signature validation.
 
 The project keeps most feature logic in `jni/Main.cpp` to make native entry points, runtime state, and retry behavior easy to inspect. Broader refactors should preserve the existing binding lifecycle unless the refactor explicitly changes that design.
@@ -220,6 +245,15 @@ The active Android target is configured in `jni/Application.mk`:
 APP_ABI := arm64-v8a
 APP_PLATFORM := android-21
 APP_STL := c++_static
+APP_OPTIM := release
+APP_THIN_ARCHIVE := false
+APP_PIE := true
+```
+
+The active C++ language mode is configured in `jni/Android.mk`:
+
+```make
+-std=c++26
 ```
 
 Unity compatibility defines are configured in `jni/Android.mk`:
@@ -243,14 +277,17 @@ At load time and during frame presentation, `jni/Main.cpp` performs the followin
 4. Resolves IL2CPP API exports.
 5. Attaches the native thread to the IL2CPP domain.
 6. Hooks `eglSwapBuffers`.
-7. Renders the ImGui overlay during frame presentation.
-8. Hooks `UnityEngine.Input.GetTouch`.
-9. Forwards Unity touch input into ImGui mouse input.
-10. Resolves feature methods and fields through `ResolveFeatureBindings()`.
-11. Retries missing method and field bindings periodically.
-12. Refreshes managed references such as battle bridge and shop panel state.
-13. Reloads hero, equipment, and GogoCard table caches when entering a match.
-14. Runs shop automation and arena effects on separate 100 ms ticks.
+7. Creates the ImGui context and resolves the config path from the game package name.
+8. Loads saved project configuration when the config file exists.
+9. Loads appearance fonts and applies the selected theme and style settings.
+10. Renders the ImGui overlay during frame presentation.
+11. Hooks `UnityEngine.Input.GetTouch`.
+12. Forwards Unity touch input into ImGui mouse input.
+13. Resolves feature methods and fields through `ResolveFeatureBindings()`.
+14. Retries missing method and field bindings periodically.
+15. Refreshes managed references such as battle bridge and shop panel state.
+16. Reloads hero, equipment, and GogoCard table caches when entering a match.
+17. Runs shop automation and arena effects on separate 100 ms ticks.
 
 This order is intentional. Rendering and input are initialized separately from feature binding so the overlay can report partial runtime readiness while delayed IL2CPP objects continue to resolve.
 
@@ -260,10 +297,13 @@ This order is intentional. Rendering and input are initialized separately from f
 - Validate class names, method names, parameter counts, return types, and field layouts against local reference artifacts before adding IL2CPP calls.
 - Keep feature runtime code in `jni/Main.cpp` unless a refactor is explicitly requested.
 - Use clear local sections and concise comments around risky IL2CPP calls.
+- Use the Runtime Status and Test tabs when validating new bindings or investigating delayed runtime state.
+- Keep Settings persistence scoped to project-owned config files rather than enabling ImGui `.ini` persistence.
 - Preserve retryable binding behavior. Do not permanently cache unresolved methods or fields as missing.
 - Preserve separate 100 ms ticks for shop automation and arena effects unless timing changes are part of the task.
 - Keep the default ABI as `arm64-v8a`.
 - Keep Unity compatibility aligned with `2019.4.22f1`.
+- Keep the native language mode aligned with `c++26` unless the build configuration changes intentionally.
 - Do not commit generated `obj/` or `libs/` output.
 - Avoid adding runtime deployment or abuse-oriented instructions to project documentation.
 
@@ -330,6 +370,14 @@ When adding or updating a binding, verify:
 - Static versus instance access.
 - Whether the object exists only inside a match or specific UI state.
 
+### Roboto font is unavailable
+
+The Appearance tab falls back to the default ImGui font when `jni/imgui/misc/fonts/Roboto-Medium.ttf` cannot be read. This does not block the overlay or native build.
+
+### Configuration does not save or load
+
+The default config path is resolved from the running game process and stored as `/data/data/<game-package>/files/mcgg_config.ini`. If the Settings tab reports a save or load failure, check that the process can read and write the game app data directory.
+
 ### CI build failed
 
 Check the GitHub Actions log for:
@@ -346,6 +394,7 @@ Check the GitHub Actions log for:
 - Unity compatibility is pinned to `2019.4.22f1`.
 - Runtime bindings may change when the target application updates.
 - Feature availability depends on current runtime state and loaded managed objects.
+- The optional Roboto font depends on the checked-out ImGui submodule contents.
 - Termux is not maintained as an official build target.
 - Documentation intentionally excludes runtime deployment and abuse-oriented instructions.
 

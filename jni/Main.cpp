@@ -1,7 +1,9 @@
 #include <jni.h>
+#include <errno.h>
 #include <dlfcn.h>
 #include <EGL/egl.h>
 #include <GLES3/gl3.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -178,9 +180,35 @@ namespace UiState {
     std::string ArenaItemFilter;
     std::string ArenaGogoCardFilter;
     std::string TestAccountId;
+    std::string ConfigPath;
+    std::string ConfigStatus;
     int ThemeIndex = 1;
     int FontIndex = 1;
     bool ShopShowSelectedOnly = false;
+    bool MoveFromTitleBarOnly = true;
+    bool ResizeFromEdges = false;
+    bool UseFixedMenuPosition = false;
+    float MenuWidth = 760.0f;
+    float MenuHeight = 560.0f;
+    float MenuPosX = 20.0f;
+    float MenuPosY = 20.0f;
+    float FontScale = 1.0f;
+    float WindowAlpha = 1.0f;
+    float WindowRounding = 7.0f;
+    float ChildRounding = 6.0f;
+    float FrameRounding = 5.0f;
+    float PopupRounding = 6.0f;
+    float ScrollbarRounding = 6.0f;
+    float GrabRounding = 5.0f;
+    float TabRounding = 5.0f;
+    float ScrollbarSize = 14.0f;
+    float WindowBorderSize = 1.0f;
+    float FrameBorderSize = 0.0f;
+    float FramePaddingX = 4.0f;
+    float FramePaddingY = 3.0f;
+    float ItemSpacingX = 8.0f;
+    float ItemSpacingY = 4.0f;
+    float IndentSpacing = 21.0f;
 }
 
 namespace AppearanceState {
@@ -2543,6 +2571,474 @@ ImVec4 HexColor(unsigned int rgb, float alpha = 1.0f) {
     );
 }
 
+std::string TrimString(const std::string& value) {
+    size_t start = 0;
+    while (start < value.size() &&
+           std::isspace(static_cast<unsigned char>(value[start]))) {
+        ++start;
+    }
+
+    size_t end = value.size();
+    while (end > start &&
+           std::isspace(static_cast<unsigned char>(value[end - 1]))) {
+        --end;
+    }
+
+    return value.substr(start, end - start);
+}
+
+std::string LowerString(std::string value) {
+    std::transform(
+        value.begin(),
+        value.end(),
+        value.begin(),
+        [](unsigned char ch) {
+            return static_cast<char>(std::tolower(ch));
+        }
+    );
+    return value;
+}
+
+bool ParseConfigBool(const std::string& value, bool fallback) {
+    std::string lower = LowerString(TrimString(value));
+
+    if (lower == "1" || lower == "true" || lower == "yes" || lower == "on") {
+        return true;
+    }
+
+    if (lower == "0" || lower == "false" || lower == "no" || lower == "off") {
+        return false;
+    }
+
+    return fallback;
+}
+
+int ParseConfigInt(const std::string& value, int fallback) {
+    char* end = nullptr;
+    long parsed = strtol(value.c_str(), &end, 10);
+
+    if (end == value.c_str()) {
+        return fallback;
+    }
+
+    return static_cast<int>(parsed);
+}
+
+float ParseConfigFloat(const std::string& value, float fallback) {
+    char* end = nullptr;
+    float parsed = strtof(value.c_str(), &end);
+
+    if (end == value.c_str()) {
+        return fallback;
+    }
+
+    return parsed;
+}
+
+void ClampConfigurableState() {
+    UiState::ThemeIndex = std::clamp(UiState::ThemeIndex, 0, 1);
+    UiState::FontIndex = std::clamp(UiState::FontIndex, 0, 1);
+    UiState::MenuWidth = std::clamp(UiState::MenuWidth, 360.0f, 1600.0f);
+    UiState::MenuHeight = std::clamp(UiState::MenuHeight, 280.0f, 1200.0f);
+    UiState::MenuPosX = std::clamp(UiState::MenuPosX, -2000.0f, 4000.0f);
+    UiState::MenuPosY = std::clamp(UiState::MenuPosY, -2000.0f, 4000.0f);
+    UiState::FontScale = std::clamp(UiState::FontScale, 0.65f, 2.0f);
+    UiState::WindowAlpha = std::clamp(UiState::WindowAlpha, 0.35f, 1.0f);
+    UiState::WindowRounding = std::clamp(UiState::WindowRounding, 0.0f, 20.0f);
+    UiState::ChildRounding = std::clamp(UiState::ChildRounding, 0.0f, 20.0f);
+    UiState::FrameRounding = std::clamp(UiState::FrameRounding, 0.0f, 20.0f);
+    UiState::PopupRounding = std::clamp(UiState::PopupRounding, 0.0f, 20.0f);
+    UiState::ScrollbarRounding = std::clamp(UiState::ScrollbarRounding, 0.0f, 20.0f);
+    UiState::GrabRounding = std::clamp(UiState::GrabRounding, 0.0f, 20.0f);
+    UiState::TabRounding = std::clamp(UiState::TabRounding, 0.0f, 20.0f);
+    UiState::ScrollbarSize = std::clamp(UiState::ScrollbarSize, 8.0f, 32.0f);
+    UiState::WindowBorderSize = std::clamp(UiState::WindowBorderSize, 0.0f, 4.0f);
+    UiState::FrameBorderSize = std::clamp(UiState::FrameBorderSize, 0.0f, 4.0f);
+    UiState::FramePaddingX = std::clamp(UiState::FramePaddingX, 0.0f, 24.0f);
+    UiState::FramePaddingY = std::clamp(UiState::FramePaddingY, 0.0f, 24.0f);
+    UiState::ItemSpacingX = std::clamp(UiState::ItemSpacingX, 0.0f, 32.0f);
+    UiState::ItemSpacingY = std::clamp(UiState::ItemSpacingY, 0.0f, 32.0f);
+    UiState::IndentSpacing = std::clamp(UiState::IndentSpacing, 0.0f, 48.0f);
+    FeatureState::ShopKeepGoldAt = std::max(0, FeatureState::ShopKeepGoldAt);
+    FeatureState::ArenaHeroStar = std::clamp(FeatureState::ArenaHeroStar, 1, 3);
+}
+
+void ResetVisualSettings() {
+    UiState::ThemeIndex = 1;
+    UiState::FontIndex = AppearanceState::RobotoFont ? 1 : 0;
+    UiState::MoveFromTitleBarOnly = true;
+    UiState::ResizeFromEdges = false;
+    UiState::UseFixedMenuPosition = false;
+    UiState::MenuWidth = 760.0f;
+    UiState::MenuHeight = 560.0f;
+    UiState::MenuPosX = 20.0f;
+    UiState::MenuPosY = 20.0f;
+    UiState::FontScale = 1.0f;
+    UiState::WindowAlpha = 1.0f;
+    UiState::WindowRounding = 7.0f;
+    UiState::ChildRounding = 6.0f;
+    UiState::FrameRounding = 5.0f;
+    UiState::PopupRounding = 6.0f;
+    UiState::ScrollbarRounding = 6.0f;
+    UiState::GrabRounding = 5.0f;
+    UiState::TabRounding = 5.0f;
+    UiState::ScrollbarSize = 14.0f;
+    UiState::WindowBorderSize = 1.0f;
+    UiState::FrameBorderSize = 0.0f;
+    UiState::FramePaddingX = 4.0f;
+    UiState::FramePaddingY = 3.0f;
+    UiState::ItemSpacingX = 8.0f;
+    UiState::ItemSpacingY = 4.0f;
+    UiState::IndentSpacing = 21.0f;
+    AppearanceState::AppliedThemeIndex = -1;
+}
+
+void ResetFeatureSettings() {
+    FeatureState::CombatInvisibleScout = false;
+    FeatureState::ShopBuyFreeHero = false;
+    FeatureState::ShopBuySelectedHero = false;
+    FeatureState::ShopRefresh = false;
+    FeatureState::ShopStopRefreshAtFreeHero = false;
+    FeatureState::ShopStopRefreshAtSelectedHero = false;
+    FeatureState::ShopKeepGold = false;
+    FeatureState::ShopKeepGoldAt = 20;
+    FeatureState::ShopSelectedHeroes.clear();
+    FeatureState::ArenaHeroStar = 1;
+    FeatureState::ArenaItemEnhanced = false;
+    FeatureState::ArenaGogoCardEnabled = false;
+    FeatureState::ArenaGogoCardSelected1 = -1;
+    FeatureState::ArenaGogoCardSelected2 = -1;
+    FeatureState::ArenaForceActiveSynergy = false;
+    FeatureState::ArenaForceLevel99 = false;
+    FeatureState::ArenaOutsideMapPlacement = false;
+    FeatureState::ArenaAllEnemyHpOne = false;
+    FeatureState::ArenaPrice = 5;
+}
+
+bool EnsureDirectoryPath(const std::string& directory) {
+    if (directory.empty()) {
+        return true;
+    }
+
+    for (size_t i = 1; i <= directory.size(); ++i) {
+        if (i < directory.size() && directory[i] != '/') {
+            continue;
+        }
+
+        std::string partial = directory.substr(0, i);
+        if (partial.empty()) {
+            continue;
+        }
+
+        if (access(partial.c_str(), F_OK) == 0) {
+            continue;
+        }
+
+        if (mkdir(partial.c_str(), 0775) != 0 && errno != EEXIST) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool EnsureParentDirectory(const std::string& path) {
+    size_t slash = path.find_last_of('/');
+
+    if (slash == std::string::npos || slash == 0) {
+        return true;
+    }
+
+    return EnsureDirectoryPath(path.substr(0, slash));
+}
+
+std::string GetCurrentProcessName() {
+    FILE* file = fopen("/proc/self/cmdline", "r");
+    if (!file) {
+        return {};
+    }
+
+    char buffer[1024];
+    size_t length = fread(buffer, 1, sizeof(buffer) - 1, file);
+    fclose(file);
+
+    if (length == 0) {
+        return {};
+    }
+
+    buffer[length] = '\0';
+    return std::string(buffer);
+}
+
+std::string GetGamePackageName() {
+    std::string processName = GetCurrentProcessName();
+    size_t suffix = processName.find(':');
+
+    if (suffix != std::string::npos) {
+        processName.resize(suffix);
+    }
+
+    return processName;
+}
+
+std::string GetDefaultConfigPath() {
+    std::string packageName = GetGamePackageName();
+
+    if (packageName.empty()) {
+        return "mcgg_config.ini";
+    }
+
+    return "/data/data/" + packageName + "/files/mcgg_config.ini";
+}
+
+void EnsureConfigPathInitialized() {
+    if (UiState::ConfigPath.empty()) {
+        UiState::ConfigPath = GetDefaultConfigPath();
+    }
+}
+
+void SetConfigStatus(const char* prefix, const std::string& path, bool success) {
+    UiState::ConfigStatus = prefix;
+    UiState::ConfigStatus += success ? ": " : " failed: ";
+    UiState::ConfigStatus += path;
+}
+
+std::string FormatShopSelectedHeroes() {
+    std::string value;
+
+    for (const auto& item : FeatureState::ShopSelectedHeroes) {
+        if (!item.second.selected) {
+            continue;
+        }
+
+        if (!value.empty()) {
+            value += ",";
+        }
+
+        value += std::to_string(item.first);
+        value += ":";
+        value += std::to_string(std::max(item.second.targetCount, 1));
+    }
+
+    return value;
+}
+
+void LoadShopSelectedHeroes(const std::string& value) {
+    FeatureState::ShopSelectedHeroes.clear();
+
+    size_t cursor = 0;
+    while (cursor < value.size()) {
+        size_t comma = value.find(',', cursor);
+        std::string token = value.substr(
+            cursor,
+            comma == std::string::npos ? std::string::npos : comma - cursor
+        );
+        size_t separator = token.find(':');
+
+        int heroId = ParseConfigInt(
+            separator == std::string::npos ? token : token.substr(0, separator),
+            0
+        );
+        int targetCount = ParseConfigInt(
+            separator == std::string::npos ? "9" : token.substr(separator + 1),
+            9
+        );
+
+        if (heroId > 0) {
+            FeatureState::ShopSelectedHeroes[heroId] = {
+                true,
+                std::max(targetCount, 1)
+            };
+        }
+
+        if (comma == std::string::npos) {
+            break;
+        }
+
+        cursor = comma + 1;
+    }
+}
+
+void WriteConfigBool(FILE* file, const char* key, bool value) {
+    fprintf(file, "%s=%d\n", key, value ? 1 : 0);
+}
+
+void WriteConfigInt(FILE* file, const char* key, int value) {
+    fprintf(file, "%s=%d\n", key, value);
+}
+
+void WriteConfigFloat(FILE* file, const char* key, float value) {
+    fprintf(file, "%s=%.3f\n", key, value);
+}
+
+void WriteConfigString(FILE* file, const char* key, const std::string& value) {
+    fprintf(file, "%s=%s\n", key, value.c_str());
+}
+
+void ApplyConfigValue(const std::string& key, const std::string& value) {
+    if (key == "themeIndex") UiState::ThemeIndex = ParseConfigInt(value, UiState::ThemeIndex);
+    else if (key == "fontIndex") UiState::FontIndex = ParseConfigInt(value, UiState::FontIndex);
+    else if (key == "shopShowSelectedOnly") UiState::ShopShowSelectedOnly = ParseConfigBool(value, UiState::ShopShowSelectedOnly);
+    else if (key == "moveFromTitleBarOnly") UiState::MoveFromTitleBarOnly = ParseConfigBool(value, UiState::MoveFromTitleBarOnly);
+    else if (key == "resizeFromEdges") UiState::ResizeFromEdges = ParseConfigBool(value, UiState::ResizeFromEdges);
+    else if (key == "useFixedMenuPosition") UiState::UseFixedMenuPosition = ParseConfigBool(value, UiState::UseFixedMenuPosition);
+    else if (key == "menuWidth") UiState::MenuWidth = ParseConfigFloat(value, UiState::MenuWidth);
+    else if (key == "menuHeight") UiState::MenuHeight = ParseConfigFloat(value, UiState::MenuHeight);
+    else if (key == "menuPosX") UiState::MenuPosX = ParseConfigFloat(value, UiState::MenuPosX);
+    else if (key == "menuPosY") UiState::MenuPosY = ParseConfigFloat(value, UiState::MenuPosY);
+    else if (key == "fontScale") UiState::FontScale = ParseConfigFloat(value, UiState::FontScale);
+    else if (key == "windowAlpha") UiState::WindowAlpha = ParseConfigFloat(value, UiState::WindowAlpha);
+    else if (key == "windowRounding") UiState::WindowRounding = ParseConfigFloat(value, UiState::WindowRounding);
+    else if (key == "childRounding") UiState::ChildRounding = ParseConfigFloat(value, UiState::ChildRounding);
+    else if (key == "frameRounding") UiState::FrameRounding = ParseConfigFloat(value, UiState::FrameRounding);
+    else if (key == "popupRounding") UiState::PopupRounding = ParseConfigFloat(value, UiState::PopupRounding);
+    else if (key == "scrollbarRounding") UiState::ScrollbarRounding = ParseConfigFloat(value, UiState::ScrollbarRounding);
+    else if (key == "grabRounding") UiState::GrabRounding = ParseConfigFloat(value, UiState::GrabRounding);
+    else if (key == "tabRounding") UiState::TabRounding = ParseConfigFloat(value, UiState::TabRounding);
+    else if (key == "scrollbarSize") UiState::ScrollbarSize = ParseConfigFloat(value, UiState::ScrollbarSize);
+    else if (key == "windowBorderSize") UiState::WindowBorderSize = ParseConfigFloat(value, UiState::WindowBorderSize);
+    else if (key == "frameBorderSize") UiState::FrameBorderSize = ParseConfigFloat(value, UiState::FrameBorderSize);
+    else if (key == "framePaddingX") UiState::FramePaddingX = ParseConfigFloat(value, UiState::FramePaddingX);
+    else if (key == "framePaddingY") UiState::FramePaddingY = ParseConfigFloat(value, UiState::FramePaddingY);
+    else if (key == "itemSpacingX") UiState::ItemSpacingX = ParseConfigFloat(value, UiState::ItemSpacingX);
+    else if (key == "itemSpacingY") UiState::ItemSpacingY = ParseConfigFloat(value, UiState::ItemSpacingY);
+    else if (key == "indentSpacing") UiState::IndentSpacing = ParseConfigFloat(value, UiState::IndentSpacing);
+    else if (key == "combatInvisibleScout") FeatureState::CombatInvisibleScout = ParseConfigBool(value, FeatureState::CombatInvisibleScout);
+    else if (key == "shopBuyFreeHero") FeatureState::ShopBuyFreeHero = ParseConfigBool(value, FeatureState::ShopBuyFreeHero);
+    else if (key == "shopBuySelectedHero") FeatureState::ShopBuySelectedHero = ParseConfigBool(value, FeatureState::ShopBuySelectedHero);
+    else if (key == "shopRefresh") FeatureState::ShopRefresh = ParseConfigBool(value, FeatureState::ShopRefresh);
+    else if (key == "shopStopRefreshAtFreeHero") FeatureState::ShopStopRefreshAtFreeHero = ParseConfigBool(value, FeatureState::ShopStopRefreshAtFreeHero);
+    else if (key == "shopStopRefreshAtSelectedHero") FeatureState::ShopStopRefreshAtSelectedHero = ParseConfigBool(value, FeatureState::ShopStopRefreshAtSelectedHero);
+    else if (key == "shopKeepGold") FeatureState::ShopKeepGold = ParseConfigBool(value, FeatureState::ShopKeepGold);
+    else if (key == "shopKeepGoldAt") FeatureState::ShopKeepGoldAt = ParseConfigInt(value, FeatureState::ShopKeepGoldAt);
+    else if (key == "shopSelectedHeroes") LoadShopSelectedHeroes(value);
+    else if (key == "arenaHeroStar") FeatureState::ArenaHeroStar = ParseConfigInt(value, FeatureState::ArenaHeroStar);
+    else if (key == "arenaItemEnhanced") FeatureState::ArenaItemEnhanced = ParseConfigBool(value, FeatureState::ArenaItemEnhanced);
+    else if (key == "arenaGogoCardEnabled") FeatureState::ArenaGogoCardEnabled = ParseConfigBool(value, FeatureState::ArenaGogoCardEnabled);
+    else if (key == "arenaGogoCardSelected1") FeatureState::ArenaGogoCardSelected1 = ParseConfigInt(value, FeatureState::ArenaGogoCardSelected1);
+    else if (key == "arenaGogoCardSelected2") FeatureState::ArenaGogoCardSelected2 = ParseConfigInt(value, FeatureState::ArenaGogoCardSelected2);
+    else if (key == "arenaForceActiveSynergy") FeatureState::ArenaForceActiveSynergy = ParseConfigBool(value, FeatureState::ArenaForceActiveSynergy);
+    else if (key == "arenaForceLevel99") FeatureState::ArenaForceLevel99 = ParseConfigBool(value, FeatureState::ArenaForceLevel99);
+    else if (key == "arenaOutsideMapPlacement") FeatureState::ArenaOutsideMapPlacement = ParseConfigBool(value, FeatureState::ArenaOutsideMapPlacement);
+    else if (key == "arenaAllEnemyHpOne") FeatureState::ArenaAllEnemyHpOne = ParseConfigBool(value, FeatureState::ArenaAllEnemyHpOne);
+    else if (key == "arenaPrice") FeatureState::ArenaPrice = ParseConfigInt(value, FeatureState::ArenaPrice);
+}
+
+bool SaveConfigToFile(const std::string& path) {
+    EnsureConfigPathInitialized();
+
+    if (!EnsureParentDirectory(path)) {
+        SetConfigStatus("Create directory", path, false);
+        return false;
+    }
+
+    FILE* file = fopen(path.c_str(), "w");
+    if (!file) {
+        UiState::ConfigStatus = "Save failed: ";
+        UiState::ConfigStatus += path;
+        UiState::ConfigStatus += " (";
+        UiState::ConfigStatus += strerror(errno);
+        UiState::ConfigStatus += ")";
+        return false;
+    }
+
+    fprintf(file, "# MCGG runtime configuration\n");
+    WriteConfigInt(file, "themeIndex", UiState::ThemeIndex);
+    WriteConfigInt(file, "fontIndex", UiState::FontIndex);
+    WriteConfigBool(file, "shopShowSelectedOnly", UiState::ShopShowSelectedOnly);
+    WriteConfigBool(file, "moveFromTitleBarOnly", UiState::MoveFromTitleBarOnly);
+    WriteConfigBool(file, "resizeFromEdges", UiState::ResizeFromEdges);
+    WriteConfigBool(file, "useFixedMenuPosition", UiState::UseFixedMenuPosition);
+    WriteConfigFloat(file, "menuWidth", UiState::MenuWidth);
+    WriteConfigFloat(file, "menuHeight", UiState::MenuHeight);
+    WriteConfigFloat(file, "menuPosX", UiState::MenuPosX);
+    WriteConfigFloat(file, "menuPosY", UiState::MenuPosY);
+    WriteConfigFloat(file, "fontScale", UiState::FontScale);
+    WriteConfigFloat(file, "windowAlpha", UiState::WindowAlpha);
+    WriteConfigFloat(file, "windowRounding", UiState::WindowRounding);
+    WriteConfigFloat(file, "childRounding", UiState::ChildRounding);
+    WriteConfigFloat(file, "frameRounding", UiState::FrameRounding);
+    WriteConfigFloat(file, "popupRounding", UiState::PopupRounding);
+    WriteConfigFloat(file, "scrollbarRounding", UiState::ScrollbarRounding);
+    WriteConfigFloat(file, "grabRounding", UiState::GrabRounding);
+    WriteConfigFloat(file, "tabRounding", UiState::TabRounding);
+    WriteConfigFloat(file, "scrollbarSize", UiState::ScrollbarSize);
+    WriteConfigFloat(file, "windowBorderSize", UiState::WindowBorderSize);
+    WriteConfigFloat(file, "frameBorderSize", UiState::FrameBorderSize);
+    WriteConfigFloat(file, "framePaddingX", UiState::FramePaddingX);
+    WriteConfigFloat(file, "framePaddingY", UiState::FramePaddingY);
+    WriteConfigFloat(file, "itemSpacingX", UiState::ItemSpacingX);
+    WriteConfigFloat(file, "itemSpacingY", UiState::ItemSpacingY);
+    WriteConfigFloat(file, "indentSpacing", UiState::IndentSpacing);
+    WriteConfigBool(file, "combatInvisibleScout", FeatureState::CombatInvisibleScout);
+    WriteConfigBool(file, "shopBuyFreeHero", FeatureState::ShopBuyFreeHero);
+    WriteConfigBool(file, "shopBuySelectedHero", FeatureState::ShopBuySelectedHero);
+    WriteConfigBool(file, "shopRefresh", FeatureState::ShopRefresh);
+    WriteConfigBool(file, "shopStopRefreshAtFreeHero", FeatureState::ShopStopRefreshAtFreeHero);
+    WriteConfigBool(file, "shopStopRefreshAtSelectedHero", FeatureState::ShopStopRefreshAtSelectedHero);
+    WriteConfigBool(file, "shopKeepGold", FeatureState::ShopKeepGold);
+    WriteConfigInt(file, "shopKeepGoldAt", FeatureState::ShopKeepGoldAt);
+    WriteConfigString(file, "shopSelectedHeroes", FormatShopSelectedHeroes());
+    WriteConfigInt(file, "arenaHeroStar", FeatureState::ArenaHeroStar);
+    WriteConfigBool(file, "arenaItemEnhanced", FeatureState::ArenaItemEnhanced);
+    WriteConfigBool(file, "arenaGogoCardEnabled", FeatureState::ArenaGogoCardEnabled);
+    WriteConfigInt(file, "arenaGogoCardSelected1", FeatureState::ArenaGogoCardSelected1);
+    WriteConfigInt(file, "arenaGogoCardSelected2", FeatureState::ArenaGogoCardSelected2);
+    WriteConfigBool(file, "arenaForceActiveSynergy", FeatureState::ArenaForceActiveSynergy);
+    WriteConfigBool(file, "arenaForceLevel99", FeatureState::ArenaForceLevel99);
+    WriteConfigBool(file, "arenaOutsideMapPlacement", FeatureState::ArenaOutsideMapPlacement);
+    WriteConfigBool(file, "arenaAllEnemyHpOne", FeatureState::ArenaAllEnemyHpOne);
+    WriteConfigInt(file, "arenaPrice", FeatureState::ArenaPrice);
+
+    fclose(file);
+    SetConfigStatus("Saved", path, true);
+    return true;
+}
+
+bool LoadConfigFromFile(const std::string& path, bool updateStatus) {
+    EnsureConfigPathInitialized();
+
+    FILE* file = fopen(path.c_str(), "r");
+    if (!file) {
+        if (updateStatus) {
+            UiState::ConfigStatus = "Load failed: ";
+            UiState::ConfigStatus += path;
+            UiState::ConfigStatus += " (";
+            UiState::ConfigStatus += strerror(errno);
+            UiState::ConfigStatus += ")";
+        }
+        return false;
+    }
+
+    char line[8192];
+    while (fgets(line, sizeof(line), file)) {
+        std::string row = TrimString(line);
+
+        if (row.empty() || row[0] == '#') {
+            continue;
+        }
+
+        size_t separator = row.find('=');
+        if (separator == std::string::npos) {
+            continue;
+        }
+
+        std::string key = TrimString(row.substr(0, separator));
+        std::string value = TrimString(row.substr(separator + 1));
+        ApplyConfigValue(key, value);
+    }
+
+    fclose(file);
+    ClampConfigurableState();
+    AppearanceState::AppliedThemeIndex = -1;
+
+    if (updateStatus) {
+        SetConfigStatus("Loaded", path, true);
+    }
+
+    return true;
+}
+
 void ApplyCatppuccinMochaTheme() {
     ImGuiStyle& style = ImGui::GetStyle();
     ImVec4* colors = style.Colors;
@@ -2654,7 +3150,38 @@ void ApplySelectedTheme() {
     AppearanceState::AppliedThemeIndex = UiState::ThemeIndex;
 }
 
+void ApplyUserStyleSettings() {
+    ClampConfigurableState();
+
+    ImGuiIO& io = ImGui::GetIO();
+    io.FontGlobalScale = UiState::FontScale;
+    io.ConfigWindowsMoveFromTitleBarOnly = UiState::MoveFromTitleBarOnly;
+    io.ConfigWindowsResizeFromEdges = UiState::ResizeFromEdges;
+
+    ImGuiStyle& style = ImGui::GetStyle();
+    style.Alpha = UiState::WindowAlpha;
+    style.WindowRounding = UiState::WindowRounding;
+    style.ChildRounding = UiState::ChildRounding;
+    style.FrameRounding = UiState::FrameRounding;
+    style.PopupRounding = UiState::PopupRounding;
+    style.ScrollbarRounding = UiState::ScrollbarRounding;
+    style.GrabRounding = UiState::GrabRounding;
+    style.TabRounding = UiState::TabRounding;
+    style.ScrollbarSize = UiState::ScrollbarSize;
+    style.WindowBorderSize = UiState::WindowBorderSize;
+    style.FrameBorderSize = UiState::FrameBorderSize;
+    style.FramePadding = ImVec2(UiState::FramePaddingX, UiState::FramePaddingY);
+    style.ItemSpacing = ImVec2(UiState::ItemSpacingX, UiState::ItemSpacingY);
+    style.IndentSpacing = UiState::IndentSpacing;
+    style.WindowTitleAlign = ImVec2(0.5f, 0.5f);
+    style.ButtonTextAlign = ImVec2(0.5f, 0.5f);
+}
+
 void ApplySelectedFont() {
+    if (UiState::FontIndex == 1 && !AppearanceState::RobotoFont) {
+        UiState::FontIndex = 0;
+    }
+
     ImGuiIO& io = ImGui::GetIO();
     ImFont* selectedFont =
         UiState::FontIndex == 1 && AppearanceState::RobotoFont ?
@@ -2697,6 +3224,7 @@ void LoadAppearanceFonts() {
 void ApplyAppearance() {
     ApplySelectedTheme();
     ApplySelectedFont();
+    ApplyUserStyleSettings();
 }
 
 std::string FormatFieldBool(void* instance, FieldInfo* field) {
@@ -2936,6 +3464,151 @@ void DrawAppearanceTab() {
 
     if (!AppearanceState::RobotoFont) {
         DrawWaitingText("Waiting for Roboto font");
+    }
+}
+
+void DrawSettingsTab() {
+    EnsureConfigPathInitialized();
+
+    if (ImGui::BeginTabBar("##SettingsTabBar")) {
+        if (ImGui::BeginTabItem("Config")) {
+            ImGui::SetNextItemWidth(-1.0f);
+            ImGui::InputTextWithHint(
+                "##ConfigPath",
+                "Configuration file path",
+                &UiState::ConfigPath
+            );
+
+            if (ImGui::Button("Save configuration")) {
+                SaveConfigToFile(UiState::ConfigPath);
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button("Load configuration")) {
+                if (LoadConfigFromFile(UiState::ConfigPath, true)) {
+                    ApplyAppearance();
+                }
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button("Reset visuals")) {
+                ResetVisualSettings();
+                ApplyAppearance();
+                UiState::ConfigStatus = "Visual settings reset";
+            }
+
+            if (!UiState::ConfigStatus.empty()) {
+                ImGui::Spacing();
+                ImGui::TextWrapped("%s", UiState::ConfigStatus.c_str());
+            }
+
+            ImGui::Spacing();
+            ImGui::TextUnformatted("Saved state includes visual settings, window settings, Combat, Shop, and Arena state.");
+
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Window")) {
+            bool changed = false;
+
+            changed |= ImGui::SliderFloat("Menu width", &UiState::MenuWidth, 360.0f, 1600.0f, "%.0f");
+            changed |= ImGui::SliderFloat("Menu height", &UiState::MenuHeight, 280.0f, 1200.0f, "%.0f");
+            changed |= ImGui::Checkbox("Use fixed menu position", &UiState::UseFixedMenuPosition);
+
+            ImGui::BeginDisabled(!UiState::UseFixedMenuPosition);
+            changed |= ImGui::InputFloat("Menu position X", &UiState::MenuPosX, 1.0f, 20.0f, "%.0f");
+            changed |= ImGui::InputFloat("Menu position Y", &UiState::MenuPosY, 1.0f, 20.0f, "%.0f");
+            ImGui::EndDisabled();
+
+            if (ImGui::Button("Capture current menu size")) {
+                ImVec2 size = ImGui::GetWindowSize();
+                UiState::MenuWidth = size.x;
+                UiState::MenuHeight = size.y;
+                changed = true;
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button("Capture current position")) {
+                ImVec2 pos = ImGui::GetWindowPos();
+                UiState::MenuPosX = pos.x;
+                UiState::MenuPosY = pos.y;
+                UiState::UseFixedMenuPosition = true;
+                changed = true;
+            }
+
+            ImGui::SeparatorText("Behavior");
+            changed |= ImGui::Checkbox("Move from title bar only", &UiState::MoveFromTitleBarOnly);
+            changed |= ImGui::Checkbox("Resize from edges", &UiState::ResizeFromEdges);
+
+            if (changed) {
+                ApplyAppearance();
+            }
+
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Style")) {
+            bool changed = false;
+
+            ImGui::SeparatorText("Typography");
+            changed |= ImGui::SliderFloat("Font size scale", &UiState::FontScale, 0.65f, 2.0f, "%.2fx");
+
+            ImGui::SeparatorText("Window");
+            changed |= ImGui::SliderFloat("Window opacity", &UiState::WindowAlpha, 0.35f, 1.0f, "%.2f");
+            changed |= ImGui::SliderFloat("Window border", &UiState::WindowBorderSize, 0.0f, 4.0f, "%.1f");
+            changed |= ImGui::SliderFloat("Frame border", &UiState::FrameBorderSize, 0.0f, 4.0f, "%.1f");
+            changed |= ImGui::SliderFloat("Scrollbar size", &UiState::ScrollbarSize, 8.0f, 32.0f, "%.0f");
+
+            ImGui::SeparatorText("Rounding");
+            changed |= ImGui::SliderFloat("Window rounding", &UiState::WindowRounding, 0.0f, 20.0f, "%.1f");
+            changed |= ImGui::SliderFloat("Child rounding", &UiState::ChildRounding, 0.0f, 20.0f, "%.1f");
+            changed |= ImGui::SliderFloat("Frame rounding", &UiState::FrameRounding, 0.0f, 20.0f, "%.1f");
+            changed |= ImGui::SliderFloat("Popup rounding", &UiState::PopupRounding, 0.0f, 20.0f, "%.1f");
+            changed |= ImGui::SliderFloat("Scrollbar rounding", &UiState::ScrollbarRounding, 0.0f, 20.0f, "%.1f");
+            changed |= ImGui::SliderFloat("Grab rounding", &UiState::GrabRounding, 0.0f, 20.0f, "%.1f");
+            changed |= ImGui::SliderFloat("Tab rounding", &UiState::TabRounding, 0.0f, 20.0f, "%.1f");
+
+            ImGui::SeparatorText("Spacing");
+            changed |= ImGui::SliderFloat("Frame padding X", &UiState::FramePaddingX, 0.0f, 24.0f, "%.1f");
+            changed |= ImGui::SliderFloat("Frame padding Y", &UiState::FramePaddingY, 0.0f, 24.0f, "%.1f");
+            changed |= ImGui::SliderFloat("Item spacing X", &UiState::ItemSpacingX, 0.0f, 32.0f, "%.1f");
+            changed |= ImGui::SliderFloat("Item spacing Y", &UiState::ItemSpacingY, 0.0f, 32.0f, "%.1f");
+            changed |= ImGui::SliderFloat("Indent spacing", &UiState::IndentSpacing, 0.0f, 48.0f, "%.1f");
+
+            if (changed) {
+                ApplyAppearance();
+            }
+
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("State")) {
+            if (ImGui::Button("Reset feature state")) {
+                ResetFeatureSettings();
+                UiState::ConfigStatus = "Feature state reset";
+            }
+
+            ImGui::SameLine();
+            if (ImGui::Button("Clear shop hero targets")) {
+                FeatureState::ShopSelectedHeroes.clear();
+                UiState::ConfigStatus = "Shop hero targets cleared";
+            }
+
+            ImGui::Spacing();
+            ImGui::Text(
+                "Tracked shop heroes: %d",
+                static_cast<int>(FeatureState::ShopSelectedHeroes.size())
+            );
+            ImGui::Text(
+                "Selected GogoCards: %d / %d",
+                FeatureState::ArenaGogoCardSelected1,
+                FeatureState::ArenaGogoCardSelected2
+            );
+
+            ImGui::EndTabItem();
+        }
+
+        ImGui::EndTabBar();
     }
 }
 
@@ -4286,6 +4959,8 @@ namespace Hooks {
             io.ConfigWindowsMoveFromTitleBarOnly = true;
             io.ConfigWindowsResizeFromEdges = false;
 
+            EnsureConfigPathInitialized();
+            LoadConfigFromFile(UiState::ConfigPath, false);
             LoadAppearanceFonts();
             ImGui_ImplOpenGL3_Init("#version 300 es");
             ApplyAppearance();
@@ -4314,14 +4989,24 @@ namespace Hooks {
 
         TickFeatures();
 
-        ImGui::SetNextWindowSize(ImVec2(760, 560), ImGuiCond_Once);
+        if (UiState::UseFixedMenuPosition) {
+            ImGui::SetNextWindowPos(
+                ImVec2(UiState::MenuPosX, UiState::MenuPosY),
+                ImGuiCond_Always
+            );
+        }
+
+        ImGui::SetNextWindowSize(
+            ImVec2(UiState::MenuWidth, UiState::MenuHeight),
+            ImGuiCond_Always
+        );
 
         if (ImGui::Begin("MCGG", nullptr)) {
             if (ImGui::BeginTabBar("##MainTabBar")) {
                 if (ImGui::BeginTabItem("Info")) {
-                    DrawGgcInfo();
-                    ImGui::Spacing();
                     DrawRuntimeStatus();
+                    ImGui::Spacing();
+                    DrawGgcInfo();
                     ImGui::Spacing();
                     ImGui::SeparatorText("Players");
 
@@ -4501,6 +5186,11 @@ namespace Hooks {
 
                 if (ImGui::BeginTabItem("Appearance")) {
                     DrawAppearanceTab();
+                    ImGui::EndTabItem();
+                }
+
+                if (ImGui::BeginTabItem("Settings")) {
+                    DrawSettingsTab();
                     ImGui::EndTabItem();
                 }
 

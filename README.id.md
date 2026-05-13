@@ -55,19 +55,35 @@ Target default yang didukung:
 - Versi Unity: `2019.4.22f1`
 - Android NDK: `r29`
 - Build system: `ndk-build`
+- Standar C++: `c++26`
 - Branch utama: `master`
+- Tab overlay saat ini: Info, Combat, Appearance, Settings, Shop, Arena, dan Test
 
 ## Fitur
 
 ### Info
 
-- Tabel player dan next-enemy.
+- Tabel runtime status untuk binding battle data, GGC, shop, arena, test, spectator, synergy, dan placement.
+- Tabel player dan next-enemy yang diurutkan dengan player lokal di posisi pertama.
 - Readout kualitas GGC untuk round 7 dan round 13.
 - Indikator status overlay untuk binding yang terlambat atau belum tersedia.
 
 ### Combat
 
 - Toggle Invisible Scout.
+
+### Appearance
+
+- Selector theme ImGui Dark dan Catppuccin Mocha.
+- Selector font Default dan font Roboto opsional.
+- Status kesiapan font saat `Roboto-Medium.ttf` tidak tersedia dari direktori font ImGui.
+
+### Settings
+
+- Kontrol ukuran menu, posisi tetap opsional, dan interaksi window.
+- Kontrol font scale, opacity, rounding, border, padding, spacing, scrollbar, dan indentation.
+- Save dan load untuk visual settings serta state Combat, Shop, dan Arena.
+- Path config default berada di package game yang sedang berjalan, di-resolve sebagai `/data/data/<game-package>/files/mcgg_config.ini`.
 
 ### Shop
 
@@ -88,6 +104,13 @@ Target default yang didukung:
 - Helper enemy HP 1.
 - Helper gold grant.
 
+### Test
+
+- Kontrol manual untuk retry binding dan refresh managed reference.
+- Inspeksi account berdasarkan self, opponent, atau account ID eksplisit.
+- Tabel prediksi fight dengan sinyal direct, manager-derived, invasion-pair, dan round-robin.
+- Readout runtime untuk round state, field battle manager, state behavior API, dan seluruh manager entry.
+
 Feature binding di-resolve terhadap local reference artifacts dan metadata IL2CPP runtime. Method dan field yang belum tersedia akan dicoba ulang secara periodik, bukan langsung disimpan permanen sebagai unavailable. Jika binding belum siap, overlay akan menampilkan status `Waiting for ...`.
 
 ## Arsitektur
@@ -102,6 +125,8 @@ Secara umum, proyek ini berisi:
 - Integrasi function hook berbasis Dobby.
 - Rendering Dear ImGui melalui OpenGL ES.
 - Forwarding input touch Unity ke input mouse ImGui.
+- Setup appearance runtime dengan persistence `.ini` ImGui yang dinonaktifkan.
+- Persistence konfigurasi milik proyek untuk overlay dan feature state.
 - Local reference artifacts untuk validasi signature method, field, dan type.
 
 Sebagian besar logic fitur tetap berada di `jni/Main.cpp` agar native entry point, runtime state, dan retry behavior mudah diperiksa. Refactor besar sebaiknya tetap mempertahankan lifecycle binding yang ada, kecuali refactor tersebut memang secara eksplisit mengubah desain tersebut.
@@ -220,6 +245,15 @@ Target Android aktif dikonfigurasi di `jni/Application.mk`:
 APP_ABI := arm64-v8a
 APP_PLATFORM := android-21
 APP_STL := c++_static
+APP_OPTIM := release
+APP_THIN_ARCHIVE := false
+APP_PIE := true
+```
+
+Mode bahasa C++ aktif dikonfigurasi di `jni/Android.mk`:
+
+```make
+-std=c++26
 ```
 
 Unity compatibility defines dikonfigurasi di `jni/Android.mk`:
@@ -243,14 +277,17 @@ Pada saat load dan selama frame presentation, `jni/Main.cpp` menjalankan urutan 
 4. Me-resolve export API IL2CPP.
 5. Melampirkan native thread ke IL2CPP domain.
 6. Melakukan hook `eglSwapBuffers`.
-7. Merender overlay ImGui selama frame presentation.
-8. Melakukan hook `UnityEngine.Input.GetTouch`.
-9. Meneruskan input touch Unity ke input mouse ImGui.
-10. Me-resolve method dan field fitur melalui `ResolveFeatureBindings()`.
-11. Mencoba ulang binding method dan field yang belum tersedia secara periodik.
-12. Me-refresh managed reference seperti battle bridge dan shop panel state.
-13. Me-reload cache tabel hero, equipment, dan GogoCard saat masuk match.
-14. Menjalankan shop automation dan arena effects pada tick terpisah 100 ms.
+7. Membuat context ImGui dan me-resolve path config dari nama package game.
+8. Memuat konfigurasi proyek yang tersimpan jika file config tersedia.
+9. Memuat font appearance serta menerapkan theme dan style settings yang dipilih.
+10. Merender overlay ImGui selama frame presentation.
+11. Melakukan hook `UnityEngine.Input.GetTouch`.
+12. Meneruskan input touch Unity ke input mouse ImGui.
+13. Me-resolve method dan field fitur melalui `ResolveFeatureBindings()`.
+14. Mencoba ulang binding method dan field yang belum tersedia secara periodik.
+15. Me-refresh managed reference seperti battle bridge dan shop panel state.
+16. Me-reload cache tabel hero, equipment, dan GogoCard saat masuk match.
+17. Menjalankan shop automation dan arena effects pada tick terpisah 100 ms.
 
 Urutan ini disengaja. Rendering dan input diinisialisasi terpisah dari feature binding agar overlay dapat melaporkan readiness runtime secara parsial sementara object IL2CPP yang terlambat tetap dicoba resolve.
 
@@ -260,10 +297,13 @@ Urutan ini disengaja. Rendering dan input diinisialisasi terpisah dari feature b
 - Validasi class name, method name, jumlah parameter, return type, dan field layout terhadap local reference artifacts sebelum menambahkan IL2CPP call.
 - Pertahankan runtime code fitur di `jni/Main.cpp` kecuali refactor memang diminta secara eksplisit.
 - Gunakan section lokal yang jelas dan komentar singkat di sekitar IL2CPP call yang berisiko.
+- Gunakan tab Runtime Status dan Test saat memvalidasi binding baru atau menelusuri runtime state yang terlambat tersedia.
+- Pertahankan persistence Settings tetap memakai file config milik proyek, bukan mengaktifkan persistence `.ini` ImGui.
 - Pertahankan retryable binding behavior. Jangan menyimpan method atau field unresolved secara permanen sebagai missing.
 - Pertahankan tick terpisah 100 ms untuk shop automation dan arena effects, kecuali perubahan timing memang bagian dari task.
 - Pertahankan default ABI sebagai `arm64-v8a`.
 - Jaga kompatibilitas Unity tetap selaras dengan `2019.4.22f1`.
+- Jaga mode bahasa native tetap selaras dengan `c++26` kecuali konfigurasi build memang diubah secara sengaja.
 - Jangan commit output generated `obj/` atau `libs/`.
 - Hindari menambahkan instruksi deployment runtime atau instruksi yang berorientasi penyalahgunaan ke dokumentasi proyek.
 
@@ -330,6 +370,14 @@ Saat menambahkan atau memperbarui binding, verifikasi:
 - Akses static atau instance.
 - Apakah object hanya tersedia di dalam match atau UI state tertentu.
 
+### Font Roboto tidak tersedia
+
+Tab Appearance akan fallback ke font default ImGui saat `jni/imgui/misc/fonts/Roboto-Medium.ttf` tidak dapat dibaca. Ini tidak memblokir overlay atau native build.
+
+### Konfigurasi tidak tersimpan atau termuat
+
+Path config default di-resolve dari process game yang sedang berjalan dan disimpan sebagai `/data/data/<game-package>/files/mcgg_config.ini`. Jika tab Settings melaporkan kegagalan save atau load, cek apakah process dapat membaca dan menulis direktori data app game.
+
 ### CI build gagal
 
 Periksa log GitHub Actions untuk:
@@ -346,6 +394,7 @@ Periksa log GitHub Actions untuk:
 - Kompatibilitas Unity dipatok ke `2019.4.22f1`.
 - Runtime binding dapat berubah ketika target application update.
 - Ketersediaan fitur bergantung pada runtime state dan managed object yang sedang loaded.
+- Font Roboto opsional bergantung pada isi submodule ImGui yang ter-checkout.
 - Termux tidak dikelola sebagai target build resmi.
 - Dokumentasi sengaja tidak menyertakan instruksi deployment runtime dan instruksi yang berorientasi penyalahgunaan.
 

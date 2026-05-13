@@ -40,9 +40,21 @@ git lfs pull
   types, and fields before changing native calls.
 - Keep the default target `arm64-v8a`.
 - Keep Unity compatibility aligned with `2019.4.22f1`.
+- Keep native language mode aligned with `c++26` unless the build configuration
+  intentionally changes.
+- Use the Runtime Status and Test tabs to validate binding readiness, managed
+  references, round state, battle manager fields, behavior API state, and
+  opponent prediction behavior after feature changes.
+- Keep Settings save/load behavior scoped to the project config file under the
+  running game package directory, normally
+  `/data/data/<game-package>/files/mcgg_config.ini`.
 - Do not commit generated `libs/` or `obj/` output.
 - Do not edit vendored directories such as `jni/Il2CppVersions/`, `jni/imgui/`,
   or `jni/xDL/` unless the change explicitly requires it.
+
+Current user-facing overlay areas are Info, Combat, Appearance, Settings, Shop,
+Arena, and Test. New user-facing controls should report delayed runtime
+dependencies with a clear `Waiting for ...` state where practical.
 
 ## Coding Style
 
@@ -51,9 +63,13 @@ Follow the existing C++ style in `jni/Main.cpp`:
 - Use 4-space indentation.
 - Prefer explicit pointer types.
 - Keep helper code small and direct.
-- Add short comments above simple functions or non-obvious blocks.
+- Add short comments above non-obvious functions or risky blocks.
 - Keep existing UI element names, method names, and hook names stable unless a
   rename is part of the requested change.
+- Keep appearance changes local to the existing theme/font setup unless a
+  broader UI refactor is part of the requested change.
+- Keep config parsing simple, bounded, and compatible with the existing
+  key-value Settings file format.
 
 ## Build Verification
 
@@ -92,6 +108,7 @@ Pull requests should include:
 - The files or areas affected.
 - The build command result, usually `ndk-build -C jni`.
 - Notes about any IL2CPP signatures, fields, or hooks changed.
+- Notes about any overlay tab, theme, font, or runtime status behavior changed.
 - Screenshots only when the ImGui overlay changes visually.
 
 Small, focused pull requests are easiest to review and merge.
