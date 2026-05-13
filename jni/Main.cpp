@@ -172,6 +172,15 @@ namespace FeatureState {
     std::chrono::steady_clock::time_point LastTableLoadAttempt{};
 }
 
+namespace UiState {
+    std::string ShopHeroFilter;
+    std::string ArenaHeroFilter;
+    std::string ArenaItemFilter;
+    std::string ArenaGogoCardFilter;
+    std::string TestAccountId;
+    bool ShopShowSelectedOnly = false;
+}
+
 // Original function pointers resolved from IL2CPP metadata or hook trampolines.
 namespace Originals {
     EGLBoolean (*EglSwapBuffers)(EGLDisplay dpy, EGLSurface surface);
@@ -193,9 +202,25 @@ namespace Originals {
         uint64_t accID,
         int roundId
     );
+    uint32_t (*MCLogicBattleData_ILOGIC_GetGameRound)(void* instance);
+    int (*MCLogicBattleData_ILOGIC_GetGamePhase)(void* instance);
+    uint32_t (*MCLogicBattleData_ILOGIC_GetRoundRemainTime)(void* instance);
+    uint64_t (*MCLogicBattleData_ILOGIC_GetRoundMaxRemainTime)(void* instance);
+    bool (*MCLogicBattleData_ILOGIC_IsFightSection)(void* instance);
+    bool (*MCLogicBattleData_ILOGIC_IsFightResultSection)(void* instance);
+    bool (*MCLogicBattleData_ILOGIC_IsSelfFightOver)(void* instance);
     int (*MCLogicBattleData_ILOGIC_GetPlayerCoin)(
         void* instance,
         uint64_t accountId
+    );
+    int (*MCLogicBattleData_ILOGIC_GetPlayerHP)(
+        void* instance,
+        uint64_t accountId
+    );
+    bool (*MCLogicBattleData_ILOGIC_GetBattleResultHistory)(
+        void* instance,
+        uint64_t accountId,
+        int round
     );
     void* (*MCLogicBattleData_ILOGIC_GetPlayerData)(
         void* instance,
@@ -248,6 +273,19 @@ namespace Originals {
         MCLogicHeroShopItemData* itemData,
         bool* ignoreExtraRule
     );
+    bool (*MCLogicBattleManager_get_m_bDefendFaild)(void* instance);
+    bool (*MCLogicBattleManager_get_IsHost)(void* instance);
+    uint64_t (*MCLogicBattleManager_get_m_uAccountId)(void* instance);
+    void* (*MCLogicBattleManager_GetCurrentOpponent)(void* instance);
+    bool (*MCLogicBattleManager_HasAliveFighter)(void* instance, int campType);
+    void (*MCLogicBattleManager_GetAliveFighter)(
+        void* instance,
+        int* campACount,
+        int* campBCount
+    );
+    void* (*MCBehaviorThreeApi_Get)(uint64_t accountId);
+    int (*MCBehaviorThreeApi_GetCurrentBattleRoundResult)(void* instance);
+    int (*MCBehaviorThreeApi_GetCurrentPhaseType)(void* instance);
     void* (*MCEquipUtil_OnGetNewEquip)(
         uint64_t accountId,
         int equipId,
@@ -908,11 +946,74 @@ void ResolveFeatureBindings() {
         {"UInt64", "Int32"}
     );
     ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_GetGameRound,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_GetGameRound",
+        {}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_GetGamePhase,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_GetGamePhase",
+        {}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_GetRoundRemainTime,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_GetRoundRemainTime",
+        {}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_GetRoundMaxRemainTime,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_GetRoundMaxRemainTime",
+        {}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_IsFightSection,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_IsFightSection",
+        {}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_IsFightResultSection,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_IsFightResultSection",
+        {}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_IsSelfFightOver,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_IsSelfFightOver",
+        {}
+    );
+    ResolveOriginal(
         Originals::MCLogicBattleData_ILOGIC_GetPlayerCoin,
         "",
         "MCLogicBattleData",
         "ILOGIC_GetPlayerCoin",
         {"UInt64"}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_GetPlayerHP,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_GetPlayerHP",
+        {"UInt64"}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_GetBattleResultHistory,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_GetBattleResultHistory",
+        {"UInt64", "Int32"}
     );
     ResolveOriginal(
         Originals::MCLogicBattleData_ILOGIC_GetPlayerData,
@@ -1015,6 +1116,69 @@ void ResolveFeatureBindings() {
         "MCLogicBattleManager",
         "BuyNormalHero",
         {"MCLogicHeroShopItemData", "Boolean"}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleManager_get_m_bDefendFaild,
+        "",
+        "MCLogicBattleManager",
+        "get_m_bDefendFaild",
+        {}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleManager_get_IsHost,
+        "",
+        "MCLogicBattleManager",
+        "get_IsHost",
+        {}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleManager_get_m_uAccountId,
+        "",
+        "MCLogicBattleManager",
+        "get_m_uAccountId",
+        {}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleManager_GetCurrentOpponent,
+        "",
+        "MCLogicBattleManager",
+        "GetCurrentOpponent",
+        {}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleManager_HasAliveFighter,
+        "",
+        "MCLogicBattleManager",
+        "HasAliveFighter",
+        {"MCEntityCampType"}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleManager_GetAliveFighter,
+        "",
+        "MCLogicBattleManager",
+        "GetAliveFighter",
+        {"Int32", "Int32"}
+    );
+    ResolveOriginal(
+        Originals::MCBehaviorThreeApi_Get,
+        "",
+        "MCBehaviorThreeApi",
+        "Get",
+        {"UInt64"}
+    );
+    ResolveOriginal(
+        Originals::MCBehaviorThreeApi_GetCurrentBattleRoundResult,
+        "",
+        "MCBehaviorThreeApi",
+        "GetCurrentBattleRoundResult",
+        {}
+    );
+    ResolveOriginal(
+        Originals::MCBehaviorThreeApi_GetCurrentPhaseType,
+        "",
+        "MCBehaviorThreeApi",
+        "GetCurrentPhaseType",
+        {}
     );
     ResolveOriginal(
         Originals::MCEquipUtil_OnGetNewEquip,
@@ -1159,6 +1323,59 @@ void* GetSelfLogicBattleManager() {
     }
 
     return GetStaticField<void*>(selfBattleManagerField);
+}
+
+void* GetBattleManagerByAccountId(uint64_t accountId) {
+    if (accountId == 0) {
+        return nullptr;
+    }
+
+    uint64_t selfAccountId = GetSelfAccountId();
+    if (selfAccountId != 0 && accountId == selfAccountId) {
+        void* selfManager = GetSelfLogicBattleManager();
+        if (selfManager) {
+            return selfManager;
+        }
+    }
+
+    if (!Originals::MCLogicBattleData_ILOGIC_GetAllBattleMgr) {
+        return nullptr;
+    }
+
+    auto* battleManagers = Originals::MCLogicBattleData_ILOGIC_GetAllBattleMgr(nullptr);
+    auto* entries = battleManagers && battleManagers->entries ?
+        battleManagers->entries->GetData() :
+        nullptr;
+    int entryLimit = battleManagers && battleManagers->entries ?
+        std::min(battleManagers->count, battleManagers->entries->getCapacity()) :
+        0;
+
+    for (int i = 0; entries && i < entryLimit; ++i) {
+        const auto& entry = entries[i];
+
+        if (entry.hashCode < 0 || entry.key != accountId) {
+            continue;
+        }
+
+        return entry.value;
+    }
+
+    return nullptr;
+}
+
+uint64_t ParseAccountIdOrDefault(const std::string& value, uint64_t fallback) {
+    if (value.empty()) {
+        return fallback;
+    }
+
+    char* end = nullptr;
+    unsigned long long parsed = strtoull(value.c_str(), &end, 10);
+
+    if (end == value.c_str()) {
+        return fallback;
+    }
+
+    return static_cast<uint64_t>(parsed);
 }
 
 void RefreshManagedReferences(bool force = false) {
@@ -1894,6 +2111,220 @@ ImVec4 GgcQualityColor(int quality) {
     }
 }
 
+bool EntryMatchesFilter(const std::string& name, int id, const std::string& filter) {
+    if (filter.empty()) {
+        return true;
+    }
+
+    return StringIncludesCaseInsensitive(name, filter) ||
+        StringIncludesCaseInsensitive(std::to_string(id), filter);
+}
+
+bool HeroMatchesFilter(const HeroTableEntry& hero, const std::string& filter) {
+    return EntryMatchesFilter(hero.name, hero.id, filter) ||
+        (!filter.empty() &&
+         StringIncludesCaseInsensitive(std::to_string(hero.quality), filter));
+}
+
+void FilterHeroes(std::vector<HeroTableEntry>& heroes, const std::string& filter) {
+    heroes.erase(
+        std::remove_if(
+            heroes.begin(),
+            heroes.end(),
+            [&filter](const HeroTableEntry& hero) {
+                return !HeroMatchesFilter(hero, filter);
+            }
+        ),
+        heroes.end()
+    );
+}
+
+void FilterEquips(std::vector<EquipTableEntry>& equips, const std::string& filter) {
+    equips.erase(
+        std::remove_if(
+            equips.begin(),
+            equips.end(),
+            [&filter](const EquipTableEntry& equip) {
+                return !EntryMatchesFilter(equip.name, equip.id, filter);
+            }
+        ),
+        equips.end()
+    );
+}
+
+void FilterCards(std::vector<CardTableEntry>& cards, const std::string& filter) {
+    cards.erase(
+        std::remove_if(
+            cards.begin(),
+            cards.end(),
+            [&filter](const CardTableEntry& card) {
+                return !EntryMatchesFilter(card.name, card.id, filter);
+            }
+        ),
+        cards.end()
+    );
+}
+
+void DrawSearchInput(const char* id, const char* hint, std::string& filter) {
+    ImGui::PushID(id);
+
+    float clearWidth =
+        ImGui::CalcTextSize("Clear").x +
+        ImGui::GetStyle().FramePadding.x * 2.0f;
+    ImGui::SetNextItemWidth(-clearWidth - ImGui::GetStyle().ItemSpacing.x);
+    ImGui::InputTextWithHint("##filter", hint, &filter);
+    ImGui::SameLine();
+
+    if (ImGui::Button("Clear", ImVec2(clearWidth, 0.0f))) {
+        filter.clear();
+    }
+
+    ImGui::PopID();
+}
+
+void DrawStatusRow(const char* label, bool ready) {
+    ImGui::TableNextRow();
+    ImGui::TableSetColumnIndex(0);
+    ImGui::TextUnformatted(label);
+    ImGui::TableSetColumnIndex(1);
+    ImGui::TextColored(
+        ready ? ImVec4(0.40f, 0.90f, 0.45f, 1.0f) : ImVec4(1.0f, 0.75f, 0.25f, 1.0f),
+        "%s",
+        ready ? "Ready" : "Waiting"
+    );
+}
+
+void DrawValueRow(const char* label, const char* value) {
+    ImGui::TableNextRow();
+    ImGui::TableSetColumnIndex(0);
+    ImGui::TextUnformatted(label);
+    ImGui::TableSetColumnIndex(1);
+    ImGui::TextUnformatted(value);
+}
+
+void DrawValueRow(const char* label, const std::string& value) {
+    DrawValueRow(label, value.c_str());
+}
+
+std::string FormatBool(bool value) {
+    return value ? "true" : "false";
+}
+
+std::string FormatOptionalBool(bool ready, bool value) {
+    return ready ? FormatBool(value) : "Waiting";
+}
+
+std::string FormatPointer(const void* value) {
+    char buffer[32];
+    snprintf(buffer, sizeof(buffer), "%p", value);
+    return buffer;
+}
+
+std::string FormatUInt64(uint64_t value) {
+    return std::to_string(static_cast<unsigned long long>(value));
+}
+
+std::string FormatInt(int value) {
+    return std::to_string(value);
+}
+
+std::string FormatFieldBool(void* instance, FieldInfo* field) {
+    if (!instance || !field) {
+        return "Waiting";
+    }
+
+    return FormatBool(GetField<bool>(reinterpret_cast<Il2CppObject*>(instance), field));
+}
+
+std::string FormatFieldInt(void* instance, FieldInfo* field) {
+    if (!instance || !field) {
+        return "Waiting";
+    }
+
+    return FormatInt(GetField<int>(reinterpret_cast<Il2CppObject*>(instance), field));
+}
+
+std::string FormatFieldUInt64(void* instance, FieldInfo* field) {
+    if (!instance || !field) {
+        return "Waiting";
+    }
+
+    return FormatUInt64(GetField<uint64_t>(reinterpret_cast<Il2CppObject*>(instance), field));
+}
+
+bool HasShopSelectBinding();
+bool HasShopAutomationBindings();
+bool HasShopRefreshBindings();
+bool HasArenaHeroBindings();
+bool HasArenaItemBindings();
+bool HasArenaGogoCardBindings();
+bool HasArenaGoldBindings();
+bool HasBattleTestBindings();
+
+void DrawRuntimeStatus() {
+    if (!ImGui::CollapsingHeader("Runtime Status", ImGuiTreeNodeFlags_DefaultOpen)) {
+        return;
+    }
+
+    char selfIdText[32];
+    snprintf(selfIdText, sizeof(selfIdText), "%llu", (unsigned long long)GetSelfAccountId());
+
+    char tableText[96];
+    snprintf(
+        tableText,
+        sizeof(tableText),
+        "%d heroes / %d items / %d cards",
+        static_cast<int>(FeatureState::Heroes.size()),
+        static_cast<int>(FeatureState::Equips.size()),
+        static_cast<int>(FeatureState::Cards.size())
+    );
+
+    if (ImGui::BeginTable(
+        "##RuntimeStatusTable",
+        2,
+        ImGuiTableFlags_Borders |
+            ImGuiTableFlags_RowBg |
+            ImGuiTableFlags_SizingStretchProp
+    )) {
+        ImGui::TableSetupColumn("Runtime");
+        ImGui::TableSetupColumn("State", ImGuiTableColumnFlags_WidthFixed, 130.0f);
+        ImGui::TableHeadersRow();
+
+        DrawValueRow("Self account", selfIdText);
+        DrawValueRow("Table cache", tableText);
+        DrawStatusRow(
+            "Battle data",
+            Originals::MCLogicBattleData_ILOGIC_GetAllBattleMgr &&
+                Originals::MCLogicBattleData_ILOGIC_GetCurrentOpponentAccountID &&
+                Originals::MCLogicBattleData_ILOGIC_GetSelfChessPlayerName
+        );
+        DrawStatusRow("GGC", Originals::MCLogicBattleData_ILOGIC_GetCrystalQualityByRound);
+        DrawStatusRow("Shop select", HasShopSelectBinding());
+        DrawStatusRow("Shop automation", HasShopAutomationBindings());
+        DrawStatusRow("Shop refresh panel", HasShopRefreshBindings());
+        DrawStatusRow("Arena heroes", HasArenaHeroBindings());
+        DrawStatusRow("Arena items", HasArenaItemBindings());
+        DrawStatusRow("Arena GogoCards", HasArenaGogoCardBindings());
+        DrawStatusRow("Arena gold", HasArenaGoldBindings());
+        DrawStatusRow("Battle tests", HasBattleTestBindings());
+        DrawStatusRow("Spectator hook", Originals::MCShowSpectatorComp_SetSpectate);
+        DrawStatusRow(
+            "Synergy hooks",
+            Originals::MCBondUtil_CheckRelationActive_Config &&
+                Originals::MCBondUtil_CheckRelationActive_Special
+        );
+        DrawStatusRow(
+            "Placement hooks",
+            Originals::ShowBattleTouchMgr_ClampGridPos &&
+                Originals::AStarTileMap_ValidPos &&
+                Originals::MCLogicEntityMap_CanWalkable &&
+                Originals::MCLogicEntityMap_IsWalkableAround
+        );
+
+        ImGui::EndTable();
+    }
+}
+
 void DrawWaitingText(const char* message) {
     ImGui::TextColored(ImVec4(1.0f, 0.75f, 0.25f, 1.0f), "%s", message);
 }
@@ -1934,6 +2365,15 @@ bool HasArenaGogoCardBindings() {
 bool HasArenaGoldBindings() {
     return Originals::MCLogicBattleData_ILOGIC_GetPlayerData &&
         Originals::MCChessPlayerData_UpdateCoin;
+}
+
+bool HasBattleTestBindings() {
+    return Originals::MCLogicBattleData_ILOGIC_GetRoundRemainTime &&
+        Originals::MCLogicBattleData_ILOGIC_IsFightSection &&
+        Originals::MCLogicBattleData_ILOGIC_IsSelfFightOver &&
+        Originals::MCLogicBattleData_ILOGIC_GetPlayerHP &&
+        Originals::MCLogicBattleData_ILOGIC_GetCurrentOpponentAccountID &&
+        Originals::MCLogicBattleManager_get_m_bDefendFaild;
 }
 
 void DrawGgcInfo() {
@@ -1992,6 +2432,498 @@ void DrawCombatTab() {
     );
 }
 
+std::string GetBattlePlayerName(uint64_t accountId) {
+    if (accountId == 0 || !Originals::MCLogicBattleData_ILOGIC_GetSelfChessPlayerName) {
+        return {};
+    }
+
+    return ManagedStringToStd(
+        Originals::MCLogicBattleData_ILOGIC_GetSelfChessPlayerName(nullptr, accountId)
+    );
+}
+
+std::string GetRoundResultDataField(void* battleManager, const char* fieldName) {
+    if (!battleManager) {
+        return "Waiting";
+    }
+
+    static FieldInfo* roundResultDataField = nullptr;
+
+    if (!roundResultDataField) {
+        roundResultDataField =
+            GetFieldInfoFromName("", "MCLogicBattleManager", "m_RoundResultData");
+    }
+
+    void* roundResultData = roundResultDataField ?
+        GetField<void*>(
+            reinterpret_cast<Il2CppObject*>(battleManager),
+            roundResultDataField
+        ) :
+        nullptr;
+
+    if (!roundResultData) {
+        return "Waiting";
+    }
+
+    FieldInfo* valueField = GetFieldInfoFromName("", "MCFightRoundResultData", fieldName);
+    return FormatFieldInt(roundResultData, valueField);
+}
+
+void DrawTestBindingRows() {
+    if (!ImGui::BeginTable(
+        "##TestBindingTable",
+        2,
+        ImGuiTableFlags_Borders |
+            ImGuiTableFlags_RowBg |
+            ImGuiTableFlags_SizingStretchProp
+    )) {
+        return;
+    }
+
+    ImGui::TableSetupColumn("Binding");
+    ImGui::TableSetupColumn("State", ImGuiTableColumnFlags_WidthFixed, 120.0f);
+    ImGui::TableHeadersRow();
+
+    DrawStatusRow("Round/phase", Originals::MCLogicBattleData_ILOGIC_GetRoundRemainTime);
+    DrawStatusRow("Fight section", Originals::MCLogicBattleData_ILOGIC_IsFightSection);
+    DrawStatusRow("Self fight over", Originals::MCLogicBattleData_ILOGIC_IsSelfFightOver);
+    DrawStatusRow("Player HP", Originals::MCLogicBattleData_ILOGIC_GetPlayerHP);
+    DrawStatusRow("Result history", Originals::MCLogicBattleData_ILOGIC_GetBattleResultHistory);
+    DrawStatusRow("Battle manager flags", Originals::MCLogicBattleManager_get_m_bDefendFaild);
+    DrawStatusRow("Alive fighter counts", Originals::MCLogicBattleManager_GetAliveFighter);
+    DrawStatusRow("Behavior API", Originals::MCBehaviorThreeApi_Get);
+
+    ImGui::EndTable();
+}
+
+void DrawTestRoundRows(
+    uint64_t selfAccountId,
+    uint64_t targetAccountId,
+    uint64_t opponentAccountId
+) {
+    if (!ImGui::BeginTable(
+        "##TestRoundTable",
+        2,
+        ImGuiTableFlags_Borders |
+            ImGuiTableFlags_RowBg |
+            ImGuiTableFlags_SizingStretchProp
+    )) {
+        return;
+    }
+
+    ImGui::TableSetupColumn("Value");
+    ImGui::TableSetupColumn("Current", ImGuiTableColumnFlags_WidthFixed, 180.0f);
+    ImGui::TableHeadersRow();
+
+    uint32_t round = Originals::MCLogicBattleData_ILOGIC_GetGameRound ?
+        Originals::MCLogicBattleData_ILOGIC_GetGameRound(nullptr) :
+        0;
+
+    DrawValueRow("Self account", selfAccountId ? FormatUInt64(selfAccountId) : "Waiting");
+    DrawValueRow("Inspect account", targetAccountId ? FormatUInt64(targetAccountId) : "Waiting");
+    DrawValueRow("Inspect name", GetBattlePlayerName(targetAccountId).empty() ? "-" : GetBattlePlayerName(targetAccountId));
+    DrawValueRow("Opponent account", opponentAccountId ? FormatUInt64(opponentAccountId) : "Waiting");
+    DrawValueRow("Opponent name", GetBattlePlayerName(opponentAccountId).empty() ? "-" : GetBattlePlayerName(opponentAccountId));
+    DrawValueRow(
+        "Game round",
+        Originals::MCLogicBattleData_ILOGIC_GetGameRound ? FormatInt(round) : "Waiting"
+    );
+    DrawValueRow(
+        "Game phase",
+        Originals::MCLogicBattleData_ILOGIC_GetGamePhase ?
+            FormatInt(Originals::MCLogicBattleData_ILOGIC_GetGamePhase(nullptr)) :
+            "Waiting"
+    );
+    DrawValueRow(
+        "Remain time",
+        Originals::MCLogicBattleData_ILOGIC_GetRoundRemainTime ?
+            FormatInt(Originals::MCLogicBattleData_ILOGIC_GetRoundRemainTime(nullptr)) :
+            "Waiting"
+    );
+    DrawValueRow(
+        "Max remain time",
+        Originals::MCLogicBattleData_ILOGIC_GetRoundMaxRemainTime ?
+            FormatUInt64(Originals::MCLogicBattleData_ILOGIC_GetRoundMaxRemainTime(nullptr)) :
+            "Waiting"
+    );
+    DrawValueRow(
+        "Is fight section",
+        Originals::MCLogicBattleData_ILOGIC_IsFightSection ?
+            FormatBool(Originals::MCLogicBattleData_ILOGIC_IsFightSection(nullptr)) :
+            "Waiting"
+    );
+    DrawValueRow(
+        "Is result section",
+        Originals::MCLogicBattleData_ILOGIC_IsFightResultSection ?
+            FormatBool(Originals::MCLogicBattleData_ILOGIC_IsFightResultSection(nullptr)) :
+            "Waiting"
+    );
+    DrawValueRow(
+        "Is self fight over",
+        Originals::MCLogicBattleData_ILOGIC_IsSelfFightOver ?
+            FormatBool(Originals::MCLogicBattleData_ILOGIC_IsSelfFightOver(nullptr)) :
+            "Waiting"
+    );
+    DrawValueRow(
+        "Inspect HP",
+        Originals::MCLogicBattleData_ILOGIC_GetPlayerHP && targetAccountId ?
+            FormatInt(Originals::MCLogicBattleData_ILOGIC_GetPlayerHP(nullptr, targetAccountId)) :
+            "Waiting"
+    );
+    DrawValueRow(
+        "Opponent HP",
+        Originals::MCLogicBattleData_ILOGIC_GetPlayerHP && opponentAccountId ?
+            FormatInt(Originals::MCLogicBattleData_ILOGIC_GetPlayerHP(nullptr, opponentAccountId)) :
+            "Waiting"
+    );
+    DrawValueRow(
+        "History fail flag",
+        Originals::MCLogicBattleData_ILOGIC_GetBattleResultHistory &&
+                targetAccountId &&
+                round > 0 ?
+            FormatBool(Originals::MCLogicBattleData_ILOGIC_GetBattleResultHistory(
+                nullptr,
+                targetAccountId,
+                static_cast<int>(round)
+            )) :
+            "Waiting"
+    );
+
+    ImGui::EndTable();
+}
+
+void DrawTestManagerRows(void* battleManager) {
+    static FieldInfo* fightOverField = nullptr;
+    static FieldInfo* defendFailedField = nullptr;
+    static FieldInfo* reduceHpOverField = nullptr;
+    static FieldInfo* hasBattleField = nullptr;
+    static FieldInfo* lastRoundWinField = nullptr;
+    static FieldInfo* selfFightValueField = nullptr;
+    static FieldInfo* killerFightValueField = nullptr;
+    static FieldInfo* killSelfAccountField = nullptr;
+
+    if (!fightOverField) {
+        fightOverField = GetFieldInfoFromName("", "MCLogicBattleManager", "m_bFightOver");
+    }
+
+    if (!defendFailedField) {
+        defendFailedField =
+            GetFieldInfoFromName("", "MCLogicBattleManager", "<m_bDefendFaild>k__BackingField");
+    }
+
+    if (!reduceHpOverField) {
+        reduceHpOverField =
+            GetFieldInfoFromName("", "MCLogicBattleManager", "m_bReducePlayerHPOver");
+    }
+
+    if (!hasBattleField) {
+        hasBattleField = GetFieldInfoFromName("", "MCLogicBattleManager", "_hasBattle");
+    }
+
+    if (!lastRoundWinField) {
+        lastRoundWinField = GetFieldInfoFromName("", "MCLogicBattleManager", "isLastRoundWin");
+    }
+
+    if (!selfFightValueField) {
+        selfFightValueField = GetFieldInfoFromName("", "MCLogicBattleManager", "_selfFightValue");
+    }
+
+    if (!killerFightValueField) {
+        killerFightValueField = GetFieldInfoFromName("", "MCLogicBattleManager", "killerFightValue");
+    }
+
+    if (!killSelfAccountField) {
+        killSelfAccountField =
+            GetFieldInfoFromName("", "MCLogicBattleManager", "m_ulKillSelfAccId");
+    }
+
+    int campACount = 0;
+    int campBCount = 0;
+    bool hasAliveCounts = false;
+
+    if (battleManager && Originals::MCLogicBattleManager_GetAliveFighter) {
+        Originals::MCLogicBattleManager_GetAliveFighter(
+            battleManager,
+            &campACount,
+            &campBCount
+        );
+        hasAliveCounts = true;
+    }
+
+    void* currentOpponent = battleManager && Originals::MCLogicBattleManager_GetCurrentOpponent ?
+        Originals::MCLogicBattleManager_GetCurrentOpponent(battleManager) :
+        nullptr;
+
+    if (!ImGui::BeginTable(
+        "##TestManagerTable",
+        2,
+        ImGuiTableFlags_Borders |
+            ImGuiTableFlags_RowBg |
+            ImGuiTableFlags_SizingStretchProp
+    )) {
+        return;
+    }
+
+    ImGui::TableSetupColumn("Value");
+    ImGui::TableSetupColumn("Current", ImGuiTableColumnFlags_WidthFixed, 180.0f);
+    ImGui::TableHeadersRow();
+
+    DrawValueRow("Manager pointer", FormatPointer(battleManager));
+    DrawValueRow(
+        "Manager account",
+        battleManager && Originals::MCLogicBattleManager_get_m_uAccountId ?
+            FormatUInt64(Originals::MCLogicBattleManager_get_m_uAccountId(battleManager)) :
+            "Waiting"
+    );
+    DrawValueRow(
+        "Is host",
+        battleManager && Originals::MCLogicBattleManager_get_IsHost ?
+            FormatBool(Originals::MCLogicBattleManager_get_IsHost(battleManager)) :
+            "Waiting"
+    );
+    DrawValueRow("hasBattle field", FormatFieldBool(battleManager, hasBattleField));
+    DrawValueRow("fightOver field", FormatFieldBool(battleManager, fightOverField));
+    DrawValueRow(
+        "defendFailed getter",
+        battleManager && Originals::MCLogicBattleManager_get_m_bDefendFaild ?
+            FormatBool(Originals::MCLogicBattleManager_get_m_bDefendFaild(battleManager)) :
+            "Waiting"
+    );
+    DrawValueRow("defendFailed field", FormatFieldBool(battleManager, defendFailedField));
+    DrawValueRow("reduce HP over", FormatFieldBool(battleManager, reduceHpOverField));
+    DrawValueRow("last round win", FormatFieldBool(battleManager, lastRoundWinField));
+    DrawValueRow("self fight value", FormatFieldInt(battleManager, selfFightValueField));
+    DrawValueRow("killer fight value", FormatFieldInt(battleManager, killerFightValueField));
+    DrawValueRow("kill self account", FormatFieldUInt64(battleManager, killSelfAccountField));
+    DrawValueRow("round result", GetRoundResultDataField(battleManager, "result"));
+    DrawValueRow("round start HP", GetRoundResultDataField(battleManager, "hpOnRoundStart"));
+    DrawValueRow("current opponent ptr", FormatPointer(currentOpponent));
+    DrawValueRow(
+        "alive camp A/B",
+        hasAliveCounts ?
+            FormatInt(campACount) + " / " + FormatInt(campBCount) :
+            "Waiting"
+    );
+    DrawValueRow(
+        "has alive camp A",
+        battleManager && Originals::MCLogicBattleManager_HasAliveFighter ?
+            FormatBool(Originals::MCLogicBattleManager_HasAliveFighter(battleManager, 1)) :
+            "Waiting"
+    );
+    DrawValueRow(
+        "has alive camp B",
+        battleManager && Originals::MCLogicBattleManager_HasAliveFighter ?
+            FormatBool(Originals::MCLogicBattleManager_HasAliveFighter(battleManager, 2)) :
+            "Waiting"
+    );
+
+    ImGui::EndTable();
+}
+
+void DrawTestBehaviorRows(uint64_t targetAccountId) {
+    void* behaviorApi = targetAccountId && Originals::MCBehaviorThreeApi_Get ?
+        Originals::MCBehaviorThreeApi_Get(targetAccountId) :
+        nullptr;
+
+    if (!ImGui::BeginTable(
+        "##TestBehaviorTable",
+        2,
+        ImGuiTableFlags_Borders |
+            ImGuiTableFlags_RowBg |
+            ImGuiTableFlags_SizingStretchProp
+    )) {
+        return;
+    }
+
+    ImGui::TableSetupColumn("Value");
+    ImGui::TableSetupColumn("Current", ImGuiTableColumnFlags_WidthFixed, 180.0f);
+    ImGui::TableHeadersRow();
+
+    DrawValueRow("Behavior API pointer", FormatPointer(behaviorApi));
+    DrawValueRow(
+        "Current battle result",
+        behaviorApi && Originals::MCBehaviorThreeApi_GetCurrentBattleRoundResult ?
+            FormatInt(Originals::MCBehaviorThreeApi_GetCurrentBattleRoundResult(behaviorApi)) :
+            "Waiting"
+    );
+    DrawValueRow(
+        "Current phase type",
+        behaviorApi && Originals::MCBehaviorThreeApi_GetCurrentPhaseType ?
+            FormatInt(Originals::MCBehaviorThreeApi_GetCurrentPhaseType(behaviorApi)) :
+            "Waiting"
+    );
+
+    ImGui::EndTable();
+}
+
+void DrawTestAllManagersTable() {
+    if (!Originals::MCLogicBattleData_ILOGIC_GetAllBattleMgr) {
+        DrawWaitingText("Waiting for battle manager list");
+        return;
+    }
+
+    auto* battleManagers = Originals::MCLogicBattleData_ILOGIC_GetAllBattleMgr(nullptr);
+    auto* entries = battleManagers && battleManagers->entries ?
+        battleManagers->entries->GetData() :
+        nullptr;
+    int entryLimit = battleManagers && battleManagers->entries ?
+        std::min(battleManagers->count, battleManagers->entries->getCapacity()) :
+        0;
+
+    if (!entries || entryLimit <= 0) {
+        ImGui::TextUnformatted("No battle managers found");
+        return;
+    }
+
+    static FieldInfo* fightOverField = nullptr;
+
+    if (!fightOverField) {
+        fightOverField = GetFieldInfoFromName("", "MCLogicBattleManager", "m_bFightOver");
+    }
+
+    if (!ImGui::BeginTable(
+        "##AllManagersTestTable",
+        7,
+        ImGuiTableFlags_Borders |
+            ImGuiTableFlags_RowBg |
+            ImGuiTableFlags_SizingStretchProp |
+            ImGuiTableFlags_ScrollY,
+        ImVec2(0.0f, 260.0f)
+    )) {
+        return;
+    }
+
+    ImGui::TableSetupColumn("Account", ImGuiTableColumnFlags_WidthFixed, 130.0f);
+    ImGui::TableSetupColumn("Name");
+    ImGui::TableSetupColumn("Enemy", ImGuiTableColumnFlags_WidthFixed, 130.0f);
+    ImGui::TableSetupColumn("HP", ImGuiTableColumnFlags_WidthFixed, 60.0f);
+    ImGui::TableSetupColumn("Over", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+    ImGui::TableSetupColumn("Fail", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+    ImGui::TableSetupColumn("Result", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+    ImGui::TableHeadersRow();
+
+    for (int i = 0; entries && i < entryLimit; ++i) {
+        const auto& entry = entries[i];
+
+        if (entry.hashCode < 0 || entry.key == 0) {
+            continue;
+        }
+
+        uint64_t accountId = entry.key;
+        void* manager = entry.value;
+        uint64_t enemyId =
+            Originals::MCLogicBattleData_ILOGIC_GetCurrentOpponentAccountID ?
+                Originals::MCLogicBattleData_ILOGIC_GetCurrentOpponentAccountID(
+                    nullptr,
+                    accountId
+                ) :
+                0;
+
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        ImGui::Text("%llu", (unsigned long long)accountId);
+        ImGui::TableSetColumnIndex(1);
+        std::string playerName = GetBattlePlayerName(accountId);
+        ImGui::TextUnformatted(playerName.empty() ? "-" : playerName.c_str());
+        ImGui::TableSetColumnIndex(2);
+        if (enemyId != 0) {
+            ImGui::Text("%llu", (unsigned long long)enemyId);
+        } else {
+            ImGui::TextUnformatted("-");
+        }
+        ImGui::TableSetColumnIndex(3);
+        if (Originals::MCLogicBattleData_ILOGIC_GetPlayerHP) {
+            ImGui::Text(
+                "%d",
+                Originals::MCLogicBattleData_ILOGIC_GetPlayerHP(nullptr, accountId)
+            );
+        } else {
+            ImGui::TextUnformatted("-");
+        }
+        ImGui::TableSetColumnIndex(4);
+        ImGui::TextUnformatted(FormatFieldBool(manager, fightOverField).c_str());
+        ImGui::TableSetColumnIndex(5);
+        if (manager && Originals::MCLogicBattleManager_get_m_bDefendFaild) {
+            ImGui::TextUnformatted(
+                FormatBool(Originals::MCLogicBattleManager_get_m_bDefendFaild(manager)).c_str()
+            );
+        } else {
+            ImGui::TextUnformatted("-");
+        }
+        ImGui::TableSetColumnIndex(6);
+        ImGui::TextUnformatted(GetRoundResultDataField(manager, "result").c_str());
+    }
+
+    ImGui::EndTable();
+}
+
+void DrawTestTab() {
+    uint64_t selfAccountId = GetSelfAccountId();
+    uint64_t defaultAccountId = selfAccountId;
+    uint64_t selfOpponentId =
+        selfAccountId && Originals::MCLogicBattleData_ILOGIC_GetCurrentOpponentAccountID ?
+            Originals::MCLogicBattleData_ILOGIC_GetCurrentOpponentAccountID(
+                nullptr,
+                selfAccountId
+            ) :
+            0;
+
+    if (ImGui::Button("Retry test bindings")) {
+        ResolveFeatureBindings();
+        RefreshManagedReferences(true);
+    }
+
+    ImGui::SameLine();
+    if (ImGui::Button("Use self") && selfAccountId != 0) {
+        UiState::TestAccountId = FormatUInt64(selfAccountId);
+    }
+
+    ImGui::SameLine();
+    if (ImGui::Button("Use opponent") && selfOpponentId != 0) {
+        UiState::TestAccountId = FormatUInt64(selfOpponentId);
+    }
+
+    ImGui::SameLine();
+    if (ImGui::Button("Clear account")) {
+        UiState::TestAccountId.clear();
+    }
+
+    ImGui::SetNextItemWidth(-1.0f);
+    ImGui::InputTextWithHint(
+        "##TestAccountId",
+        "Account ID to inspect (empty = self)",
+        &UiState::TestAccountId
+    );
+
+    uint64_t targetAccountId = ParseAccountIdOrDefault(
+        UiState::TestAccountId,
+        defaultAccountId
+    );
+    uint64_t opponentAccountId =
+        targetAccountId && Originals::MCLogicBattleData_ILOGIC_GetCurrentOpponentAccountID ?
+            Originals::MCLogicBattleData_ILOGIC_GetCurrentOpponentAccountID(
+                nullptr,
+                targetAccountId
+            ) :
+            0;
+    void* targetManager = GetBattleManagerByAccountId(targetAccountId);
+
+    ImGui::SeparatorText("Bindings");
+    DrawTestBindingRows();
+
+    ImGui::SeparatorText("Round State");
+    DrawTestRoundRows(selfAccountId, targetAccountId, opponentAccountId);
+
+    ImGui::SeparatorText("Battle Manager");
+    DrawTestManagerRows(targetManager);
+
+    ImGui::SeparatorText("Behavior API");
+    DrawTestBehaviorRows(targetAccountId);
+
+    ImGui::SeparatorText("All Managers");
+    DrawTestAllManagersTable();
+}
+
 void DrawShopTab() {
     if (ImGui::BeginTabBar("##ShopTabBar")) {
         if (ImGui::BeginTabItem("Automation")) {
@@ -2024,6 +2956,13 @@ void DrawShopTab() {
         }
 
         if (ImGui::BeginTabItem("Hero Targets")) {
+            DrawSearchInput(
+                "ShopHeroFilter",
+                "Search heroes by name, ID, or cost",
+                UiState::ShopHeroFilter
+            );
+            ImGui::Checkbox("Show tracked heroes only", &UiState::ShopShowSelectedOnly);
+
             if (ImGui::Button("Clear hero targets", ImVec2(-1.0f, 0.0f))) {
                 for (auto& item : FeatureState::ShopSelectedHeroes) {
                     item.second.selected = false;
@@ -2032,9 +2971,36 @@ void DrawShopTab() {
 
             ImGui::Spacing();
             std::vector<HeroTableEntry> heroes = GetSortedHeroes(true);
+            int totalHeroCount = static_cast<int>(heroes.size());
+            FilterHeroes(heroes, UiState::ShopHeroFilter);
+
+            if (UiState::ShopShowSelectedOnly) {
+                heroes.erase(
+                    std::remove_if(
+                        heroes.begin(),
+                        heroes.end(),
+                        [](const HeroTableEntry& hero) {
+                            auto it = FeatureState::ShopSelectedHeroes.find(hero.id);
+                            return it == FeatureState::ShopSelectedHeroes.end() ||
+                                !it->second.selected;
+                        }
+                    ),
+                    heroes.end()
+                );
+            }
+
+            ImGui::Text(
+                "Showing %d / %d heroes",
+                static_cast<int>(heroes.size()),
+                totalHeroCount
+            );
 
             if (heroes.empty()) {
-                DrawWaitingText("Waiting for hero table");
+                if (totalHeroCount == 0) {
+                    DrawWaitingText("Waiting for hero table");
+                } else {
+                    ImGui::TextUnformatted("No heroes match the current filter");
+                }
             } else if (ImGui::BeginTable(
                 "##ShopHeroListTable",
                 4,
@@ -2094,11 +3060,27 @@ void DrawArenaTab() {
             ImGui::InputInt("Spawn star level", &FeatureState::ArenaHeroStar);
             FeatureState::ArenaHeroStar = std::clamp(FeatureState::ArenaHeroStar, 1, 3);
             ImGui::Separator();
+            DrawSearchInput(
+                "ArenaHeroFilter",
+                "Search heroes by name, ID, or cost",
+                UiState::ArenaHeroFilter
+            );
 
             std::vector<HeroTableEntry> heroes = GetSortedHeroes(true);
+            int totalHeroCount = static_cast<int>(heroes.size());
+            FilterHeroes(heroes, UiState::ArenaHeroFilter);
+            ImGui::Text(
+                "Showing %d / %d heroes",
+                static_cast<int>(heroes.size()),
+                totalHeroCount
+            );
 
             if (heroes.empty()) {
-                DrawWaitingText("Waiting for hero table");
+                if (totalHeroCount == 0) {
+                    DrawWaitingText("Waiting for hero table");
+                } else {
+                    ImGui::TextUnformatted("No heroes match the current filter");
+                }
             } else if (ImGui::BeginTable(
                 "##ArenaHeroListTable",
                 3,
@@ -2142,11 +3124,27 @@ void DrawArenaTab() {
 
             ImGui::Checkbox("Grant enhanced item", &FeatureState::ArenaItemEnhanced);
             ImGui::Separator();
+            DrawSearchInput(
+                "ArenaItemFilter",
+                "Search items by name or ID",
+                UiState::ArenaItemFilter
+            );
 
             std::vector<EquipTableEntry> equips = GetSortedEquips();
+            int totalEquipCount = static_cast<int>(equips.size());
+            FilterEquips(equips, UiState::ArenaItemFilter);
+            ImGui::Text(
+                "Showing %d / %d items",
+                static_cast<int>(equips.size()),
+                totalEquipCount
+            );
 
             if (equips.empty()) {
-                DrawWaitingText("Waiting for item table");
+                if (totalEquipCount == 0) {
+                    DrawWaitingText("Waiting for item table");
+                } else {
+                    ImGui::TextUnformatted("No items match the current filter");
+                }
             } else if (ImGui::BeginTable(
                 "##ArenaItemListTable",
                 2,
@@ -2191,12 +3189,35 @@ void DrawArenaTab() {
                 FeatureState::ArenaGogoCardSelected1,
                 FeatureState::ArenaGogoCardSelected2
             );
+            if (ImGui::Button("Clear card 1")) {
+                FeatureState::ArenaGogoCardSelected1 = -1;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Clear card 2")) {
+                FeatureState::ArenaGogoCardSelected2 = -1;
+            }
             ImGui::Separator();
+            DrawSearchInput(
+                "ArenaGogoCardFilter",
+                "Search GogoCards by name or ID",
+                UiState::ArenaGogoCardFilter
+            );
 
             std::vector<CardTableEntry> cards = GetSortedCards();
+            int totalCardCount = static_cast<int>(cards.size());
+            FilterCards(cards, UiState::ArenaGogoCardFilter);
+            ImGui::Text(
+                "Showing %d / %d cards",
+                static_cast<int>(cards.size()),
+                totalCardCount
+            );
 
             if (cards.empty()) {
-                DrawWaitingText("Waiting for GogoCard table");
+                if (totalCardCount == 0) {
+                    DrawWaitingText("Waiting for GogoCard table");
+                } else {
+                    ImGui::TextUnformatted("No GogoCards match the current filter");
+                }
             } else if (ImGui::BeginTable(
                 "##ArenaGogoCardTable",
                 3,
@@ -2421,6 +3442,8 @@ namespace Hooks {
                 if (ImGui::BeginTabItem("Info")) {
                     DrawGgcInfo();
                     ImGui::Spacing();
+                    DrawRuntimeStatus();
+                    ImGui::Spacing();
                     ImGui::SeparatorText("Players");
 
                     if (!Originals::MCLogicBattleData_ILOGIC_GetAllBattleMgr ||
@@ -2607,10 +3630,15 @@ namespace Hooks {
                     ImGui::EndTabItem();
                 }
 
+                if (ImGui::BeginTabItem("Test")) {
+                    DrawTestTab();
+                    ImGui::EndTabItem();
+                }
+
                 ImGui::EndTabBar();
             }
-            ImGui::End();
         }
+        ImGui::End();
 
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
