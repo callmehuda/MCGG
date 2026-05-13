@@ -26,7 +26,7 @@ jobs:
       - name: Build with ndk-build
         run: |
           SDK_ROOT="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
-          "$SDK_ROOT/ndk/$ANDROID_NDK_VERSION/ndk-build" -C jni -j"$(nproc)"
+          "$SDK_ROOT/ndk/$ANDROID_NDK_VERSION/ndk-build" -C jni
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4

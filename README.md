@@ -14,9 +14,6 @@ MCGG is built to stay simple, readable, and easy to understand. It builds an
 native modding foundation with IL2CPP method lookup, field helpers, Dobby hooks,
 xDL symbol lookup, Unity touch forwarding, and a Dear ImGui overlay.
 
-This project is not affiliated with, endorsed by, or sponsored by Magic Chess Go
-Go, Skystone Games, or the original game developers.
-
 ## Responsible Use
 
 This repository is for learning, research, reverse engineering practice, and
@@ -34,22 +31,11 @@ This repository does not include:
 - Copyrighted game assets
 - Paid content
 - Bypasses
-- Account services
-- Server-side tooling
 - Instructions for abusing online services
 
 ## Features
 
 - Enemy Predictor overlay logic
-- Dear ImGui menu rendered through `eglSwapBuffers`
-- Unity touch forwarding into ImGui input
-- IL2CPP API resolution for Unity 2019.4.22f1
-- Advanced `GetField`, `GetStaticField`, `SetField`, and `SetStaticField`
-  helpers
-- Dobby-based native hooks
-- xDL-based shared library lookup
-- Local Unity and IL2CPP structure definitions
-- `arm64-v8a` native build target
 
 ## Requirements
 
@@ -164,7 +150,7 @@ At load time, `jni/Main.cpp`:
   `dump/dump.cs` before adding IL2CPP calls.
 - Keep the default build target `arm64-v8a`.
 - Keep Unity compatibility aligned with `2019.4.22f1`.
-- Do not commit generated `obj/` output.
+- Do not commit generated `obj/`, `libs/` output.
 
 ## CI Build
 
@@ -172,7 +158,7 @@ GitHub Actions builds the native library on pushes and pull requests to
 `master`. The workflow installs NDK r29, runs:
 
 ```sh
-ndk-build -C jni -j"$(nproc)"
+ndk-build -C jni
 ```
 
 and uploads the generated native libraries as the `native-libs` artifact.
