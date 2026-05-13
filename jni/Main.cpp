@@ -129,6 +129,14 @@ namespace RuntimeConfig {
     constexpr int TableRetryMs = 2000;
     constexpr int ArenaTickMs = 100;
     constexpr int ShopTickMs = 100;
+    constexpr int MaxManagedDictionaryEntries = 8192;
+    constexpr int MaxManagedListItems = 2048;
+    constexpr int MaxManagedStringChars = 4096;
+}
+
+namespace RuntimeState {
+    bool Il2CppReady = false;
+    bool BindingRetryRequested = false;
 }
 
 // Feature toggles, cached managed references, and throttled runtime state.
@@ -182,6 +190,7 @@ namespace UiState {
     std::string TestAccountId;
     std::string ConfigPath;
     std::string ConfigStatus;
+    int MainTabIndex = 0;
     int ThemeIndex = 1;
     int FontIndex = 1;
     bool ShopShowSelectedOnly = false;
@@ -458,15 +467,27 @@ std::string GenerateFieldCacheKey(
     return key;
 }
 
+bool HasIl2CppMethodScanApi();
+bool HasIl2CppFieldScanApi();
+bool IsIl2CppRuntimeReady();
+
 // Resolves a class name, including nested class paths.
 Il2CppClass* ResolveClassFromName(
     const Il2CppImage* image,
     const char* namespaze,
     const char* className
 ) {
+    if (!image || !className || !il2cpp_class_from_name) {
+        return nullptr;
+    }
+
     Il2CppClass* klass = il2cpp_class_from_name(image, namespaze, className);
     if (klass) {
         return klass;
+    }
+
+    if (!il2cpp_class_get_nested_types || !il2cpp_class_get_name) {
+        return nullptr;
     }
 
     char nameCopy[512]{0};
@@ -504,6 +525,11 @@ Il2CppClass* ResolveClassFromName(
 // Searches a class and its parents for a field.
 FieldInfo* FindFieldInClassHierarchy(Il2CppClass* klass, const char* fieldName) {
     if (!klass || !fieldName) {
+        return nullptr;
+    }
+
+    if (!il2cpp_class_get_field_from_name &&
+        (!il2cpp_class_get_fields || !il2cpp_field_get_name)) {
         return nullptr;
     }
 
@@ -547,7 +573,7 @@ FieldInfo* GetFieldInfoFromName(
     const char* className,
     const char* fieldName
 ) {
-    if (!className || !fieldName || !il2cpp_domain_get || !il2cpp_domain_get_assemblies) {
+    if (!className || !fieldName || !HasIl2CppFieldScanApi()) {
         return nullptr;
     }
 
@@ -594,7 +620,7 @@ FieldInfo* GetFieldInfoFromName(
 
 // Reads an instance field by metadata into a caller-provided buffer.
 bool GetFieldRaw(Il2CppObject* instance, FieldInfo* field, void* outValue) {
-    if (!instance || !field || !outValue || !il2cpp_field_get_value) {
+    if (!IsIl2CppRuntimeReady() || !instance || !field || !outValue || !il2cpp_field_get_value) {
         return false;
     }
 
@@ -619,7 +645,7 @@ bool GetFieldRaw(
 
 // Reads a static field by metadata into a caller-provided buffer.
 bool GetStaticFieldRaw(FieldInfo* field, void* outValue) {
-    if (!field || !outValue || !il2cpp_field_static_get_value) {
+    if (!IsIl2CppRuntimeReady() || !field || !outValue || !il2cpp_field_static_get_value) {
         return false;
     }
 
@@ -642,7 +668,7 @@ bool GetStaticFieldRaw(
 
 // Writes an instance field by metadata from a caller-provided buffer.
 bool SetFieldRaw(Il2CppObject* instance, FieldInfo* field, const void* value) {
-    if (!instance || !field || !value || !il2cpp_field_set_value) {
+    if (!IsIl2CppRuntimeReady() || !instance || !field || !value || !il2cpp_field_set_value) {
         return false;
     }
 
@@ -667,7 +693,7 @@ bool SetFieldRaw(
 
 // Writes a static field by metadata from a caller-provided buffer.
 bool SetStaticFieldRaw(FieldInfo* field, const void* value) {
-    if (!field || !value || !il2cpp_field_static_set_value) {
+    if (!IsIl2CppRuntimeReady() || !field || !value || !il2cpp_field_static_set_value) {
         return false;
     }
 
@@ -771,14 +797,18 @@ std::vector<MethodInfo*> GetAllMethodInfosFromName(
     const char* methodName,
     const std::vector<const char*>& paramTypes
 ) {
+    std::vector<MethodInfo*> foundMethods;
+
+    if (!className || !methodName || !HasIl2CppMethodScanApi()) {
+        return foundMethods;
+    }
+
     std::string cacheKey = GenerateCacheKey(ns, className, methodName, paramTypes);
 
     auto cached = MultiMethodCache.find(cacheKey);
     if (cached != MultiMethodCache.end() && !cached->second.empty()) {
         return cached->second;
     }
-
-    std::vector<MethodInfo*> foundMethods;
 
     size_t size = 0;
     Il2CppDomain* domain = il2cpp_domain_get();
@@ -838,6 +868,10 @@ std::vector<MethodInfo*> GetAllMethodInfosFromName(
                     foundMethods.push_back(method);
                     break;
                 }
+            }
+
+            if (!il2cpp_class_get_parent) {
+                break;
             }
 
             currentKlass = il2cpp_class_get_parent(currentKlass);
@@ -921,7 +955,9 @@ bool HookResolvedMethod(
     void* method = GetFirstMethodFromName(ns, className, methodName, paramTypes);
 
     if (method) {
-        DobbyHook(method, replacement, reinterpret_cast<void**>(&original));
+        if (DobbyHook(method, replacement, reinterpret_cast<void**>(&original)) != RT_SUCCESS) {
+            original = nullptr;
+        }
     }
 
     return original != nullptr;
@@ -939,6 +975,176 @@ bool IntervalElapsed(
     }
 
     return false;
+}
+
+bool HasIl2CppDomainApi() {
+    return il2cpp_domain_get && il2cpp_thread_attach;
+}
+
+bool HasIl2CppAssemblyScanApi() {
+    return il2cpp_domain_get &&
+        il2cpp_domain_get_assemblies &&
+        il2cpp_assembly_get_image &&
+        il2cpp_class_from_name;
+}
+
+bool HasIl2CppMethodScanApi() {
+    return HasIl2CppAssemblyScanApi() &&
+        il2cpp_class_get_methods &&
+        il2cpp_method_get_name &&
+        il2cpp_method_get_param_count &&
+        il2cpp_method_get_param &&
+        il2cpp_class_from_type &&
+        il2cpp_class_get_name;
+}
+
+bool HasIl2CppFieldScanApi() {
+    return HasIl2CppAssemblyScanApi() &&
+        (il2cpp_class_get_field_from_name ||
+         (il2cpp_class_get_fields && il2cpp_field_get_name));
+}
+
+bool IsIl2CppRuntimeReady() {
+    if (!RuntimeState::Il2CppReady || !HasIl2CppDomainApi()) {
+        return false;
+    }
+
+    return il2cpp_domain_get() != nullptr;
+}
+
+template <typename T>
+bool IsManagedArrayValid(
+    const MonoStructures::Array<T>* array,
+    int maxItems = RuntimeConfig::MaxManagedListItems
+) {
+    if (!array || maxItems < 0) {
+        return false;
+    }
+
+    il2cpp_array_size_t capacity = array->GetCapacity();
+    return capacity <= static_cast<il2cpp_array_size_t>(maxItems);
+}
+
+template <typename T>
+bool TryGetManagedListData(
+    const MonoStructures::List<T>* list,
+    const T** outData,
+    int* outSize,
+    int maxItems = RuntimeConfig::MaxManagedListItems
+) {
+    if (outData) {
+        *outData = nullptr;
+    }
+
+    if (outSize) {
+        *outSize = 0;
+    }
+
+    if (!list || !list->items || list->size < 0 || maxItems < 0) {
+        return false;
+    }
+
+    if (!IsManagedArrayValid(list->items, maxItems)) {
+        return false;
+    }
+
+    int capacity = list->items->getCapacity();
+    if (list->size > capacity || list->size > maxItems) {
+        return false;
+    }
+
+    const T* data = list->GetData();
+    if (!data && list->size > 0) {
+        return false;
+    }
+
+    if (outData) {
+        *outData = data;
+    }
+
+    if (outSize) {
+        *outSize = list->size;
+    }
+
+    return true;
+}
+
+template <typename TKey, typename TValue>
+bool TryGetDictionaryEntries(
+    const MonoStructures::Dictionary<TKey, TValue>* dictionary,
+    const typename MonoStructures::Dictionary<TKey, TValue>::Entry** outEntries,
+    int* outLimit,
+    int maxEntries = RuntimeConfig::MaxManagedDictionaryEntries
+) {
+    if (outEntries) {
+        *outEntries = nullptr;
+    }
+
+    if (outLimit) {
+        *outLimit = 0;
+    }
+
+    if (!dictionary || !dictionary->entries || maxEntries < 0) {
+        return false;
+    }
+
+    if (dictionary->count < 0 ||
+        dictionary->freeCount < 0 ||
+        dictionary->freeCount > dictionary->count) {
+        return false;
+    }
+
+    if (!IsManagedArrayValid(dictionary->entries, maxEntries)) {
+        return false;
+    }
+
+    int capacity = dictionary->entries->getCapacity();
+    if (capacity < 0 ||
+        capacity > maxEntries ||
+        dictionary->count > capacity) {
+        return false;
+    }
+
+    const auto* entries = dictionary->entries->GetData();
+    if (!entries && dictionary->count > 0) {
+        return false;
+    }
+
+    if (outEntries) {
+        *outEntries = entries;
+    }
+
+    if (outLimit) {
+        *outLimit = std::min(dictionary->count, capacity);
+    }
+
+    return true;
+}
+
+template <typename TKey, typename TValue>
+std::vector<std::pair<TKey, TValue>> CopyDictionaryEntries(
+    const MonoStructures::Dictionary<TKey, TValue>* dictionary,
+    int maxEntries = RuntimeConfig::MaxManagedDictionaryEntries
+) {
+    std::vector<std::pair<TKey, TValue>> output;
+    const typename MonoStructures::Dictionary<TKey, TValue>::Entry* entries = nullptr;
+    int entryLimit = 0;
+
+    if (!TryGetDictionaryEntries(dictionary, &entries, &entryLimit, maxEntries)) {
+        return output;
+    }
+
+    output.reserve(static_cast<size_t>(std::max(entryLimit, 0)));
+
+    for (int i = 0; entries && i < entryLimit; ++i) {
+        const auto& entry = entries[i];
+
+        if (entry.hashCode >= 0) {
+            output.emplace_back(entry.key, entry.value);
+        }
+    }
+
+    return output;
 }
 
 namespace Hooks {
@@ -962,6 +1168,10 @@ namespace Hooks {
 
 // Resolves feature bindings. Missing entries are retried by the frame tick.
 void ResolveFeatureBindings() {
+    if (!IsIl2CppRuntimeReady() || !HasIl2CppMethodScanApi()) {
+        return;
+    }
+
     ResolveOriginal(
         Originals::MCLogicBattleData_ILOGIC_GetSelfChessPlayerName,
         "",
@@ -1369,7 +1579,13 @@ void ResolveFeatureBindings() {
 }
 
 void RetryFeatureBindingsIfNeeded() {
-    if (IntervalElapsed(FeatureState::LastBindingRetry, RuntimeConfig::BindingRetryMs)) {
+    if (!IsIl2CppRuntimeReady()) {
+        return;
+    }
+
+    if (RuntimeState::BindingRetryRequested ||
+        IntervalElapsed(FeatureState::LastBindingRetry, RuntimeConfig::BindingRetryMs)) {
+        RuntimeState::BindingRetryRequested = false;
         ResolveFeatureBindings();
     }
 }
@@ -1379,7 +1595,14 @@ std::string ManagedStringToStd(Il2CppString* value) {
         return {};
     }
 
-    return reinterpret_cast<MonoStructures::String*>(value)->str();
+    auto* managedString = reinterpret_cast<MonoStructures::String*>(value);
+    int length = managedString->getLength();
+
+    if (length <= 0 || length > RuntimeConfig::MaxManagedStringChars) {
+        return {};
+    }
+
+    return managedString->str();
 }
 
 bool IsForbidHeroName(const std::string& name) {
@@ -1430,12 +1653,12 @@ void* GetBattleManagerByAccountId(uint64_t accountId) {
     }
 
     auto* battleManagers = Originals::MCLogicBattleData_ILOGIC_GetAllBattleMgr(nullptr);
-    auto* entries = battleManagers && battleManagers->entries ?
-        battleManagers->entries->GetData() :
-        nullptr;
-    int entryLimit = battleManagers && battleManagers->entries ?
-        std::min(battleManagers->count, battleManagers->entries->getCapacity()) :
-        0;
+    const MonoStructures::Dictionary<uint64_t, void*>::Entry* entries = nullptr;
+    int entryLimit = 0;
+
+    if (!TryGetDictionaryEntries(battleManagers, &entries, &entryLimit)) {
+        return nullptr;
+    }
 
     for (int i = 0; entries && i < entryLimit; ++i) {
         const auto& entry = entries[i];
@@ -1553,10 +1776,12 @@ uint64_t LookupPairInDictionary(
     MonoStructures::Dictionary<uint64_t, uint64_t>* pairDict,
     uint64_t accountId
 ) {
-    auto* entries = pairDict && pairDict->entries ? pairDict->entries->GetData() : nullptr;
-    int entryLimit = pairDict && pairDict->entries ?
-        std::min(pairDict->count, pairDict->entries->getCapacity()) :
-        0;
+    const MonoStructures::Dictionary<uint64_t, uint64_t>::Entry* entries = nullptr;
+    int entryLimit = 0;
+
+    if (!TryGetDictionaryEntries(pairDict, &entries, &entryLimit)) {
+        return 0;
+    }
 
     for (int i = 0; entries && i < entryLimit; ++i) {
         const auto& entry = entries[i];
@@ -1713,6 +1938,10 @@ uint64_t PredictRoundRobinOpponent(
 }
 
 void RefreshManagedReferences(bool force = false) {
+    if (!IsIl2CppRuntimeReady()) {
+        return;
+    }
+
     if (!force &&
         !IntervalElapsed(
             FeatureState::LastReferenceRefresh,
@@ -1855,10 +2084,27 @@ bool IsBattleActive(uint64_t selfAccountId) {
     }
 
     auto* battleManagers = Originals::MCLogicBattleData_ILOGIC_GetAllBattleMgr(nullptr);
-    return battleManagers && !battleManagers->empty();
+    const MonoStructures::Dictionary<uint64_t, void*>::Entry* entries = nullptr;
+    int entryLimit = 0;
+
+    if (!TryGetDictionaryEntries(battleManagers, &entries, &entryLimit)) {
+        return false;
+    }
+
+    for (int i = 0; entries && i < entryLimit; ++i) {
+        if (entries[i].hashCode >= 0 && entries[i].key != 0) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 void RefreshTableDataForMatch(uint64_t selfAccountId) {
+    if (!IsIl2CppRuntimeReady()) {
+        return;
+    }
+
     bool battleActive = IsBattleActive(selfAccountId);
     bool selfChanged =
         selfAccountId != 0 &&
@@ -1873,6 +2119,10 @@ void RefreshTableDataForMatch(uint64_t selfAccountId) {
 }
 
 void EnsureTableDataLoaded() {
+    if (!IsIl2CppRuntimeReady()) {
+        return;
+    }
+
     if (FeatureState::TableDataLoaded) {
         return;
     }
@@ -1908,7 +2158,7 @@ void EnsureTableDataLoaded() {
                 qualityField = GetFieldInfoFromName("", "CData_MCHero_Element", "m_Quality");
             }
 
-            for (const auto& item : heroDictionary->ToVector()) {
+            for (const auto& item : CopyDictionaryEntries(heroDictionary)) {
                 void* hero = item.second;
 
                 if (!hero) {
@@ -1960,14 +2210,14 @@ void EnsureTableDataLoaded() {
                     GetFieldInfoFromName("", "CData_MCEquipBase_Element", "m_mItemName");
             }
 
-            for (const auto& outer : equipDictionary->ToVector()) {
+            for (const auto& outer : CopyDictionaryEntries(equipDictionary)) {
                 auto* nestedDictionary = outer.second;
 
                 if (!nestedDictionary) {
                     continue;
                 }
 
-                for (const auto& inner : nestedDictionary->ToVector()) {
+                for (const auto& inner : CopyDictionaryEntries(nestedDictionary)) {
                     void* equip = inner.second;
 
                     if (!equip) {
@@ -2013,7 +2263,7 @@ void EnsureTableDataLoaded() {
                     GetFieldInfoFromName("", "CData_MCSuperCrystalKey_Element", "m_SkillName");
             }
 
-            for (const auto& item : cardDictionary->ToVector()) {
+            for (const auto& item : CopyDictionaryEntries(cardDictionary)) {
                 void* card = item.second;
 
                 if (!card) {
@@ -2077,6 +2327,10 @@ bool SelectShopSlot(int slot) {
 }
 
 void GiveHero(int heroId, int star) {
+    if (!IsIl2CppRuntimeReady()) {
+        return;
+    }
+
     uint64_t selfAccountId = GetSelfAccountId();
     void* battleManager = nullptr;
 
@@ -2103,6 +2357,10 @@ void GiveHero(int heroId, int star) {
 }
 
 void GiveEquip(int equipId) {
+    if (!IsIl2CppRuntimeReady()) {
+        return;
+    }
+
     uint64_t selfAccountId = GetSelfAccountId();
 
     if (selfAccountId == 0 || !Originals::MCEquipUtil_OnGetNewEquip || equipId <= 0) {
@@ -2115,6 +2373,10 @@ void GiveEquip(int equipId) {
 }
 
 void GiveGold() {
+    if (!IsIl2CppRuntimeReady()) {
+        return;
+    }
+
     uint64_t selfAccountId = GetSelfAccountId();
 
     if (selfAccountId == 0 ||
@@ -2132,7 +2394,7 @@ void GiveGold() {
 }
 
 void ApplyArenaState(uint64_t selfAccountId) {
-    if (selfAccountId == 0) {
+    if (!IsIl2CppRuntimeReady() || selfAccountId == 0) {
         return;
     }
 
@@ -2167,12 +2429,12 @@ void ApplyArenaState(uint64_t selfAccountId) {
             Originals::MCLogicBattleData_ILOGIC_GetAllBattleMgr) {
             auto* battleManagers =
                 Originals::MCLogicBattleData_ILOGIC_GetAllBattleMgr(nullptr);
-            auto* entries = battleManagers && battleManagers->entries ?
-                battleManagers->entries->GetData() :
-                nullptr;
-            int entryLimit = battleManagers && battleManagers->entries ?
-                std::min(battleManagers->count, battleManagers->entries->getCapacity()) :
-                0;
+            const MonoStructures::Dictionary<uint64_t, void*>::Entry* entries = nullptr;
+            int entryLimit = 0;
+
+            if (!TryGetDictionaryEntries(battleManagers, &entries, &entryLimit)) {
+                return;
+            }
 
             for (int i = 0; entries && i < entryLimit; ++i) {
                 const auto& entry = entries[i];
@@ -2218,7 +2480,7 @@ void ApplyArenaState(uint64_t selfAccountId) {
             nullptr;
 
         if (roundDictionary) {
-            for (const auto& item : roundDictionary->ToVector()) {
+            for (const auto& item : CopyDictionaryEntries(roundDictionary, 32)) {
                 void* roundData = item.second;
 
                 if (!roundData) {
@@ -2234,11 +2496,18 @@ void ApplyArenaState(uint64_t selfAccountId) {
                     continue;
                 }
 
-                if (FeatureState::ArenaGogoCardSelected1 > 0 && cardList->GetSize() >= 1) {
+                const int* cardData = nullptr;
+                int cardCount = 0;
+
+                if (!TryGetManagedListData(cardList, &cardData, &cardCount, 8)) {
+                    continue;
+                }
+
+                if (FeatureState::ArenaGogoCardSelected1 > 0 && cardCount >= 1) {
                     cardList->set_Item(0, FeatureState::ArenaGogoCardSelected1);
                 }
 
-                if (FeatureState::ArenaGogoCardSelected2 > 0 && cardList->GetSize() >= 2) {
+                if (FeatureState::ArenaGogoCardSelected2 > 0 && cardCount >= 2) {
                     cardList->set_Item(1, FeatureState::ArenaGogoCardSelected2);
                 }
             }
@@ -2247,6 +2516,10 @@ void ApplyArenaState(uint64_t selfAccountId) {
 }
 
 void RunShopAutomation(uint64_t selfAccountId) {
+    if (!IsIl2CppRuntimeReady()) {
+        return;
+    }
+
     bool anyShopAutomation =
         FeatureState::ShopBuyFreeHero ||
         FeatureState::ShopBuySelectedHero ||
@@ -2402,6 +2675,10 @@ void RunShopAutomation(uint64_t selfAccountId) {
 }
 
 void TickFeatures() {
+    if (!IsIl2CppRuntimeReady()) {
+        return;
+    }
+
     RetryFeatureBindingsIfNeeded();
     RefreshManagedReferences();
 
@@ -2636,6 +2913,7 @@ float ParseConfigFloat(const std::string& value, float fallback) {
 }
 
 void ClampConfigurableState() {
+    UiState::MainTabIndex = std::clamp(UiState::MainTabIndex, 0, 6);
     UiState::ThemeIndex = std::clamp(UiState::ThemeIndex, 0, 1);
     UiState::FontIndex = std::clamp(UiState::FontIndex, 0, 1);
     UiState::MenuWidth = std::clamp(UiState::MenuWidth, 360.0f, 1600.0f);
@@ -2659,8 +2937,13 @@ void ClampConfigurableState() {
     UiState::ItemSpacingX = std::clamp(UiState::ItemSpacingX, 0.0f, 32.0f);
     UiState::ItemSpacingY = std::clamp(UiState::ItemSpacingY, 0.0f, 32.0f);
     UiState::IndentSpacing = std::clamp(UiState::IndentSpacing, 0.0f, 48.0f);
-    FeatureState::ShopKeepGoldAt = std::max(0, FeatureState::ShopKeepGoldAt);
+    FeatureState::ShopKeepGoldAt = std::clamp(FeatureState::ShopKeepGoldAt, 0, 999999);
     FeatureState::ArenaHeroStar = std::clamp(FeatureState::ArenaHeroStar, 1, 3);
+    FeatureState::ArenaPrice = std::clamp(FeatureState::ArenaPrice, 0, 99);
+
+    for (auto& item : FeatureState::ShopSelectedHeroes) {
+        item.second.targetCount = std::clamp(item.second.targetCount, 1, 99);
+    }
 }
 
 void ResetVisualSettings() {
@@ -3259,6 +3542,131 @@ bool HasArenaItemBindings();
 bool HasArenaGogoCardBindings();
 bool HasArenaGoldBindings();
 bool HasBattleTestBindings();
+std::string GetBattlePlayerName(uint64_t accountId);
+
+struct PlayerInfoRow {
+    uint64_t accountId = 0;
+    bool isSelf = false;
+    std::string playerName;
+    std::string sortName;
+    std::string enemyName;
+};
+
+namespace UiCache {
+    std::vector<PlayerInfoRow> InfoPlayerRows;
+    bool InfoPlayersReady = false;
+    std::chrono::steady_clock::time_point LastInfoPlayerRefresh{};
+    ImVec2 MenuWindowPos{};
+    ImVec2 MenuWindowSize{};
+}
+
+std::string NormalizeDisplayName(const std::string& value) {
+    std::string output = value;
+    std::transform(
+        output.begin(),
+        output.end(),
+        output.begin(),
+        [](unsigned char ch) {
+            return static_cast<char>(std::tolower(ch));
+        }
+    );
+    return output;
+}
+
+void RefreshInfoPlayerRows(bool force = false) {
+    if (!IsIl2CppRuntimeReady()) {
+        UiCache::InfoPlayerRows.clear();
+        UiCache::InfoPlayersReady = false;
+        return;
+    }
+
+    if (!force &&
+        !IntervalElapsed(UiCache::LastInfoPlayerRefresh, 500)) {
+        return;
+    }
+
+    UiCache::InfoPlayerRows.clear();
+    UiCache::InfoPlayersReady = false;
+
+    if (!Originals::MCLogicBattleData_ILOGIC_GetAllBattleMgr ||
+        !Originals::MCLogicBattleData_ILOGIC_GetCurrentOpponentAccountID ||
+        !Originals::MCLogicBattleData_ILOGIC_GetSelfChessPlayerName) {
+        return;
+    }
+
+    auto* battleManagers = Originals::MCLogicBattleData_ILOGIC_GetAllBattleMgr(nullptr);
+    const MonoStructures::Dictionary<uint64_t, void*>::Entry* entries = nullptr;
+    int entryLimit = 0;
+
+    if (!TryGetDictionaryEntries(battleManagers, &entries, &entryLimit)) {
+        return;
+    }
+
+    uint64_t selfAccountId = GetSelfAccountId();
+    std::unordered_map<uint64_t, std::string> playerNameCache;
+    playerNameCache.reserve(static_cast<size_t>(std::max(entryLimit, 0) * 2));
+    UiCache::InfoPlayerRows.reserve(static_cast<size_t>(std::max(entryLimit, 0)));
+
+    auto getPlayerName = [&playerNameCache](uint64_t accountId) -> const std::string& {
+        auto cached = playerNameCache.find(accountId);
+        if (cached != playerNameCache.end()) {
+            return cached->second;
+        }
+
+        std::string playerName;
+
+        if (accountId != 0 && Originals::MCLogicBattleData_ILOGIC_GetSelfChessPlayerName) {
+            playerName = ManagedStringToStd(
+                Originals::MCLogicBattleData_ILOGIC_GetSelfChessPlayerName(nullptr, accountId)
+            );
+        }
+
+        auto inserted = playerNameCache.emplace(accountId, std::move(playerName));
+        return inserted.first->second;
+    };
+
+    for (int i = 0; entries && i < entryLimit; ++i) {
+        const auto& entry = entries[i];
+
+        if (entry.hashCode < 0 || entry.key == 0) {
+            continue;
+        }
+
+        uint64_t accountId = entry.key;
+        uint64_t enemyId = Originals::MCLogicBattleData_ILOGIC_GetCurrentOpponentAccountID(
+            nullptr,
+            accountId
+        );
+        std::string playerName = getPlayerName(accountId);
+        std::string enemyName = enemyId != 0 ? getPlayerName(enemyId) : "";
+
+        UiCache::InfoPlayerRows.push_back({
+            accountId,
+            selfAccountId != 0 && accountId == selfAccountId,
+            playerName,
+            NormalizeDisplayName(playerName),
+            enemyName
+        });
+    }
+
+    std::sort(
+        UiCache::InfoPlayerRows.begin(),
+        UiCache::InfoPlayerRows.end(),
+        [](const PlayerInfoRow& left, const PlayerInfoRow& right) {
+            if (left.isSelf != right.isSelf) {
+                return left.isSelf;
+            }
+
+            if (left.sortName != right.sortName) {
+                return left.sortName < right.sortName;
+            }
+
+            return left.accountId < right.accountId;
+        }
+    );
+
+    UiCache::InfoPlayersReady = true;
+}
 
 void DrawRuntimeStatus() {
     if (!ImGui::CollapsingHeader("Runtime Status", ImGuiTreeNodeFlags_DefaultOpen)) {
@@ -3266,7 +3674,8 @@ void DrawRuntimeStatus() {
     }
 
     char selfIdText[32];
-    snprintf(selfIdText, sizeof(selfIdText), "%llu", (unsigned long long)GetSelfAccountId());
+    uint64_t selfAccountId = IsIl2CppRuntimeReady() ? GetSelfAccountId() : 0;
+    snprintf(selfIdText, sizeof(selfIdText), "%llu", (unsigned long long)selfAccountId);
 
     char tableText[96];
     snprintf(
@@ -3291,6 +3700,7 @@ void DrawRuntimeStatus() {
 
         DrawValueRow("Self account", selfIdText);
         DrawValueRow("Table cache", tableText);
+        DrawStatusRow("IL2CPP", IsIl2CppRuntimeReady());
         DrawStatusRow(
             "Battle data",
             Originals::MCLogicBattleData_ILOGIC_GetAllBattleMgr &&
@@ -3329,45 +3739,53 @@ void DrawWaitingText(const char* message) {
 }
 
 bool HasShopSelectBinding() {
-    return (FeatureState::HeroShopItemList &&
+    return IsIl2CppRuntimeReady() &&
+        ((FeatureState::HeroShopItemList &&
             Originals::UIPanelBattleHeroShop_HeroItemList_OnSelectHero) ||
-        (FeatureState::HeroShopPanel &&
+         (FeatureState::HeroShopPanel &&
          Originals::UIPanelBattleHeroShop_KeyBoardShopSelect) ||
-        (FeatureState::HeroShopPanel &&
-         Originals::UIPanelBattleHeroShop_BuyHero);
+         (FeatureState::HeroShopPanel &&
+          Originals::UIPanelBattleHeroShop_BuyHero));
 }
 
 bool HasShopAutomationBindings() {
-    return Originals::MCLogicBattleData_ILOGIC_GetShopItemData &&
+    return IsIl2CppRuntimeReady() &&
+        Originals::MCLogicBattleData_ILOGIC_GetShopItemData &&
         Originals::MCLogicBattleData_ILOGIC_GetPlayerCoin &&
         HasShopSelectBinding();
 }
 
 bool HasShopRefreshBindings() {
-    return FeatureState::HeroShopPanel &&
+    return IsIl2CppRuntimeReady() &&
+        FeatureState::HeroShopPanel &&
         Originals::UIPanelBattleHeroShop_KeyBoardRefreshShop;
 }
 
 bool HasArenaHeroBindings() {
-    return Originals::MCLogicBattleManager_BuyNormalHero &&
+    return IsIl2CppRuntimeReady() &&
+        Originals::MCLogicBattleManager_BuyNormalHero &&
         (Originals::MCComp_GetGamer || GetSelfLogicBattleManager());
 }
 
 bool HasArenaItemBindings() {
-    return Originals::MCEquipUtil_OnGetNewEquip != nullptr;
+    return IsIl2CppRuntimeReady() &&
+        Originals::MCEquipUtil_OnGetNewEquip != nullptr;
 }
 
 bool HasArenaGogoCardBindings() {
-    return Originals::MCComp_GetGoGoCardComp != nullptr;
+    return IsIl2CppRuntimeReady() &&
+        Originals::MCComp_GetGoGoCardComp != nullptr;
 }
 
 bool HasArenaGoldBindings() {
-    return Originals::MCLogicBattleData_ILOGIC_GetPlayerData &&
+    return IsIl2CppRuntimeReady() &&
+        Originals::MCLogicBattleData_ILOGIC_GetPlayerData &&
         Originals::MCChessPlayerData_UpdateCoin;
 }
 
 bool HasBattleTestBindings() {
-    return Originals::MCLogicBattleData_ILOGIC_GetRoundRemainTime &&
+    return IsIl2CppRuntimeReady() &&
+        Originals::MCLogicBattleData_ILOGIC_GetRoundRemainTime &&
         Originals::MCLogicBattleData_ILOGIC_IsFightSection &&
         Originals::MCLogicBattleData_ILOGIC_IsSelfFightOver &&
         Originals::MCLogicBattleData_ILOGIC_GetPlayerHP &&
@@ -3377,6 +3795,11 @@ bool HasBattleTestBindings() {
 
 void DrawGgcInfo() {
     ImGui::SeparatorText("GGC");
+
+    if (!IsIl2CppRuntimeReady()) {
+        ImGui::TextUnformatted("Waiting for GGC data");
+        return;
+    }
 
     uint64_t selfAccountId = GetSelfAccountId();
 
@@ -3416,6 +3839,81 @@ void DrawGgcInfo() {
         GgcQualityName(round13Quality),
         round13Quality
     );
+}
+
+void DrawInfoPlayersTable() {
+    ImGui::SeparatorText("Players");
+
+    if (!IsIl2CppRuntimeReady()) {
+        DrawWaitingText("Waiting for IL2CPP runtime");
+        return;
+    }
+
+    if (!Originals::MCLogicBattleData_ILOGIC_GetAllBattleMgr ||
+        !Originals::MCLogicBattleData_ILOGIC_GetCurrentOpponentAccountID ||
+        !Originals::MCLogicBattleData_ILOGIC_GetSelfChessPlayerName) {
+        DrawWaitingText("Waiting for battle data");
+        return;
+    }
+
+    RefreshInfoPlayerRows();
+
+    if (!UiCache::InfoPlayersReady) {
+        DrawWaitingText("Waiting for player list");
+        return;
+    }
+
+    if (UiCache::InfoPlayerRows.empty()) {
+        ImGui::TextUnformatted("No players found");
+        return;
+    }
+
+    if (!ImGui::BeginTable(
+        "##InfoPlayersTable",
+        2,
+        ImGuiTableFlags_Borders |
+            ImGuiTableFlags_RowBg |
+            ImGuiTableFlags_SizingStretchProp |
+            ImGuiTableFlags_ScrollY,
+        ImVec2(0.0f, 260.0f)
+    )) {
+        return;
+    }
+
+    ImGui::TableSetupColumn("Player");
+    ImGui::TableSetupColumn("Current enemy");
+    ImGui::TableHeadersRow();
+
+    for (const PlayerInfoRow& row : UiCache::InfoPlayerRows) {
+        ImGui::TableNextRow();
+
+        ImGui::TableSetColumnIndex(0);
+        if (row.isSelf) {
+            std::string playerDisplay = row.playerName.empty() ? "-" : row.playerName;
+            playerDisplay += " (Self)";
+            ImGui::TextUnformatted(playerDisplay.c_str());
+        } else {
+            ImGui::TextUnformatted(row.playerName.empty() ? "-" : row.playerName.c_str());
+        }
+
+        ImGui::TableSetColumnIndex(1);
+        ImGui::TextUnformatted(row.enemyName.empty() ? "-" : row.enemyName.c_str());
+    }
+
+    ImGui::EndTable();
+}
+
+void DrawInfoTab() {
+    if (!IsIl2CppRuntimeReady()) {
+        DrawWaitingText("Waiting for IL2CPP runtime");
+        ImGui::Spacing();
+    }
+
+    DrawRuntimeStatus();
+    ImGui::Spacing();
+    DrawGgcInfo();
+    ImGui::Spacing();
+    DrawInfoPlayersTable();
 }
 
 void DrawCombatTab() {
@@ -3521,7 +4019,7 @@ void DrawSettingsTab() {
             ImGui::EndDisabled();
 
             if (ImGui::Button("Capture current menu size")) {
-                ImVec2 size = ImGui::GetWindowSize();
+                ImVec2 size = UiCache::MenuWindowSize;
                 UiState::MenuWidth = size.x;
                 UiState::MenuHeight = size.y;
                 changed = true;
@@ -3529,7 +4027,7 @@ void DrawSettingsTab() {
 
             ImGui::SameLine();
             if (ImGui::Button("Capture current position")) {
-                ImVec2 pos = ImGui::GetWindowPos();
+                ImVec2 pos = UiCache::MenuWindowPos;
                 UiState::MenuPosX = pos.x;
                 UiState::MenuPosY = pos.y;
                 UiState::UseFixedMenuPosition = true;
@@ -3613,7 +4111,9 @@ void DrawSettingsTab() {
 }
 
 std::string GetBattlePlayerName(uint64_t accountId) {
-    if (accountId == 0 || !Originals::MCLogicBattleData_ILOGIC_GetSelfChessPlayerName) {
+    if (!IsIl2CppRuntimeReady() ||
+        accountId == 0 ||
+        !Originals::MCLogicBattleData_ILOGIC_GetSelfChessPlayerName) {
         return {};
     }
 
@@ -3698,12 +4198,14 @@ void DrawTestRoundRows(
     uint32_t round = Originals::MCLogicBattleData_ILOGIC_GetGameRound ?
         Originals::MCLogicBattleData_ILOGIC_GetGameRound(nullptr) :
         0;
+    std::string targetName = GetBattlePlayerName(targetAccountId);
+    std::string opponentName = GetBattlePlayerName(opponentAccountId);
 
     DrawValueRow("Self account", selfAccountId ? FormatUInt64(selfAccountId) : "Waiting");
     DrawValueRow("Inspect account", targetAccountId ? FormatUInt64(targetAccountId) : "Waiting");
-    DrawValueRow("Inspect name", GetBattlePlayerName(targetAccountId).empty() ? "-" : GetBattlePlayerName(targetAccountId));
+    DrawValueRow("Inspect name", targetName.empty() ? "-" : targetName);
     DrawValueRow("Opponent account", opponentAccountId ? FormatUInt64(opponentAccountId) : "Waiting");
-    DrawValueRow("Opponent name", GetBattlePlayerName(opponentAccountId).empty() ? "-" : GetBattlePlayerName(opponentAccountId));
+    DrawValueRow("Opponent name", opponentName.empty() ? "-" : opponentName);
     DrawValueRow(
         "Game round",
         Originals::MCLogicBattleData_ILOGIC_GetGameRound ? FormatInt(round) : "Waiting"
@@ -3960,12 +4462,12 @@ std::vector<PredictionPlayer> CollectPredictionPlayers(uint64_t selfAccountId) {
     }
 
     auto* battleManagers = Originals::MCLogicBattleData_ILOGIC_GetAllBattleMgr(nullptr);
-    auto* entries = battleManagers && battleManagers->entries ?
-        battleManagers->entries->GetData() :
-        nullptr;
-    int entryLimit = battleManagers && battleManagers->entries ?
-        std::min(battleManagers->count, battleManagers->entries->getCapacity()) :
-        0;
+    const MonoStructures::Dictionary<uint64_t, void*>::Entry* entries = nullptr;
+    int entryLimit = 0;
+
+    if (!TryGetDictionaryEntries(battleManagers, &entries, &entryLimit)) {
+        return players;
+    }
 
     players.reserve(static_cast<size_t>(std::max(entryLimit, 0)));
 
@@ -4304,14 +4806,10 @@ void DrawTestAllManagersTable() {
     }
 
     auto* battleManagers = Originals::MCLogicBattleData_ILOGIC_GetAllBattleMgr(nullptr);
-    auto* entries = battleManagers && battleManagers->entries ?
-        battleManagers->entries->GetData() :
-        nullptr;
-    int entryLimit = battleManagers && battleManagers->entries ?
-        std::min(battleManagers->count, battleManagers->entries->getCapacity()) :
-        0;
+    const MonoStructures::Dictionary<uint64_t, void*>::Entry* entries = nullptr;
+    int entryLimit = 0;
 
-    if (!entries || entryLimit <= 0) {
+    if (!TryGetDictionaryEntries(battleManagers, &entries, &entryLimit) || entryLimit <= 0) {
         ImGui::TextUnformatted("No battle managers found");
         return;
     }
@@ -4399,6 +4897,11 @@ void DrawTestAllManagersTable() {
 }
 
 void DrawTestTab() {
+    if (!IsIl2CppRuntimeReady()) {
+        DrawWaitingText("Waiting for IL2CPP runtime");
+        return;
+    }
+
     uint64_t selfAccountId = GetSelfAccountId();
     uint64_t defaultAccountId = selfAccountId;
     uint64_t selfOpponentId =
@@ -4495,7 +4998,8 @@ void DrawShopTab() {
             ImGui::Checkbox("Keep gold reserve", &FeatureState::ShopKeepGold);
             ImGui::SetNextItemWidth(120.0f);
             ImGui::InputInt("Minimum reserve gold", &FeatureState::ShopKeepGoldAt);
-            FeatureState::ShopKeepGoldAt = std::max(0, FeatureState::ShopKeepGoldAt);
+            FeatureState::ShopKeepGoldAt =
+                std::clamp(FeatureState::ShopKeepGoldAt, 0, 999999);
             ImGui::EndTabItem();
         }
 
@@ -4562,7 +5066,7 @@ void DrawShopTab() {
 
                 for (const HeroTableEntry& hero : heroes) {
                     HeroAutomationState& state = FeatureState::ShopSelectedHeroes[hero.id];
-                    state.targetCount = std::max(1, state.targetCount);
+                    state.targetCount = std::clamp(state.targetCount, 1, 99);
 
                     ImGui::PushID(hero.id);
                     ImGui::TableNextRow();
@@ -4576,7 +5080,7 @@ void DrawShopTab() {
                     ImGui::TableSetColumnIndex(2);
                     ImGui::SetNextItemWidth(-1.0f);
                     ImGui::InputInt("##target", &state.targetCount);
-                    state.targetCount = std::max(1, state.targetCount);
+                    state.targetCount = std::clamp(state.targetCount, 1, 99);
 
                     ImGui::TableSetColumnIndex(3);
                     ImGui::Checkbox("##selected", &state.selected);
@@ -4828,6 +5332,7 @@ void DrawArenaTab() {
             ImGui::Separator();
             ImGui::SetNextItemWidth(120.0f);
             ImGui::InputInt("Hero cost filter", &FeatureState::ArenaPrice);
+            FeatureState::ArenaPrice = std::clamp(FeatureState::ArenaPrice, 0, 99);
 
             if (ImGui::Button("Spawn all heroes with selected cost", ImVec2(-1.0f, 0.0f))) {
                 for (const HeroTableEntry& hero : GetSortedHeroes(true)) {
@@ -4846,6 +5351,158 @@ void DrawArenaTab() {
 
         ImGui::EndTabBar();
     }
+}
+
+struct MainMenuTab {
+    const char* label;
+    void (*draw)();
+};
+
+void DrawMenuTabButton(const char* label, int index) {
+    bool selected = UiState::MainTabIndex == index;
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(10.0f, 8.0f));
+
+    if (ImGui::Selectable(label, selected, 0, ImVec2(-1.0f, 34.0f))) {
+        UiState::MainTabIndex = index;
+    }
+
+    ImGui::PopStyleVar(2);
+}
+
+ImVec2 GetValidatedMenuSize() {
+    ClampConfigurableState();
+
+    ImGuiIO& io = ImGui::GetIO();
+    float maxWidth = io.DisplaySize.x > 0.0f ?
+        std::max(360.0f, io.DisplaySize.x - 24.0f) :
+        1600.0f;
+    float maxHeight = io.DisplaySize.y > 0.0f ?
+        std::max(280.0f, io.DisplaySize.y - 24.0f) :
+        1200.0f;
+
+    return ImVec2(
+        std::clamp(UiState::MenuWidth, 360.0f, maxWidth),
+        std::clamp(UiState::MenuHeight, 280.0f, maxHeight)
+    );
+}
+
+ImVec2 GetValidatedMenuPosition(const ImVec2& menuSize) {
+    ImGuiIO& io = ImGui::GetIO();
+    float maxX = io.DisplaySize.x > 0.0f ? io.DisplaySize.x - 48.0f : 4000.0f;
+    float maxY = io.DisplaySize.y > 0.0f ? io.DisplaySize.y - 48.0f : 4000.0f;
+    float minX = menuSize.x > 0.0f ? 48.0f - menuSize.x : -2000.0f;
+    float minY = menuSize.y > 0.0f ? 48.0f - menuSize.y : -2000.0f;
+
+    return ImVec2(
+        std::clamp(UiState::MenuPosX, minX, maxX),
+        std::clamp(UiState::MenuPosY, minY, maxY)
+    );
+}
+
+void DrawMainMenu() {
+    const MainMenuTab tabs[] = {
+        {"Info", DrawInfoTab},
+        {"Combat", DrawCombatTab},
+        {"Shop", DrawShopTab},
+        {"Arena", DrawArenaTab},
+        {"Appearance", DrawAppearanceTab},
+        {"Settings", DrawSettingsTab},
+        {"Test", DrawTestTab}
+    };
+
+    int tabCount = static_cast<int>(IM_ARRAYSIZE(tabs));
+    UiState::MainTabIndex = std::clamp(UiState::MainTabIndex, 0, tabCount - 1);
+
+    ImVec2 menuSize = GetValidatedMenuSize();
+
+    if (UiState::UseFixedMenuPosition) {
+        ImGui::SetNextWindowPos(GetValidatedMenuPosition(menuSize), ImGuiCond_Always);
+    }
+
+    ImGui::SetNextWindowSize(menuSize, ImGuiCond_Always);
+
+    if (!ImGui::Begin("MCGG", nullptr, ImGuiWindowFlags_NoCollapse)) {
+        ImGui::End();
+        return;
+    }
+
+    UiCache::MenuWindowPos = ImGui::GetWindowPos();
+    UiCache::MenuWindowSize = ImGui::GetWindowSize();
+
+    ImGui::BeginChild("##MainNav", ImVec2(132.0f, 0.0f), false);
+    ImGui::TextUnformatted("MCGG");
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    for (int i = 0; i < tabCount; ++i) {
+        DrawMenuTabButton(tabs[i].label, i);
+    }
+
+    ImGui::EndChild();
+    ImGui::SameLine();
+
+    ImGui::BeginChild("##MainContent", ImVec2(0.0f, 0.0f), false);
+    ImGui::TextUnformatted(tabs[UiState::MainTabIndex].label);
+    ImGui::Separator();
+    ImGui::Spacing();
+    tabs[UiState::MainTabIndex].draw();
+    ImGui::EndChild();
+
+    ImGui::End();
+}
+
+bool InitializeOverlay() {
+    if (ImGui::GetCurrentContext() != nullptr) {
+        return true;
+    }
+
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+
+    ImGuiIO& io = ImGui::GetIO();
+    io.IniFilename = nullptr;
+    io.ConfigWindowsMoveFromTitleBarOnly = true;
+    io.ConfigWindowsResizeFromEdges = false;
+
+    EnsureConfigPathInitialized();
+    LoadConfigFromFile(UiState::ConfigPath, false);
+    LoadAppearanceFonts();
+
+    if (!ImGui_ImplOpenGL3_Init("#version 300 es")) {
+        AppearanceState::DefaultFont = nullptr;
+        AppearanceState::RobotoFont = nullptr;
+        ImGui::DestroyContext();
+        return false;
+    }
+
+    ApplyAppearance();
+
+    ImGuiStyle& style = ImGui::GetStyle();
+    style.WindowTitleAlign = ImVec2(0.5f, 0.5f);
+    style.ButtonTextAlign = ImVec2(0.5f, 0.5f);
+    style.ScaleAllSizes(1.0f);
+
+    return true;
+}
+
+bool AttachRenderIl2CppThread(bool& attached) {
+    if (attached) {
+        return true;
+    }
+
+    if (!IsIl2CppRuntimeReady()) {
+        return false;
+    }
+
+    Il2CppDomain* domain = il2cpp_domain_get();
+    if (!domain || !il2cpp_thread_attach(domain)) {
+        return false;
+    }
+
+    attached = true;
+    return true;
 }
 
 namespace Hooks {
@@ -4943,42 +5600,39 @@ namespace Hooks {
 
     // Renders the ImGui overlay before the frame is swapped.
     EGLBoolean EglSwapBuffers(EGLDisplay dpy, EGLSurface surface) {
-        static bool ImGui_Init = false;
-        static bool Il2Cpp_Init = false;
+        static bool imguiReady = false;
+        static bool renderThreadAttached = false;
 
-        eglQuerySurface(dpy, surface, EGL_WIDTH, &GLWidth);
-        eglQuerySurface(dpy, surface, EGL_HEIGHT, &GLHeight);
-
-        if (!ImGui_Init) {
-            IMGUI_CHECKVERSION();
-
-            ImGui::CreateContext();
-
-            ImGuiIO& io = ImGui::GetIO();
-            io.IniFilename = nullptr;
-            io.ConfigWindowsMoveFromTitleBarOnly = true;
-            io.ConfigWindowsResizeFromEdges = false;
-
-            EnsureConfigPathInitialized();
-            LoadConfigFromFile(UiState::ConfigPath, false);
-            LoadAppearanceFonts();
-            ImGui_ImplOpenGL3_Init("#version 300 es");
-            ApplyAppearance();
-
-            ImGuiStyle& style = ImGui::GetStyle();
-            style.WindowTitleAlign = ImVec2(0.5f, 0.5f);
-            style.ButtonTextAlign = ImVec2(0.5f, 0.5f);
-            style.ScaleAllSizes(1.0f);
-
-            ImGui_Init = true;
+        if (!Originals::EglSwapBuffers) {
+            return EGL_FALSE;
         }
 
-        if (!Il2Cpp_Init) {
-            if (il2cpp_domain_get && il2cpp_thread_attach) {
-                il2cpp_thread_attach(il2cpp_domain_get());
-                Il2Cpp_Init = true;
+        if (dpy == EGL_NO_DISPLAY || surface == EGL_NO_SURFACE) {
+            return Originals::EglSwapBuffers(dpy, surface);
+        }
+
+        EGLint width = 0;
+        EGLint height = 0;
+
+        if (!eglQuerySurface(dpy, surface, EGL_WIDTH, &width) ||
+            !eglQuerySurface(dpy, surface, EGL_HEIGHT, &height) ||
+            width <= 0 ||
+            height <= 0) {
+            return Originals::EglSwapBuffers(dpy, surface);
+        }
+
+        GLWidth = width;
+        GLHeight = height;
+
+        if (!imguiReady) {
+            imguiReady = InitializeOverlay();
+
+            if (!imguiReady) {
+                return Originals::EglSwapBuffers(dpy, surface);
             }
         }
+
+        bool managedReady = AttachRenderIl2CppThread(renderThreadAttached);
 
         ImGuiIO& io = ImGui::GetIO();
         io.DisplaySize = ImVec2((float)GLWidth, (float)GLHeight);
@@ -4987,232 +5641,11 @@ namespace Hooks {
         ImGui_ImplOpenGL3_NewFrame();
         ImGui::NewFrame();
 
-        TickFeatures();
-
-        if (UiState::UseFixedMenuPosition) {
-            ImGui::SetNextWindowPos(
-                ImVec2(UiState::MenuPosX, UiState::MenuPosY),
-                ImGuiCond_Always
-            );
+        if (managedReady) {
+            TickFeatures();
         }
 
-        ImGui::SetNextWindowSize(
-            ImVec2(UiState::MenuWidth, UiState::MenuHeight),
-            ImGuiCond_Always
-        );
-
-        if (ImGui::Begin("MCGG", nullptr)) {
-            if (ImGui::BeginTabBar("##MainTabBar")) {
-                if (ImGui::BeginTabItem("Info")) {
-                    DrawRuntimeStatus();
-                    ImGui::Spacing();
-                    DrawGgcInfo();
-                    ImGui::Spacing();
-                    ImGui::SeparatorText("Players");
-
-                    if (!Originals::MCLogicBattleData_ILOGIC_GetAllBattleMgr ||
-                        !Originals::MCLogicBattleData_ILOGIC_GetCurrentOpponentAccountID ||
-                        !Originals::MCLogicBattleData_ILOGIC_GetSelfChessPlayerName) {
-                        ImGui::TextUnformatted("Waiting for battle data");
-                    } else {
-                        MonoStructures::Dictionary<uint64_t, void*>* battleManagers =
-                            Originals::MCLogicBattleData_ILOGIC_GetAllBattleMgr(nullptr);
-
-                        auto* battleManagerEntries = battleManagers ? battleManagers->entries : nullptr;
-
-                        if (!battleManagers || battleManagers->empty() || !battleManagerEntries) {
-                            ImGui::TextUnformatted("No players found");
-                        } else if (ImGui::BeginTable(
-                            "##EnemyPredictorTable",
-                            2,
-                            ImGuiTableFlags_Borders |
-                                ImGuiTableFlags_RowBg |
-                                ImGuiTableFlags_SizingStretchProp |
-                                ImGuiTableFlags_ScrollY,
-                            ImVec2(0.0f, 300.0f)
-                        )) {
-                            ImGui::TableSetupColumn("Player Name");
-                            ImGui::TableSetupColumn("Enemy Name");
-                            ImGui::TableHeadersRow();
-
-                            static FieldInfo* selfAccountIdField = nullptr;
-
-                            if (!selfAccountIdField) {
-                                selfAccountIdField =
-                                    GetFieldInfoFromName("", "MCLogicBattleData", "m_SelfAccID");
-                            }
-
-                            uint64_t selfAccountId = GetStaticField<uint64_t>(selfAccountIdField);
-
-                            struct PlayerInfoRow {
-                                uint64_t accountId;
-                                bool isSelf;
-                                std::string playerName;
-                                std::string sortName;
-                                std::string enemyName;
-                            };
-
-                            auto normalizeName = [](const std::string& value) {
-                                std::string output = value;
-                                std::transform(
-                                    output.begin(),
-                                    output.end(),
-                                    output.begin(),
-                                    [](unsigned char ch) {
-                                        return static_cast<char>(std::tolower(ch));
-                                    }
-                                );
-                                return output;
-                            };
-
-                            std::unordered_map<uint64_t, std::string> playerNameCache;
-                            std::vector<PlayerInfoRow> playerRows;
-
-                            int entryLimit =
-                                std::min(battleManagers->count, battleManagerEntries->getCapacity());
-
-                            playerNameCache.reserve(static_cast<size_t>(battleManagers->GetSize() * 2));
-                            playerRows.reserve(static_cast<size_t>(battleManagers->GetSize()));
-
-                            auto getPlayerName = [&playerNameCache](uint64_t accountId) -> const std::string& {
-                                auto cached = playerNameCache.find(accountId);
-                                if (cached != playerNameCache.end()) {
-                                    return cached->second;
-                                }
-
-                                std::string playerName;
-
-                                if (accountId != 0) {
-                                    Il2CppString* managedPlayerName =
-                                        Originals::MCLogicBattleData_ILOGIC_GetSelfChessPlayerName(
-                                            nullptr,
-                                            accountId
-                                        );
-
-                                    if (managedPlayerName) {
-                                        playerName =
-                                            reinterpret_cast<MonoStructures::String*>(managedPlayerName)->str();
-                                    }
-                                }
-
-                                auto inserted = playerNameCache.emplace(accountId, std::move(playerName));
-                                return inserted.first->second;
-                            };
-
-                            const auto* entries = battleManagerEntries->GetData();
-
-                            for (int i = 0; entries && i < entryLimit; ++i) {
-                                const auto& entry = entries[i];
-
-                                if (entry.hashCode < 0) {
-                                    continue;
-                                }
-
-                                uint64_t accountId = entry.key;
-
-                                if (accountId == 0) {
-                                    continue;
-                                }
-
-                                uint64_t enemyId = 0;
-                                enemyId = Originals::MCLogicBattleData_ILOGIC_GetCurrentOpponentAccountID(
-                                    nullptr,
-                                    accountId
-                                );
-
-                                std::string playerName = getPlayerName(accountId);
-                                std::string enemyName;
-
-                                if (enemyId != 0) {
-                                    enemyName = getPlayerName(enemyId);
-                                }
-
-                                playerRows.push_back({
-                                    accountId,
-                                    selfAccountId != 0 && accountId == selfAccountId,
-                                    playerName,
-                                    normalizeName(playerName),
-                                    enemyName
-                                });
-                            }
-
-                            std::sort(
-                                playerRows.begin(),
-                                playerRows.end(),
-                                [](const PlayerInfoRow& left, const PlayerInfoRow& right) {
-                                    if (left.isSelf != right.isSelf) {
-                                        return left.isSelf;
-                                    }
-
-                                    if (left.sortName != right.sortName) {
-                                        return left.sortName < right.sortName;
-                                    }
-
-                                    return left.accountId < right.accountId;
-                                }
-                            );
-
-                            for (const PlayerInfoRow& row : playerRows) {
-                                ImGui::TableNextRow();
-
-                                ImGui::TableSetColumnIndex(0);
-                                if (row.isSelf) {
-                                    std::string playerDisplay =
-                                        row.playerName.empty() ? "-" : row.playerName;
-                                    playerDisplay += " (Self)";
-                                    ImGui::TextUnformatted(playerDisplay.c_str());
-                                } else {
-                                    ImGui::TextUnformatted(
-                                        row.playerName.empty() ? "-" : row.playerName.c_str()
-                                    );
-                                }
-
-                                ImGui::TableSetColumnIndex(1);
-                                ImGui::TextUnformatted(row.enemyName.empty() ? "-" : row.enemyName.c_str());
-
-                            }
-
-                            ImGui::EndTable();
-                        }
-                    }
-                    
-                    ImGui::EndTabItem();
-                }
-
-                if (ImGui::BeginTabItem("Combat")) {
-                    DrawCombatTab();
-                    ImGui::EndTabItem();
-                }
-
-                if (ImGui::BeginTabItem("Appearance")) {
-                    DrawAppearanceTab();
-                    ImGui::EndTabItem();
-                }
-
-                if (ImGui::BeginTabItem("Settings")) {
-                    DrawSettingsTab();
-                    ImGui::EndTabItem();
-                }
-
-                if (ImGui::BeginTabItem("Shop")) {
-                    DrawShopTab();
-                    ImGui::EndTabItem();
-                }
-
-                if (ImGui::BeginTabItem("Arena")) {
-                    DrawArenaTab();
-                    ImGui::EndTabItem();
-                }
-
-                if (ImGui::BeginTabItem("Test")) {
-                    DrawTestTab();
-                    ImGui::EndTabItem();
-                }
-
-                ImGui::EndTabBar();
-            }
-        }
-        ImGui::End();
+        DrawMainMenu();
 
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -5222,13 +5655,26 @@ namespace Hooks {
 
     // Forwards Unity touch input into ImGui mouse input.
     Touch Input_GetTouch(int index) {
-        Touch ret = Originals::Input_GetTouch(index);
+        Touch ret{};
+
+        if (!Originals::Input_GetTouch) {
+            return ret;
+        }
+
+        ret = Originals::Input_GetTouch(index);
 
         if (ImGui::GetCurrentContext() != nullptr && index == 0) {
             ImGuiIO& io = ImGui::GetIO();
 
             float x = ret.m_Position.x;
             float y = io.DisplaySize.y - ret.m_Position.y;
+
+            if (io.DisplaySize.x <= 0.0f ||
+                io.DisplaySize.y <= 0.0f ||
+                !Unity::IsFinite(x) ||
+                !Unity::IsFinite(y)) {
+                return ret;
+            }
 
             switch (ret.m_Phase) {
                 case TouchPhase::Began:
@@ -5258,8 +5704,18 @@ namespace Hooks {
 
 // Waits for game libraries, resolves IL2CPP APIs, and installs hooks.
 void SetupThread() {
+    void* swapBuffers = nullptr;
+
+    while (!swapBuffers) {
+        swapBuffers = DobbySymbolResolver(nullptr, "eglSwapBuffers");
+
+        if (!swapBuffers) {
+            sleep(1);
+        }
+    }
+
     DobbyHook(
-        DobbySymbolResolver(nullptr, "eglSwapBuffers"),
+        swapBuffers,
         (void*)Hooks::EglSwapBuffers,
         (void**)&Originals::EglSwapBuffers
     );
@@ -5278,7 +5734,7 @@ void SetupThread() {
 
 #undef DO_API
 
-    if (!il2cpp_domain_get || !il2cpp_thread_attach) {
+    if (!HasIl2CppDomainApi()) {
         return;
     }
 
@@ -5287,7 +5743,9 @@ void SetupThread() {
         return;
     }
 
-    il2cpp_thread_attach(domain);
+    if (!il2cpp_thread_attach(domain)) {
+        return;
+    }
 
     auto GetTouch_Methods =
         GetAllMethodsFromName("UnityEngine", "Input", "GetTouch", {"int"});
@@ -5300,7 +5758,8 @@ void SetupThread() {
         );
     }
 
-    ResolveFeatureBindings();
+    RuntimeState::Il2CppReady = true;
+    RuntimeState::BindingRetryRequested = true;
 }
 
 // Starts hook setup when this shared library is loaded in the target process.
@@ -5325,9 +5784,13 @@ jboolean LoadOriginalLibrary(JNIEnv* env, jobject, jstring path) {
     }
 
     char fullPath[1024];
-    snprintf(fullPath, sizeof(fullPath), "%s/%s", libraryPath, "libunity.so");
+    int written = snprintf(fullPath, sizeof(fullPath), "%s/%s", libraryPath, "libunity.so");
 
     env->ReleaseStringUTFChars(path, libraryPath);
+
+    if (written <= 0 || written >= static_cast<int>(sizeof(fullPath))) {
+        return JNI_FALSE;
+    }
 
     UnityLibraryHandle = dlopen(fullPath, RTLD_LAZY | RTLD_LOCAL);
     if (!UnityLibraryHandle) {
