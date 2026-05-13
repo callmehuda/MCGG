@@ -1,45 +1,66 @@
 # MCGG
 
-![Platform](https://img.shields.io/badge/platform-Android-brightgreen)
+[![CI Build](https://github.com/Yan-0001/MCGG/actions/workflows/build.yml/badge.svg)](https://github.com/Yan-0001/MCGG/actions/workflows/build.yml)
+[![MIT License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+![Android](https://img.shields.io/badge/Android-native-brightgreen)
 ![ABI](https://img.shields.io/badge/ABI-arm64--v8a-blue)
 ![Unity](https://img.shields.io/badge/Unity-2019.4.22f1-black)
-![License](https://img.shields.io/badge/license-MIT-green)
+![NDK](https://img.shields.io/badge/NDK-r29-orange)
 
-MCGG is a native Android modding project for Magic Chess Go Go. It builds an
-`arm64-v8a` shared library for a Unity IL2CPP runtime, with runtime method
-resolution, Dobby hooks, xDL symbol lookup, and a Dear ImGui overlay.
+Open-source native Android modding project for Magic Chess Go Go.
 
-This project is intended for research, reverse engineering practice, and
-authorized local testing. It is not affiliated with, endorsed by, or sponsored by
-the Magic Chess Go Go developers or publishers.
+MCGG is built to stay simple, readable, and easy to understand. It builds an
+`arm64-v8a` shared library for a Unity IL2CPP runtime and provides a small
+native modding foundation with IL2CPP method lookup, field helpers, Dobby hooks,
+xDL symbol lookup, Unity touch forwarding, and a Dear ImGui overlay.
 
-## Highlights
+This project is not affiliated with, endorsed by, or sponsored by Magic Chess Go
+Go, Skystone Games, or the original game developers.
 
-- Native Android shared library built with `ndk-build`
-- Unity `2019.4.22f1` IL2CPP headers and API declarations
-- `arm64-v8a` only build target
+## Responsible Use
+
+This repository is for learning, research, reverse engineering practice, and
+authorized local testing. Use it only with devices, accounts, and builds that
+you are allowed to inspect or modify.
+
+Before using this project, review and follow the Magic Chess Go Go Terms of
+Service:
+
+https://us.skystone.games/mcgg-tos
+
+This repository does not include:
+
+- Game APKs
+- Copyrighted game assets
+- Paid content
+- Bypasses
+- Account services
+- Server-side tooling
+- Instructions for abusing online services
+
+## Features
+
+- Enemy Predictor overlay logic
+- Dear ImGui menu rendered through `eglSwapBuffers`
+- Unity touch forwarding into ImGui input
+- IL2CPP API resolution for Unity 2019.4.22f1
+- Advanced `GetField`, `GetStaticField`, `SetField`, and `SetStaticField`
+  helpers
 - Dobby-based native hooks
-- xDL-based Android ELF and symbol lookup
-- Dear ImGui overlay rendered through OpenGL ES 3
-- Unity touch input forwarding into ImGui mouse input
-- Local `Structures.hpp` helpers for Unity, Mono, delegate, event, list, array,
-  dictionary, and string layouts
-- IL2CPP method and field resolver helpers in `jni/Main.cpp`
-- Enemy Predictor overlay powered by:
-  - `ILOGIC_GetAllBattleMgr`
-  - `ILOGIC_GetCurrentOpponentAccountID`
-  - `ILOGIC_GetSelfChessPlayerName`
+- xDL-based shared library lookup
+- Local Unity and IL2CPP structure definitions
+- `arm64-v8a` native build target
 
 ## Requirements
 
 - Git
 - Git LFS
 - Android SDK
-- Android NDK r29 or compatible
+- Android NDK r29
 - `ndk-build` available in `PATH`
 - An `arm64-v8a` Android target environment
 
-The GitHub Actions workflow uses:
+The CI workflow uses:
 
 ```sh
 ANDROID_NDK_VERSION=29.0.14206865
@@ -47,7 +68,7 @@ ANDROID_NDK_VERSION=29.0.14206865
 
 ## Quick Start
 
-Clone with submodules:
+Clone the repository with submodules:
 
 ```sh
 git clone --recursive https://github.com/Yan-0001/MCGG.git
@@ -60,7 +81,7 @@ If the repository was cloned without submodules:
 git submodule update --init --recursive
 ```
 
-Pull Git LFS assets:
+Pull Git LFS files:
 
 ```sh
 git lfs install
@@ -82,7 +103,7 @@ libs/arm64-v8a/libmain.so
 ## Repository Layout
 
 ```text
-.github/workflows/            GitHub Actions CI workflow
+.github/workflows/            GitHub Actions build workflow
 dump/dump.cs                  IL2CPP dump used as a signature reference
 jni/Android.mk                Native module build configuration
 jni/Application.mk            ABI, platform, STL, and NDK settings
@@ -92,13 +113,13 @@ jni/dobby/                    Dobby header and arm64 static library
 jni/Il2CppVersions/           Unity IL2CPP headers and API declarations
 jni/imgui/                    Dear ImGui source
 jni/xDL/                      xDL Android dynamic loader utilities
-libs/                         Installed shared library output
+libs/                         Native shared library output
 obj/                          NDK intermediate build output
 ```
 
 ## Build Configuration
 
-The native module is defined as:
+The native module is defined in `jni/Android.mk`:
 
 ```make
 LOCAL_MODULE := main
@@ -130,24 +151,31 @@ At load time, `jni/Main.cpp`:
 3. Waits for `libil2cpp.so` and `liblogic.so`.
 4. Resolves IL2CPP API exports.
 5. Attaches to the IL2CPP domain.
-6. Hooks `eglSwapBuffers`.
-7. Hooks `UnityEngine.Input.GetTouch`.
-8. Renders the ImGui overlay during frame presentation.
-9. Forwards Unity touch input into ImGui mouse input.
+6. Resolves required game logic methods.
+7. Hooks `eglSwapBuffers`.
+8. Hooks `UnityEngine.Input.GetTouch`.
+9. Renders the ImGui overlay during frame presentation.
+10. Forwards Unity touch input into ImGui mouse input.
 
-## IL2CPP Notes
+## Development Notes
 
-The project currently targets Magic Chess Go Go builds using Unity
-`2019.4.22f1`. Method signatures, return types, parameters, and class names
-should be checked against `dump/dump.cs` before adding or changing native calls.
+- Keep native changes focused and easy to inspect.
+- Check class names, method names, parameters, and return types against
+  `dump/dump.cs` before adding IL2CPP calls.
+- Keep the default build target `arm64-v8a`.
+- Keep Unity compatibility aligned with `2019.4.22f1`.
+- Do not commit generated `obj/` output.
 
-Useful rules:
+## CI Build
 
-- Use `uint64_t` for `System.UInt64`
-- Use `uint32_t` for `System.UInt32`
-- Use `void*` for managed object instances unless a local layout is required
-- Keep function pointer signatures aligned with the dump
-- Rebuild after changing `jni/Main.cpp` or `jni/structures/Structures.hpp`
+GitHub Actions builds the native library on pushes and pull requests to
+`master`. The workflow installs NDK r29, runs:
+
+```sh
+ndk-build -C jni -j"$(nproc)"
+```
+
+and uploads the generated native libraries as the `native-libs` artifact.
 
 ## Troubleshooting
 
@@ -175,17 +203,6 @@ If Dobby cannot be linked, confirm this file exists:
 ```text
 jni/dobby/lib/arm64-v8a/libdobby.a
 ```
-
-## Contributing
-
-Focused pull requests are easiest to review. Keep changes scoped, document new
-IL2CPP methods with their dump signatures, and run:
-
-```sh
-ndk-build -C jni
-```
-
-before submitting native code changes.
 
 ## License
 
