@@ -36,8 +36,6 @@ This repository does not include:
 
 ## Features
 
-The ImGui overlay is organized into feature tabs:
-
 - **Info**
   - Player and next-enemy table.
   - GGC quality readout for round 7 and round 13.
@@ -157,18 +155,18 @@ At load time and during frame presentation, `jni/Main.cpp`:
 
 1. Confirms the current process is the Unity target process.
 2. Starts a setup thread.
-3. Waits for `libil2cpp.so` and `liblogic.so`.
+3. Waits for `liblogic.so`.
 4. Resolves IL2CPP API exports.
 5. Attaches to the IL2CPP domain.
 6. Hooks `eglSwapBuffers`.
-7. Hooks `UnityEngine.Input.GetTouch`.
-8. Resolves game feature methods and hooks through `ResolveFeatureBindings()`.
-9. Retries missing method and field bindings periodically.
-10. Refreshes managed references such as battle bridge and shop panel state.
-11. Reloads hero, equipment, and GogoCard table caches when entering a match.
-12. Runs shop automation and arena effects on separate 100 ms ticks.
-13. Renders the ImGui overlay during frame presentation.
-14. Forwards Unity touch input into ImGui mouse input.
+7. Renders the ImGui overlay during frame presentation.
+8. Hooks `UnityEngine.Input.GetTouch`.
+9. Forwards Unity touch input into ImGui mouse input.
+10. Resolves game feature methods and hooks through `ResolveFeatureBindings()`.
+11. Retries missing method and field bindings periodically.
+12. Refreshes managed references such as battle bridge and shop panel state.
+13. Reloads hero, equipment, and GogoCard table caches when entering a match.
+14. Runs shop automation and arena effects on separate 100 ms ticks.
 
 ## Development Notes
 

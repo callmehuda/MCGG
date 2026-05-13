@@ -110,7 +110,6 @@ struct HeroAutomationState {
 };
 
 struct {
-    void* libil2cpp = nullptr;
     void* liblogic = nullptr;
 } handle;
 
@@ -276,7 +275,7 @@ namespace Originals {
 }
 
 // Checks whether the current process is the Unity target process.
-bool IsUnityProcess() {
+bool IsUnityMoontonProcess() {
     FILE* fp = fopen("/proc/self/cmdline", "r");
     if (!fp) {
         return false;
@@ -2657,10 +2656,11 @@ namespace Hooks {
 
 // Waits for game libraries, resolves IL2CPP APIs, and installs hooks.
 void SetupThread() {
-    while (!handle.libil2cpp) {
-        sleep(2);
-        handle.libil2cpp = xdl_open("libil2cpp.so", XDL_DEFAULT);
-    }
+    DobbyHook(
+        DobbySymbolResolver(nullptr, "eglSwapBuffers"),
+        (void*)Hooks::EglSwapBuffers,
+        (void**)&Originals::EglSwapBuffers
+    );
 
     while (!handle.liblogic) {
         sleep(2);
@@ -2670,7 +2670,7 @@ void SetupThread() {
     sleep(2);
 
 #define DO_API(ret, name, args) \
-    name = reinterpret_cast<decltype(name)>(xdl_sym(handle.libil2cpp, #name, nullptr));
+    name = reinterpret_cast<decltype(name)>(xdl_sym(handle.liblogic, #name, nullptr));
 
 #include "Il2CppVersions/api/2019.4.22f1.h"
 
@@ -2686,12 +2686,6 @@ void SetupThread() {
     }
 
     il2cpp_thread_attach(domain);
-
-    DobbyHook(
-        DobbySymbolResolver(nullptr, "eglSwapBuffers"),
-        (void*)Hooks::EglSwapBuffers,
-        (void**)&Originals::EglSwapBuffers
-    );
 
     auto GetTouch_Methods =
         GetAllMethodsFromName("UnityEngine", "Input", "GetTouch", {"int"});
@@ -2710,7 +2704,7 @@ void SetupThread() {
 // Starts hook setup when this shared library is loaded in the target process.
 __attribute__((constructor))
 void InitLibrary() {
-    if (!IsUnityProcess()) {
+    if (!IsUnityMoontonProcess()) {
         return;
     }
 
