@@ -10,9 +10,10 @@
 Open-source native Android modding project for Magic Chess Go Go.
 
 MCGG is built to stay simple, readable, and easy to understand. It builds an
-`arm64-v8a` shared library for a Unity IL2CPP runtime and provides a small
-native modding foundation with IL2CPP method lookup, field helpers, Dobby hooks,
-xDL symbol lookup, Unity touch forwarding, and a Dear ImGui overlay.
+`arm64-v8a` shared library for a Unity IL2CPP runtime and provides a native
+modding foundation with IL2CPP method lookup, retryable field and method
+resolution, Dobby hooks, xDL symbol lookup, Unity touch forwarding, throttled
+runtime feature ticks, and a Dear ImGui overlay.
 
 ## Responsible Use
 
@@ -35,7 +36,29 @@ This repository does not include:
 
 ## Features
 
-- Enemy Predictor overlay logic
+The ImGui overlay is organized into feature tabs:
+
+- **Info**
+  - Player and next-enemy table.
+  - GGC quality readout for round 7 and round 13.
+- **Combat**
+  - Invisible Scout toggle.
+- **Shop**
+  - Auto-buy free heroes.
+  - Auto-buy selected hero targets.
+  - Auto-refresh shop with stop conditions for free or selected heroes.
+  - Gold reserve threshold for safer automation.
+  - Hero target table with configurable target counts.
+- **Arena**
+  - Spawn heroes by table entry and star level.
+  - Grant equipment, including enhanced equipment.
+  - Force selected GogoCards.
+  - Force active synergies, level 99, outside-map placement, enemy HP 1, and
+    gold grant helpers.
+
+Feature bindings are resolved against the local IL2CPP metadata and retried
+periodically when a method or field is not available yet. Missing bindings are
+shown in the overlay as `Waiting for ...` states.
 
 ## Requirements
 
@@ -130,24 +153,35 @@ Unity compatibility defines are configured in `jni/Android.mk`:
 
 ## Runtime Flow
 
-At load time, `jni/Main.cpp`:
+At load time and during frame presentation, `jni/Main.cpp`:
 
 1. Confirms the current process is the Unity target process.
 2. Starts a setup thread.
 3. Waits for `libil2cpp.so` and `liblogic.so`.
 4. Resolves IL2CPP API exports.
 5. Attaches to the IL2CPP domain.
-6. Resolves required game logic methods.
-7. Hooks `eglSwapBuffers`.
-8. Hooks `UnityEngine.Input.GetTouch`.
-9. Renders the ImGui overlay during frame presentation.
-10. Forwards Unity touch input into ImGui mouse input.
+6. Hooks `eglSwapBuffers`.
+7. Hooks `UnityEngine.Input.GetTouch`.
+8. Resolves game feature methods and hooks through `ResolveFeatureBindings()`.
+9. Retries missing method and field bindings periodically.
+10. Refreshes managed references such as battle bridge and shop panel state.
+11. Reloads hero, equipment, and GogoCard table caches when entering a match.
+12. Runs shop automation and arena effects on separate 100 ms ticks.
+13. Renders the ImGui overlay during frame presentation.
+14. Forwards Unity touch input into ImGui mouse input.
 
 ## Development Notes
 
 - Keep native changes focused and easy to inspect.
 - Check class names, method names, parameters, and return types against
   `dump/dump.cs` before adding IL2CPP calls.
+- Keep feature runtime code in `jni/Main.cpp` unless a refactor is explicitly
+  requested. Use clear local sections and concise comments around risky IL2CPP
+  calls.
+- Keep retryable binding behavior intact. Do not permanently cache unresolved
+  method or field lookups as missing.
+- Preserve the separate 100 ms shop and arena feature ticks unless changing the
+  timing is part of the task.
 - Keep the default build target `arm64-v8a`.
 - Keep Unity compatibility aligned with `2019.4.22f1`.
 - Do not commit generated `obj/`, `libs/` output.
