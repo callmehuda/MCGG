@@ -24,17 +24,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Hooking Strategy**: Uses Dobby to hook `eglSwapBuffers` for frame-by-frame UI injection, `UnityEngine.Input.GetTouch` for touch-to-mouse forwarding, and selected game methods for Combat and Arena behavior.
 - **Runtime Ticks**: Shop automation and Arena effects run on separate 100 ms ticks for stability and responsiveness. Shop automation also uses bounded cooldowns for buy, repeat-buy, refresh, target-worth, and Recommendation Lineup checks.
 - **Runtime Caches**: Managed references are cached through atomic pointers. Hero/equipment/GogoCard table data is collected locally and published under `RuntimeMutex::FeatureMutex` when entering a new match.
-- **Diagnostics**: Runtime Status and Test tabs expose binding readiness, Recommendation Lineup readiness, managed reference refresh, round state, battle manager fields, behavior API state, all manager entries, and opponent prediction signals.
+- **Diagnostics**: Runtime Status and Test tabs expose binding readiness, Recommendation Lineup readiness, managed reference refresh, local UI readiness, round state, battle manager fields, behavior API state, all manager entries, and opponent prediction signals.
 - **Configuration**: Settings saves and loads visual settings plus Combat, Shop, and Arena state from `/data/data/<game-package>/files/mcgg_config.ini`.
 - **Memory Mapping**: `jni/structures/Structures.hpp` defines the layout of Unity/Mono types to allow native interaction with managed objects.
 - **Reference**: `dump/dump.cs` serves as the source of truth for the target game's internal C# structure.
 
 ### Current Feature Areas
 - **Info**: runtime status, player/enemy table, and GGC round 7/13 quality display.
-- **Combat**: Invisible Scout toggle.
+- **Combat**: Invisible Scout toggle plus local UI visibility toggles for blood bars, joystick, and social drag area.
 - **Appearance**: ImGui Dark/Catppuccin Mocha theme selection plus Default/Noto Sans CJK font selection.
 - **Settings**: menu size, fixed position, font scale, style tuning, and save/load configuration.
-- **Shop**: auto-buy free heroes, auto-buy selected targets, auto-buy Recommendation Lineup heroes, auto-refresh, pause-refresh conditions, keep-gold threshold, manual target counts, and Recommendation Lineup target counts.
+- **Shop**: auto-buy free heroes, auto-buy selected targets, auto-buy Recommendation Lineup heroes, auto-refresh, pause-refresh conditions, keep-gold threshold, manual target counts, Recommendation Lineup target counts, and client-side shop UI automation.
 - **Arena**: hero spawn, equipment grant, GogoCard forcing, active synergy forcing, level 99, outside-map placement, enemy HP 1, and gold grant helpers.
 - **Test**: manual binding retry, account inspection, fight prediction, round state, battle manager, behavior API, and all-manager diagnostics.
 
@@ -63,6 +63,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Single-file feature work**: Keep feature runtime changes in `jni/Main.cpp` unless explicitly asked to split files.
 - **Retry behavior**: Do not permanently cache failed IL2CPP method or field lookups. Missing bindings should retry and user-facing controls should show `Waiting for ...` states where practical.
 - **Shop automation**: Preserve the single-threaded, throttled frame-tick model. Use existing atomic toggles/counters and selected-target snapshot helpers. Avoid unbounded scans, immediate retry loops, or holding locks across managed calls in the hot path unless a future design explicitly requires them.
+- **Local UI automation**: Keep `MCBattleBridge` UI toggles client-side. Do not replace them with server-authoritative battle actions.
 - **Comments**: Add concise comments before risky IL2CPP calls, hook signatures, value-type layouts, or timing-sensitive blocks.
 - **Scope**: Do not modify vendored directories (`jni/imgui/`, `jni/xDL/`, `jni/dobby/`, `jni/Il2CppVersions/`) unless explicitly requested.
 - **Appearance**: Keep theme/font changes in the existing appearance setup and preserve fallback to the default ImGui font when Noto Sans CJK is unavailable.

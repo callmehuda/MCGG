@@ -124,8 +124,10 @@ Current user-facing feature areas are Info, Combat, Appearance, Settings, Shop,
 Arena, and Test. If a feature binding is missing at runtime, the overlay should
 show a `Waiting for ...` state rather than failing silently. Shop currently
 includes free-hero buying, selected target buying, Recommendation Lineup buying,
-auto-refresh pause conditions, keep-gold reserve, and target counts. Use the
-Runtime Status and Test tabs when checking binding readiness, managed
+auto-refresh pause conditions, keep-gold reserve, target counts, and client-side
+shop UI automation. Combat includes local UI visibility toggles backed by
+`MCBattleBridge`. Use the Runtime Status and Test tabs when checking binding
+readiness, managed
 references, round state, battle manager fields, behavior API state,
 Recommendation Lineup state, or opponent prediction logic.
 Settings config should default to the running game package directory as

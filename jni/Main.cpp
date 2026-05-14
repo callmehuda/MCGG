@@ -137,6 +137,7 @@ namespace RuntimeConfig {
     constexpr int TableRetryMs = 2000;
     constexpr int ArenaTickMs = 100;
     constexpr int ShopTickMs = 100;
+    constexpr int LocalUiTickMs = 250;
     constexpr int ShopActionCooldownMs = 350;
     constexpr int ShopRepeatBuyCooldownMs = 1500;
     constexpr int ShopRefreshCooldownMs = 650;
@@ -162,6 +163,12 @@ namespace RuntimeState {
 // Feature toggles, cached managed references, and throttled runtime state.
 namespace FeatureState {
     std::atomic<bool> CombatInvisibleScout{false};
+    std::atomic<bool> CombatHideAllBloodBars{false};
+    std::atomic<bool> CombatHideJoystick{false};
+    std::atomic<bool> CombatHideSocialDragArea{false};
+    std::atomic<bool> CombatBloodBarsHiddenApplied{false};
+    std::atomic<bool> CombatJoystickHiddenApplied{false};
+    std::atomic<bool> CombatSocialDragAreaHiddenApplied{false};
 
     std::atomic<bool> ShopBuyFreeHero{false};
     std::atomic<bool> ShopBuySelectedHero{false};
@@ -174,6 +181,11 @@ namespace FeatureState {
     std::atomic<int> ShopKeepGoldAt{20};
     std::atomic<int> ShopRecommendTargetCount{9};
     std::unordered_map<int, HeroAutomationState> ShopSelectedHeroes;
+    std::atomic<bool> AutomationOpenShopDuringPrepare{false};
+    std::atomic<bool> AutomationCloseShopDuringFight{false};
+    std::atomic<bool> AutomationHideShopEntry{false};
+    std::atomic<bool> AutomationKeepChatClosed{false};
+    std::atomic<bool> AutomationShopEntryHiddenApplied{false};
 
     std::atomic<int> ArenaHeroStar{1};
     std::atomic<bool> ArenaItemEnhanced{false};
@@ -202,6 +214,7 @@ namespace FeatureState {
     std::chrono::steady_clock::time_point LastReferenceRefresh{};
     std::chrono::steady_clock::time_point LastArenaTick{};
     std::chrono::steady_clock::time_point LastShopTick{};
+    std::chrono::steady_clock::time_point LastLocalUiTick{};
     std::chrono::steady_clock::time_point LastTableLoadAttempt{};
     std::chrono::steady_clock::time_point LastShopAction{};
     std::chrono::steady_clock::time_point LastShopBuyAttempt{};
@@ -219,10 +232,6 @@ namespace FeatureState {
 }
 
 namespace UiState {
-    std::string ShopHeroFilter;
-    std::string ArenaHeroFilter;
-    std::string ArenaItemFilter;
-    std::string ArenaGogoCardFilter;
     std::string TestAccountId;
     std::string ConfigPath;
     std::string ConfigStatus;
@@ -388,6 +397,14 @@ namespace Originals {
     void (*UIPanelBattleHeroShop_BuyHero)(void* instance, uint8_t slot, bool refreshSameHero);
     void (*UIPanelBattleHeroShop_HeroItemList_OnSelectHero)(void* instance, uint8_t slot);
     bool (*MCBattleBridge_IsHeroInRecommendLineup)(void* instance, int heroId);
+    void (*MCBattleBridge_OpenShop)(void* instance, bool open);
+    void (*MCBattleBridge_CloseChatUI)(void* instance);
+    bool (*MCBattleBridge_CheckEnableKeyBoard)(void* instance);
+    void (*MCBattleBridge_SetJoyStickVisible)(void* instance, bool visible);
+    void (*MCBattleBridge_SetSocialDragAreaVisible)(void* instance, bool visible);
+    void (*MCBattleBridge_SetJoyStickUIShow)(void* instance, bool show);
+    void (*MCBattleBridge_SetShopEnterActive)(void* instance, bool active);
+    void (*MCBattleBridge_SetAllBloodVisible)(void* instance, bool visible);
     void (*MCChessPlayerData_UpdateCoin)(void* instance, int addValue, int changeType);
 
     void (*MCShowSpectatorComp_SetSpectate)(void* instance, uint64_t accountId);
@@ -1604,6 +1621,62 @@ void ResolveFeatureBindings() {
         "MCBattleBridge",
         "IsHeroInRecommendLineup",
         {"Int32"}
+    );
+    ResolveOriginal(
+        Originals::MCBattleBridge_OpenShop,
+        "",
+        "MCBattleBridge",
+        "OpenShop",
+        {"Boolean"}
+    );
+    ResolveOriginal(
+        Originals::MCBattleBridge_CloseChatUI,
+        "",
+        "MCBattleBridge",
+        "CloseChatUI",
+        {}
+    );
+    ResolveOriginal(
+        Originals::MCBattleBridge_CheckEnableKeyBoard,
+        "",
+        "MCBattleBridge",
+        "CheckEnableKeyBoard",
+        {}
+    );
+    ResolveOriginal(
+        Originals::MCBattleBridge_SetJoyStickVisible,
+        "",
+        "MCBattleBridge",
+        "SetJoyStickVisible",
+        {"Boolean"}
+    );
+    ResolveOriginal(
+        Originals::MCBattleBridge_SetSocialDragAreaVisible,
+        "",
+        "MCBattleBridge",
+        "SetSocialDragAreaVisible",
+        {"Boolean"}
+    );
+    ResolveOriginal(
+        Originals::MCBattleBridge_SetJoyStickUIShow,
+        "",
+        "MCBattleBridge",
+        "SetJoyStickUIShow",
+        {"Boolean"}
+    );
+    ResolveOriginal(
+        Originals::MCBattleBridge_SetShopEnterActive,
+        "",
+        "MCBattleBridge",
+        "SetShopEnterActive",
+        {"Boolean"}
+    );
+    ResolveOriginal(
+        Originals::MCBattleBridge_SetAllBloodVisible,
+        "",
+        "MCBattleBridge",
+        "SetAllBloodVisible",
+        {"Boolean"}
     );
     ResolveOriginal(
         Originals::MCChessPlayerData_UpdateCoin,
@@ -3166,6 +3239,97 @@ void RunShopAutomation(uint64_t selfAccountId) {
     }
 }
 
+bool HasAnyLocalUiFeatureState() {
+    return FeatureState::CombatHideAllBloodBars ||
+        FeatureState::CombatHideJoystick ||
+        FeatureState::CombatHideSocialDragArea ||
+        FeatureState::CombatBloodBarsHiddenApplied ||
+        FeatureState::CombatJoystickHiddenApplied ||
+        FeatureState::CombatSocialDragAreaHiddenApplied ||
+        FeatureState::AutomationOpenShopDuringPrepare ||
+        FeatureState::AutomationCloseShopDuringFight ||
+        FeatureState::AutomationHideShopEntry ||
+        FeatureState::AutomationKeepChatClosed ||
+        FeatureState::AutomationShopEntryHiddenApplied;
+}
+
+void ApplyLocalUiFeatures(uint64_t selfAccountId) {
+    if (!IsIl2CppRuntimeReady() || !HasAnyLocalUiFeatureState()) {
+        return;
+    }
+
+    void* battleBridge = FeatureState::BattleBridge.load();
+
+    if (!battleBridge) {
+        return;
+    }
+
+    // MCBattleBridge UI calls are local presentation changes; they do not
+    // request battle state changes from the game server.
+    bool hideBloodBars = FeatureState::CombatHideAllBloodBars.load();
+    if (Originals::MCBattleBridge_SetAllBloodVisible &&
+        (hideBloodBars || FeatureState::CombatBloodBarsHiddenApplied.load())) {
+        Originals::MCBattleBridge_SetAllBloodVisible(battleBridge, !hideBloodBars);
+        FeatureState::CombatBloodBarsHiddenApplied = hideBloodBars;
+    }
+
+    bool hideJoystick = FeatureState::CombatHideJoystick.load();
+    if (hideJoystick || FeatureState::CombatJoystickHiddenApplied.load()) {
+        if (Originals::MCBattleBridge_SetJoyStickVisible) {
+            Originals::MCBattleBridge_SetJoyStickVisible(battleBridge, !hideJoystick);
+        }
+
+        if (Originals::MCBattleBridge_SetJoyStickUIShow) {
+            Originals::MCBattleBridge_SetJoyStickUIShow(battleBridge, !hideJoystick);
+        }
+
+        FeatureState::CombatJoystickHiddenApplied = hideJoystick;
+    }
+
+    bool hideSocialDragArea = FeatureState::CombatHideSocialDragArea.load();
+    if (Originals::MCBattleBridge_SetSocialDragAreaVisible &&
+        (hideSocialDragArea || FeatureState::CombatSocialDragAreaHiddenApplied.load())) {
+        Originals::MCBattleBridge_SetSocialDragAreaVisible(
+            battleBridge,
+            !hideSocialDragArea
+        );
+        FeatureState::CombatSocialDragAreaHiddenApplied = hideSocialDragArea;
+    }
+
+    bool hideShopEntry = FeatureState::AutomationHideShopEntry.load();
+    if (Originals::MCBattleBridge_SetShopEnterActive &&
+        (hideShopEntry || FeatureState::AutomationShopEntryHiddenApplied.load())) {
+        Originals::MCBattleBridge_SetShopEnterActive(battleBridge, !hideShopEntry);
+        FeatureState::AutomationShopEntryHiddenApplied = hideShopEntry;
+    }
+
+    if (FeatureState::AutomationKeepChatClosed &&
+        Originals::MCBattleBridge_CloseChatUI) {
+        Originals::MCBattleBridge_CloseChatUI(battleBridge);
+    }
+
+    bool shouldOpenShop = FeatureState::AutomationOpenShopDuringPrepare.load();
+    bool shouldCloseShop = FeatureState::AutomationCloseShopDuringFight.load();
+
+    if ((shouldOpenShop || shouldCloseShop) &&
+        selfAccountId != 0 &&
+        FeatureState::WasInMatch &&
+        Originals::MCBattleBridge_OpenShop &&
+        Originals::MCLogicBattleData_ILOGIC_IsFightSection &&
+        Originals::MCLogicBattleData_ILOGIC_IsFightResultSection) {
+        bool isFightSection =
+            Originals::MCLogicBattleData_ILOGIC_IsFightSection(nullptr);
+        bool isFightResultSection =
+            Originals::MCLogicBattleData_ILOGIC_IsFightResultSection(nullptr);
+
+        if (shouldCloseShop && (isFightSection || isFightResultSection)) {
+            Originals::MCBattleBridge_OpenShop(battleBridge, false);
+        } else if (shouldOpenShop && !isFightSection && !isFightResultSection) {
+            Originals::MCBattleBridge_OpenShop(battleBridge, true);
+        }
+    }
+}
+
 void TickFeatures() {
     if (!IsIl2CppRuntimeReady()) {
         return;
@@ -3185,6 +3349,10 @@ void TickFeatures() {
 
     if (IntervalElapsed(FeatureState::LastShopTick, RuntimeConfig::ShopTickMs, now)) {
         RunShopAutomation(selfAccountId);
+    }
+
+    if (IntervalElapsed(FeatureState::LastLocalUiTick, RuntimeConfig::LocalUiTickMs, now)) {
+        ApplyLocalUiFeatures(selfAccountId);
     }
 }
 
@@ -3212,77 +3380,6 @@ ImVec4 GgcQualityColor(int quality) {
         default:
             return ImVec4(0.70f, 0.70f, 0.70f, 1.0f);
     }
-}
-
-bool EntryMatchesFilter(const std::string& name, int id, const std::string& filter) {
-    if (filter.empty()) {
-        return true;
-    }
-
-    return StringIncludesCaseInsensitive(name, filter) ||
-        StringIncludesCaseInsensitive(std::to_string(id), filter);
-}
-
-bool HeroMatchesFilter(const HeroTableEntry& hero, const std::string& filter) {
-    return EntryMatchesFilter(hero.name, hero.id, filter) ||
-        (!filter.empty() &&
-         StringIncludesCaseInsensitive(std::to_string(hero.quality), filter));
-}
-
-void FilterHeroes(std::vector<HeroTableEntry>& heroes, const std::string& filter) {
-    heroes.erase(
-        std::remove_if(
-            heroes.begin(),
-            heroes.end(),
-            [&filter](const HeroTableEntry& hero) {
-                return !HeroMatchesFilter(hero, filter);
-            }
-        ),
-        heroes.end()
-    );
-}
-
-void FilterEquips(std::vector<EquipTableEntry>& equips, const std::string& filter) {
-    equips.erase(
-        std::remove_if(
-            equips.begin(),
-            equips.end(),
-            [&filter](const EquipTableEntry& equip) {
-                return !EntryMatchesFilter(equip.name, equip.id, filter);
-            }
-        ),
-        equips.end()
-    );
-}
-
-void FilterCards(std::vector<CardTableEntry>& cards, const std::string& filter) {
-    cards.erase(
-        std::remove_if(
-            cards.begin(),
-            cards.end(),
-            [&filter](const CardTableEntry& card) {
-                return !EntryMatchesFilter(card.name, card.id, filter);
-            }
-        ),
-        cards.end()
-    );
-}
-
-void DrawSearchInput(const char* id, const char* hint, std::string& filter) {
-    ImGui::PushID(id);
-
-    float clearWidth =
-        ImGui::CalcTextSize("Clear").x +
-        ImGui::GetStyle().FramePadding.x * 2.0f;
-    ImGui::SetNextItemWidth(-clearWidth - ImGui::GetStyle().ItemSpacing.x);
-    ImGui::InputTextWithHint("##filter", hint, &filter);
-    ImGui::SameLine();
-
-    if (ImGui::Button("Clear", ImVec2(clearWidth, 0.0f))) {
-        filter.clear();
-    }
-
-    ImGui::PopID();
 }
 
 void DrawStatusRow(const char* label, bool ready) {
@@ -3476,6 +3573,9 @@ void ResetVisualSettings() {
 
 void ResetFeatureSettings() {
     FeatureState::CombatInvisibleScout = false;
+    FeatureState::CombatHideAllBloodBars = false;
+    FeatureState::CombatHideJoystick = false;
+    FeatureState::CombatHideSocialDragArea = false;
     FeatureState::ShopBuyFreeHero = false;
     FeatureState::ShopBuySelectedHero = false;
     FeatureState::ShopBuyRecommendLineup = false;
@@ -3486,6 +3586,10 @@ void ResetFeatureSettings() {
     FeatureState::ShopKeepGold = false;
     FeatureState::ShopKeepGoldAt = 20;
     FeatureState::ShopRecommendTargetCount = 9;
+    FeatureState::AutomationOpenShopDuringPrepare = false;
+    FeatureState::AutomationCloseShopDuringFight = false;
+    FeatureState::AutomationHideShopEntry = false;
+    FeatureState::AutomationKeepChatClosed = false;
     ClearShopHeroTargets();
     FeatureState::ArenaHeroStar = 1;
     FeatureState::ArenaItemEnhanced = false;
@@ -3692,6 +3796,9 @@ void ApplyConfigValue(const std::string& key, const std::string& value) {
     else if (key == "itemSpacingY") UiState::ItemSpacingY = ParseConfigFloat(value, UiState::ItemSpacingY);
     else if (key == "indentSpacing") UiState::IndentSpacing = ParseConfigFloat(value, UiState::IndentSpacing);
     else if (key == "combatInvisibleScout") FeatureState::CombatInvisibleScout = ParseConfigBool(value, FeatureState::CombatInvisibleScout);
+    else if (key == "combatHideAllBloodBars") FeatureState::CombatHideAllBloodBars = ParseConfigBool(value, FeatureState::CombatHideAllBloodBars);
+    else if (key == "combatHideJoystick") FeatureState::CombatHideJoystick = ParseConfigBool(value, FeatureState::CombatHideJoystick);
+    else if (key == "combatHideSocialDragArea") FeatureState::CombatHideSocialDragArea = ParseConfigBool(value, FeatureState::CombatHideSocialDragArea);
     else if (key == "shopBuyFreeHero") FeatureState::ShopBuyFreeHero = ParseConfigBool(value, FeatureState::ShopBuyFreeHero);
     else if (key == "shopBuySelectedHero") FeatureState::ShopBuySelectedHero = ParseConfigBool(value, FeatureState::ShopBuySelectedHero);
     else if (key == "shopBuyRecommendLineup") FeatureState::ShopBuyRecommendLineup = ParseConfigBool(value, FeatureState::ShopBuyRecommendLineup);
@@ -3703,6 +3810,10 @@ void ApplyConfigValue(const std::string& key, const std::string& value) {
     else if (key == "shopKeepGoldAt") FeatureState::ShopKeepGoldAt = ParseConfigInt(value, FeatureState::ShopKeepGoldAt);
     else if (key == "shopRecommendTargetCount") FeatureState::ShopRecommendTargetCount = ParseConfigInt(value, FeatureState::ShopRecommendTargetCount);
     else if (key == "shopSelectedHeroes") LoadShopSelectedHeroes(value);
+    else if (key == "automationOpenShopDuringPrepare") FeatureState::AutomationOpenShopDuringPrepare = ParseConfigBool(value, FeatureState::AutomationOpenShopDuringPrepare);
+    else if (key == "automationCloseShopDuringFight") FeatureState::AutomationCloseShopDuringFight = ParseConfigBool(value, FeatureState::AutomationCloseShopDuringFight);
+    else if (key == "automationHideShopEntry") FeatureState::AutomationHideShopEntry = ParseConfigBool(value, FeatureState::AutomationHideShopEntry);
+    else if (key == "automationKeepChatClosed") FeatureState::AutomationKeepChatClosed = ParseConfigBool(value, FeatureState::AutomationKeepChatClosed);
     else if (key == "arenaHeroStar") FeatureState::ArenaHeroStar = ParseConfigInt(value, FeatureState::ArenaHeroStar);
     else if (key == "arenaItemEnhanced") FeatureState::ArenaItemEnhanced = ParseConfigBool(value, FeatureState::ArenaItemEnhanced);
     else if (key == "arenaGogoCardEnabled") FeatureState::ArenaGogoCardEnabled = ParseConfigBool(value, FeatureState::ArenaGogoCardEnabled);
@@ -3763,6 +3874,13 @@ bool SaveConfigToFile(const std::string& path) {
     WriteConfigFloat(file, "itemSpacingY", UiState::ItemSpacingY);
     WriteConfigFloat(file, "indentSpacing", UiState::IndentSpacing);
     WriteConfigBool(file, "combatInvisibleScout", FeatureState::CombatInvisibleScout);
+    WriteConfigBool(file, "combatHideAllBloodBars", FeatureState::CombatHideAllBloodBars);
+    WriteConfigBool(file, "combatHideJoystick", FeatureState::CombatHideJoystick);
+    WriteConfigBool(
+        file,
+        "combatHideSocialDragArea",
+        FeatureState::CombatHideSocialDragArea
+    );
     WriteConfigBool(file, "shopBuyFreeHero", FeatureState::ShopBuyFreeHero);
     WriteConfigBool(file, "shopBuySelectedHero", FeatureState::ShopBuySelectedHero);
     WriteConfigBool(file, "shopBuyRecommendLineup", FeatureState::ShopBuyRecommendLineup);
@@ -3778,6 +3896,18 @@ bool SaveConfigToFile(const std::string& path) {
     WriteConfigInt(file, "shopKeepGoldAt", FeatureState::ShopKeepGoldAt);
     WriteConfigInt(file, "shopRecommendTargetCount", GetRecommendLineupTargetCount());
     WriteConfigString(file, "shopSelectedHeroes", FormatShopSelectedHeroes());
+    WriteConfigBool(
+        file,
+        "automationOpenShopDuringPrepare",
+        FeatureState::AutomationOpenShopDuringPrepare
+    );
+    WriteConfigBool(
+        file,
+        "automationCloseShopDuringFight",
+        FeatureState::AutomationCloseShopDuringFight
+    );
+    WriteConfigBool(file, "automationHideShopEntry", FeatureState::AutomationHideShopEntry);
+    WriteConfigBool(file, "automationKeepChatClosed", FeatureState::AutomationKeepChatClosed);
     WriteConfigInt(file, "arenaHeroStar", FeatureState::ArenaHeroStar);
     WriteConfigBool(file, "arenaItemEnhanced", FeatureState::ArenaItemEnhanced);
     WriteConfigBool(file, "arenaGogoCardEnabled", FeatureState::ArenaGogoCardEnabled);
@@ -4062,6 +4192,8 @@ bool HasShopSelectBinding();
 bool HasShopAutomationBindings();
 bool HasShopRefreshBindings();
 bool HasShopRecommendLineupBindings();
+bool HasCombatLocalUiBindings();
+bool HasClientUiAutomationBindings();
 bool HasArenaHeroBindings();
 bool HasArenaItemBindings();
 bool HasArenaGogoCardBindings();
@@ -4238,6 +4370,8 @@ void DrawRuntimeStatus() {
         DrawStatusRow("Shop automation", HasShopAutomationBindings());
         DrawStatusRow("Recommend lineup", HasShopRecommendLineupBindings());
         DrawStatusRow("Shop refresh panel", HasShopRefreshBindings());
+        DrawStatusRow("Combat local UI", HasCombatLocalUiBindings());
+        DrawStatusRow("Client UI automation", HasClientUiAutomationBindings());
         DrawStatusRow("Arena heroes", HasArenaHeroBindings());
         DrawStatusRow("Arena items", HasArenaItemBindings());
         DrawStatusRow("Arena GogoCards", HasArenaGogoCardBindings());
@@ -4383,6 +4517,25 @@ bool HasShopRecommendLineupBindings() {
         (Originals::MCLogicBattleData_ILOGIC_GetHeroByRecommendLineup ||
          (FeatureState::BattleBridge &&
           Originals::MCBattleBridge_IsHeroInRecommendLineup));
+}
+
+bool HasCombatLocalUiBindings() {
+    return IsIl2CppRuntimeReady() &&
+        FeatureState::BattleBridge &&
+        Originals::MCBattleBridge_SetAllBloodVisible &&
+        Originals::MCBattleBridge_SetJoyStickVisible &&
+        Originals::MCBattleBridge_SetJoyStickUIShow &&
+        Originals::MCBattleBridge_SetSocialDragAreaVisible;
+}
+
+bool HasClientUiAutomationBindings() {
+    return IsIl2CppRuntimeReady() &&
+        FeatureState::BattleBridge &&
+        Originals::MCBattleBridge_OpenShop &&
+        Originals::MCBattleBridge_CloseChatUI &&
+        Originals::MCBattleBridge_SetShopEnterActive &&
+        Originals::MCLogicBattleData_ILOGIC_IsFightSection &&
+        Originals::MCLogicBattleData_ILOGIC_IsFightResultSection;
 }
 
 bool HasArenaHeroBindings() {
@@ -4551,6 +4704,26 @@ void DrawCombatTab() {
         "Invisible Scout - hide spectate switching",
         FeatureState::CombatInvisibleScout
     );
+
+    ImGui::SeparatorText("Client UI");
+
+    if (!HasCombatLocalUiBindings()) {
+        DrawWaitingText("Waiting for combat local UI bindings");
+    }
+
+    void* battleBridge = FeatureState::BattleBridge.load();
+    if (battleBridge && Originals::MCBattleBridge_CheckEnableKeyBoard) {
+        ImGui::Text(
+            "Keyboard enabled: %s",
+            FormatBool(Originals::MCBattleBridge_CheckEnableKeyBoard(battleBridge)).c_str()
+        );
+    } else {
+        ImGui::TextUnformatted("Keyboard enabled: Waiting");
+    }
+
+    DrawAtomicCheckbox("Hide all blood bars", FeatureState::CombatHideAllBloodBars);
+    DrawAtomicCheckbox("Hide joystick", FeatureState::CombatHideJoystick);
+    DrawAtomicCheckbox("Hide social drag area", FeatureState::CombatHideSocialDragArea);
 }
 
 void DrawAppearanceTab() {
@@ -5682,15 +5855,34 @@ void DrawShopTab() {
             DrawAtomicInputInt("Minimum reserve gold", FeatureState::ShopKeepGoldAt);
             FeatureState::ShopKeepGoldAt =
                 std::clamp(FeatureState::ShopKeepGoldAt.load(), 0, 999999);
+
+            ImGui::Separator();
+            ImGui::SeparatorText("Client UI");
+
+            if (!HasClientUiAutomationBindings()) {
+                DrawWaitingText("Waiting for client UI automation bindings");
+            }
+
+            DrawAtomicCheckbox(
+                "Open shop during prepare",
+                FeatureState::AutomationOpenShopDuringPrepare
+            );
+            DrawAtomicCheckbox(
+                "Close shop during fight/result",
+                FeatureState::AutomationCloseShopDuringFight
+            );
+            DrawAtomicCheckbox(
+                "Hide shop entry button",
+                FeatureState::AutomationHideShopEntry
+            );
+            DrawAtomicCheckbox(
+                "Keep chat closed",
+                FeatureState::AutomationKeepChatClosed
+            );
             ImGui::EndTabItem();
         }
 
         if (ImGui::BeginTabItem("Hero Targets")) {
-            DrawSearchInput(
-                "ShopHeroFilter",
-                "Search heroes by name, ID, or cost",
-                UiState::ShopHeroFilter
-            );
             DrawAtomicCheckbox("Show tracked heroes only", UiState::ShopShowSelectedOnly);
 
             if (ImGui::Button("Clear hero targets", ImVec2(-1.0f, 0.0f))) {
@@ -5702,7 +5894,6 @@ void DrawShopTab() {
             std::unordered_map<int, HeroAutomationState> shopTargets =
                 GetShopHeroTargetsSnapshot();
             int totalHeroCount = static_cast<int>(heroes.size());
-            FilterHeroes(heroes, UiState::ShopHeroFilter);
 
             if (UiState::ShopShowSelectedOnly.load()) {
                 heroes.erase(
@@ -5729,7 +5920,7 @@ void DrawShopTab() {
                 if (totalHeroCount == 0) {
                     DrawWaitingText("Waiting for hero table");
                 } else {
-                    ImGui::TextUnformatted("No heroes match the current filter");
+                    ImGui::TextUnformatted("No tracked heroes selected");
                 }
             } else if (ImGui::BeginTable(
                 "##ShopHeroListTable",
@@ -5802,15 +5993,9 @@ void DrawArenaTab() {
             FeatureState::ArenaHeroStar =
                 std::clamp(FeatureState::ArenaHeroStar.load(), 1, 3);
             ImGui::Separator();
-            DrawSearchInput(
-                "ArenaHeroFilter",
-                "Search heroes by name, ID, or cost",
-                UiState::ArenaHeroFilter
-            );
 
             std::vector<HeroTableEntry> heroes = GetSortedHeroes(true);
             int totalHeroCount = static_cast<int>(heroes.size());
-            FilterHeroes(heroes, UiState::ArenaHeroFilter);
             ImGui::Text(
                 "Showing %d / %d heroes",
                 static_cast<int>(heroes.size()),
@@ -5821,7 +6006,7 @@ void DrawArenaTab() {
                 if (totalHeroCount == 0) {
                     DrawWaitingText("Waiting for hero table");
                 } else {
-                    ImGui::TextUnformatted("No heroes match the current filter");
+                    ImGui::TextUnformatted("No heroes available");
                 }
             } else if (ImGui::BeginTable(
                 "##ArenaHeroListTable",
@@ -5866,15 +6051,9 @@ void DrawArenaTab() {
 
             DrawAtomicCheckbox("Grant enhanced item", FeatureState::ArenaItemEnhanced);
             ImGui::Separator();
-            DrawSearchInput(
-                "ArenaItemFilter",
-                "Search items by name or ID",
-                UiState::ArenaItemFilter
-            );
 
             std::vector<EquipTableEntry> equips = GetSortedEquips();
             int totalEquipCount = static_cast<int>(equips.size());
-            FilterEquips(equips, UiState::ArenaItemFilter);
             ImGui::Text(
                 "Showing %d / %d items",
                 static_cast<int>(equips.size()),
@@ -5885,7 +6064,7 @@ void DrawArenaTab() {
                 if (totalEquipCount == 0) {
                     DrawWaitingText("Waiting for item table");
                 } else {
-                    ImGui::TextUnformatted("No items match the current filter");
+                    ImGui::TextUnformatted("No items available");
                 }
             } else if (ImGui::BeginTable(
                 "##ArenaItemListTable",
@@ -5939,15 +6118,9 @@ void DrawArenaTab() {
                 FeatureState::ArenaGogoCardSelected2 = -1;
             }
             ImGui::Separator();
-            DrawSearchInput(
-                "ArenaGogoCardFilter",
-                "Search GogoCards by name or ID",
-                UiState::ArenaGogoCardFilter
-            );
 
             std::vector<CardTableEntry> cards = GetSortedCards();
             int totalCardCount = static_cast<int>(cards.size());
-            FilterCards(cards, UiState::ArenaGogoCardFilter);
             ImGui::Text(
                 "Showing %d / %d cards",
                 static_cast<int>(cards.size()),
@@ -5958,7 +6131,7 @@ void DrawArenaTab() {
                 if (totalCardCount == 0) {
                     DrawWaitingText("Waiting for GogoCard table");
                 } else {
-                    ImGui::TextUnformatted("No GogoCards match the current filter");
+                    ImGui::TextUnformatted("No GogoCards available");
                 }
             } else if (ImGui::BeginTable(
                 "##ArenaGogoCardTable",

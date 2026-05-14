@@ -63,7 +63,7 @@ Target default yang didukung:
 
 ### Info
 
-- Tabel runtime status untuk binding battle data, GGC, shop, Recommendation Lineup, arena, test, spectator, synergy, dan placement.
+- Tabel runtime status untuk binding battle data, GGC, shop, Recommendation Lineup, local UI, arena, test, spectator, synergy, dan placement.
 - Tabel player dan next-enemy yang diurutkan dengan player lokal di posisi pertama.
 - Readout kualitas GGC untuk round 7 dan round 13.
 - Indikator status overlay untuk binding yang terlambat atau belum tersedia.
@@ -71,6 +71,8 @@ Target default yang didukung:
 ### Combat
 
 - Toggle Invisible Scout.
+- Toggle local UI untuk semua blood bar, visibilitas joystick, dan visibilitas social drag area.
+- Readout kesiapan keyboard dari battle bridge.
 
 ### Appearance
 
@@ -91,8 +93,9 @@ Target default yang didukung:
 - Auto-buy target hero yang dipilih.
 - Auto-buy hero dari Recommendation Lineup yang aktif.
 - Auto-refresh shop dengan stop condition untuk hero gratis, target yang dipilih, atau hero Recommendation Lineup.
+- Automasi UI client-side untuk membuka shop saat prepare, menutup shop saat fight/result, menyembunyikan tombol masuk shop, dan menjaga chat tetap tertutup.
 - Gold reserve threshold untuk automasi yang lebih aman.
-- Tabel target hero dengan jumlah target yang dapat dikonfigurasi.
+- Tabel target hero dengan jumlah target yang dapat dikonfigurasi dan tanpa field search yang bergantung pada keyboard.
 - Jumlah target Recommendation Lineup untuk automation shop tingkat lanjut.
 - Throttle buy dan refresh untuk mengurangi aksi berulang saat automation berjalan terus-menerus.
 

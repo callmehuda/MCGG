@@ -61,8 +61,10 @@ git lfs pull
 Current user-facing overlay areas are Info, Combat, Appearance, Settings, Shop,
 Arena, and Test. Shop currently includes free-hero buying, manual target buying,
 Recommendation Lineup buying, auto-refresh pause conditions, keep-gold reserve,
-and target counts. New user-facing controls should report delayed runtime
-dependencies with a clear `Waiting for ...` state where practical.
+target counts, and client-side shop UI automation. Combat also includes local UI
+visibility toggles backed by `MCBattleBridge`. New user-facing controls should
+report delayed runtime dependencies with a clear `Waiting for ...` state where
+practical.
 
 ## Threading and Shared State
 
