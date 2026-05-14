@@ -82,7 +82,8 @@ Target default yang didukung:
 
 ### Settings
 
-- Kontrol ukuran menu, posisi tetap opsional, dan interaksi window.
+- Kontrol ukuran menu, posisi tetap opsional, navigasi tab yang lebih ramah
+  perangkat mobile, dan interaksi window.
 - Kontrol font scale, opacity, rounding, border, padding, spacing, scrollbar, dan indentation.
 - Save dan load untuk visual settings serta state Combat, Shop, dan Arena.
 - Path config default berada di package game yang sedang berjalan, di-resolve sebagai `/data/data/<game-package>/files/mcgg_config.ini`.
@@ -114,7 +115,9 @@ Target default yang didukung:
 - Kontrol manual untuk retry binding dan refresh managed reference.
 - Inspeksi account berdasarkan self, opponent, atau account ID eksplisit.
 - Tabel prediksi fight dengan sinyal direct, manager-derived, invasion-pair, dan round-robin.
-- Readout runtime untuk round state, field battle manager, state behavior API, dan seluruh manager entry.
+- Readout runtime bertab untuk kesiapan binding, round state, identitas player,
+  rank, ekonomi, state shop, field battle manager, state battle bridge, state
+  panel shop, state behavior API, dan seluruh manager entry.
 
 Feature binding di-resolve terhadap local reference artifacts dan metadata IL2CPP runtime. Method dan field yang belum tersedia akan dicoba ulang secara periodik, bukan langsung disimpan permanen sebagai unavailable. Jika binding belum siap, overlay akan menampilkan status `Waiting for ...`.
 
@@ -324,6 +327,10 @@ Urutan ini disengaja. Rendering dan input diinisialisasi terpisah dari feature b
 - Pertahankan runtime code fitur di `jni/Main.cpp` kecuali refactor memang diminta secara eksplisit.
 - Gunakan section lokal yang jelas dan komentar singkat di sekitar IL2CPP call yang berisiko.
 - Gunakan tab Runtime Status dan Test saat memvalidasi binding baru atau menelusuri runtime state yang terlambat tersedia.
+- Pertahankan diagnostik Test sebagai read-only kecuali task secara eksplisit
+  meminta aksi, dan verifikasi setiap binding tambahan terhadap `dump/dump.cs`.
+- Jaga overlay utama tetap mudah diakses pada display mobile sambil
+  mempertahankan navigasi utama berbasis TabBar.
 - Pertahankan persistence Settings tetap memakai file config milik proyek, bukan mengaktifkan persistence `.ini` ImGui.
 - Pertahankan retryable binding behavior. Jangan menyimpan method atau field unresolved secara permanen sebagai missing.
 - Pertahankan tick terpisah 100 ms untuk shop automation dan arena effects, kecuali perubahan timing memang bagian dari task.

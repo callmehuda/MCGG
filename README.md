@@ -82,7 +82,7 @@ The default supported target is:
 
 ### Settings
 
-- Menu size, optional fixed position, and window interaction controls.
+- Menu size, optional fixed position, mobile-friendly tab navigation, and window interaction controls.
 - Font scale, opacity, rounding, border, padding, spacing, scrollbar, and indentation controls.
 - Save and load for visual settings plus Combat, Shop, and Arena state.
 - Default config path under the running game package, resolved as `/data/data/<game-package>/files/mcgg_config.ini`.
@@ -114,7 +114,9 @@ The default supported target is:
 - Manual binding retry and managed reference refresh controls.
 - Account inspection by self, opponent, or explicit account ID.
 - Fight prediction table with direct, manager-derived, invasion-pair, and round-robin signals.
-- Runtime readouts for round state, battle manager fields, behavior API state, and all manager entries.
+- Tabbed runtime readouts for binding readiness, round state, player identity,
+  rank, economy, shop state, battle manager fields, battle bridge state, shop
+  panel state, behavior API state, and all manager entries.
 
 Feature bindings are resolved against local reference artifacts and runtime IL2CPP metadata. Missing methods and fields are retried periodically instead of being permanently cached as unavailable. When a binding is not ready, the overlay reports a `Waiting for ...` state.
 
@@ -322,6 +324,10 @@ This order is intentional. Rendering and input are initialized separately from f
 - Keep feature runtime code in `jni/Main.cpp` unless a refactor is explicitly requested.
 - Use clear local sections and concise comments around risky IL2CPP calls.
 - Use the Runtime Status and Test tabs when validating new bindings or investigating delayed runtime state.
+- Keep Test diagnostics read-only unless a task explicitly requests an action,
+  and verify each added binding against `dump/dump.cs`.
+- Keep the main overlay accessible on mobile displays while preserving the
+  primary TabBar navigation.
 - Keep Settings persistence scoped to project-owned config files rather than enabling ImGui `.ini` persistence.
 - Preserve retryable binding behavior. Do not permanently cache unresolved methods or fields as missing.
 - Preserve separate 100 ms ticks for shop automation and arena effects unless timing changes are part of the task.
