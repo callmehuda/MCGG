@@ -13,12 +13,17 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := main
 
 LOCAL_CFLAGS := \
-    -O0 \
-    -g0 \
+    -Oz \
+    -DNDEBUG \
+    -ffunction-sections \
+    -fdata-sections \
+    -fvisibility=hidden \
+    -fno-unwind-tables \
+    -fno-asynchronous-unwind-tables \
+    -fomit-frame-pointer \
     -w \
     -Wno-everything \
     -Wno-error \
-    -Wformat \
     -DIMGUI_DISABLE_DEMO_WINDOWS \
     -DIMGUI_DISABLE_DEBUG_TOOLS \
     -DIMGUI_USE_WCHAR32 \
@@ -29,16 +34,21 @@ LOCAL_CFLAGS := \
 
 LOCAL_CPPFLAGS := \
     $(LOCAL_CFLAGS) \
-    -std=c++26
+    -std=c++26 \
+    -fvisibility-inlines-hidden \
+    -fno-exceptions \
+    -fno-rtti
 
-LOCAL_LDFLAGS :=
+LOCAL_LDFLAGS := \
+    -Wl,--gc-sections \
+    -Wl,--strip-all \
+    -Wl,--exclude-libs,ALL
 
 LOCAL_LDLIBS := \
     -llog \
     -landroid \
     -lEGL \
-    -lGLESv3 \
-    -lz
+    -lGLESv3
 
 LOCAL_C_INCLUDES := \
     $(LOCAL_PATH)/xDL/xdl/src/main/cpp/include/ \
@@ -49,7 +59,10 @@ LOCAL_C_INCLUDES := \
 
 LOCAL_SRC_FILES := \
     $(wildcard $(LOCAL_PATH)/xDL/xdl/src/main/cpp/*.c*) \
-    $(wildcard $(LOCAL_PATH)/imgui/*.c*) \
+    $(LOCAL_PATH)/imgui/imgui.cpp \
+    $(LOCAL_PATH)/imgui/imgui_draw.cpp \
+    $(LOCAL_PATH)/imgui/imgui_tables.cpp \
+    $(LOCAL_PATH)/imgui/imgui_widgets.cpp \
     $(LOCAL_PATH)/imgui/backends/imgui_impl_android.cpp \
     $(LOCAL_PATH)/imgui/backends/imgui_impl_opengl3.cpp \
     $(LOCAL_PATH)/imgui/misc/cpp/imgui_stdlib.cpp \
