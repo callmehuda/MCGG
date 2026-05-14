@@ -23,7 +23,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Feature Binding**: `ResolveFeatureBindings()` resolves game methods and hooks. Missing methods and fields are retried periodically because Unity metadata and battle objects may not be ready during first setup.
 - **Hooking Strategy**: Uses Dobby to hook `eglSwapBuffers` for frame-by-frame UI injection, `UnityEngine.Input.GetTouch` for touch-to-mouse forwarding, and selected game methods for Combat and Arena behavior.
 - **Runtime Ticks**: Shop automation and Arena effects run on separate 100 ms ticks for stability and responsiveness. Shop automation also uses bounded cooldowns for buy, repeat-buy, refresh, target-worth, and Recommendation Lineup checks.
-- **Runtime Caches**: Managed references and hero/equipment/GogoCard table data are cached, with table caches refreshed when entering a new match.
+- **Runtime Caches**: Managed references are cached through atomic pointers. Hero/equipment/GogoCard table data is collected locally and published under `RuntimeMutex::FeatureMutex` when entering a new match.
 - **Diagnostics**: Runtime Status and Test tabs expose binding readiness, Recommendation Lineup readiness, managed reference refresh, round state, battle manager fields, behavior API state, all manager entries, and opponent prediction signals.
 - **Configuration**: Settings saves and loads visual settings plus Combat, Shop, and Arena state from `/data/data/<game-package>/files/mcgg_config.ini`.
 - **Memory Mapping**: `jni/structures/Structures.hpp` defines the layout of Unity/Mono types to allow native interaction with managed objects.
@@ -45,6 +45,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Unity Version**: `2019.4.22f1` (Refer to `UNITY_` macros in `jni/Android.mk`)
 - **C++ Standard**: C++26 (defined in `jni/Android.mk`)
 - **NDK App Settings**: `APP_OPTIM := release`, `APP_THIN_ARCHIVE := false`, `APP_PIE := true`
+- **Native C Flags**: `-Oz` and `-DNDEBUG` by default; `NDK_DEBUG=1` adds `-O0`
+
+### Shared State Discipline
+
+- `RuntimeMutex::CacheMutex` protects IL2CPP method and field caches.
+- `RuntimeMutex::FeatureMutex` protects complex feature collections, including `FeatureState::Heroes`, `FeatureState::Equips`, `FeatureState::Cards`, and `FeatureState::ShopSelectedHeroes`.
+- `RuntimeMutex::UiMutex` protects UI/config strings and config save/load status.
+- Primitive feature flags, counters, runtime readiness flags, and managed reference pointers use `std::atomic`; follow the existing `.load()` and assignment patterns.
+- Use existing snapshot/access helpers such as `GetSortedHeroes()`, `GetSortedEquips()`, `GetSortedCards()`, `TryGetHeroTableEntry()`, `GetShopHeroTargetsSnapshot()`, and `GetSelectedShopHeroTargetsSnapshot()` instead of unlocked map reads.
+- Do not hold `RuntimeMutex::FeatureMutex` while calling managed IL2CPP APIs. Gather local data first, then publish under the lock.
 
 ### Coding Style
 - **Indentation**: 4 spaces.
@@ -52,7 +62,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Pointers**: Prefer `void*` for managed objects unless a specific structure from `Structures.hpp` is required.
 - **Single-file feature work**: Keep feature runtime changes in `jni/Main.cpp` unless explicitly asked to split files.
 - **Retry behavior**: Do not permanently cache failed IL2CPP method or field lookups. Missing bindings should retry and user-facing controls should show `Waiting for ...` states where practical.
-- **Shop automation**: Preserve the single-threaded, throttled frame-tick model. Avoid mutexes, atomics, unbounded scans, or immediate retry loops in the hot path unless a future design explicitly requires them.
+- **Shop automation**: Preserve the single-threaded, throttled frame-tick model. Use existing atomic toggles/counters and selected-target snapshot helpers. Avoid unbounded scans, immediate retry loops, or holding locks across managed calls in the hot path unless a future design explicitly requires them.
 - **Comments**: Add concise comments before risky IL2CPP calls, hook signatures, value-type layouts, or timing-sensitive blocks.
 - **Scope**: Do not modify vendored directories (`jni/imgui/`, `jni/xDL/`, `jni/dobby/`, `jni/Il2CppVersions/`) unless explicitly requested.
 - **Appearance**: Keep theme/font changes in the existing appearance setup and preserve fallback to the default ImGui font when Noto Sans CJK is unavailable.

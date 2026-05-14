@@ -47,7 +47,7 @@ git lfs pull
   opponent prediction behavior after feature changes.
 - For Shop changes, preserve the existing throttled automation model: buy,
   repeat-buy, refresh, target-worth, and Recommendation Lineup checks must stay
-  bounded and retryable.
+  bounded, snapshot-based, and retryable.
 - Recommendation Lineup automation depends on both `MCLogicBattleData` and
   `MCBattleBridge` bindings. Verify signatures against `dump/dump.cs` before
   changing related method pointers.
@@ -63,6 +63,22 @@ Arena, and Test. Shop currently includes free-hero buying, manual target buying,
 Recommendation Lineup buying, auto-refresh pause conditions, keep-gold reserve,
 and target counts. New user-facing controls should report delayed runtime
 dependencies with a clear `Waiting for ...` state where practical.
+
+## Threading and Shared State
+
+- `RuntimeMutex::CacheMutex` guards IL2CPP method and field caches.
+- `RuntimeMutex::FeatureMutex` guards complex feature collections such as
+  `FeatureState::Heroes`, `FeatureState::Equips`, `FeatureState::Cards`, and
+  `FeatureState::ShopSelectedHeroes`.
+- Use existing snapshot and access helpers such as `GetSortedHeroes()`,
+  `GetSortedEquips()`, `GetSortedCards()`, `TryGetHeroTableEntry()`,
+  `GetShopHeroTargetsSnapshot()`, and
+  `GetSelectedShopHeroTargetsSnapshot()` instead of ad hoc unlocked map reads.
+- Do not hold `RuntimeMutex::FeatureMutex` while calling managed IL2CPP APIs.
+  Gather local data first, then publish the result under the lock.
+- `RuntimeMutex::UiMutex` guards UI/config strings and config save/load status.
+  Primitive feature flags, counters, and managed reference pointers are
+  `std::atomic`; follow the existing `.load()` and assignment patterns.
 
 ## Coding Style
 

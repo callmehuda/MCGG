@@ -130,9 +130,22 @@ At a high level, the project contains:
 - Unity touch input forwarding into ImGui mouse input.
 - Runtime appearance setup with disabled ImGui `.ini` persistence.
 - Project-owned configuration persistence for overlay and feature state.
+- Atomic primitive runtime state with dedicated mutex domains for IL2CPP
+  caches, feature collections, and UI/config strings.
+- Snapshot helpers for hero, equipment, GogoCard, and selected shop target
+  data used by the overlay and throttled feature ticks.
 - Local reference artifacts used for method, field, and type signature validation.
 
 The project keeps most feature logic in `jni/Main.cpp` to make native entry points, runtime state, and retry behavior easy to inspect. Broader refactors should preserve the existing binding lifecycle unless the refactor explicitly changes that design.
+
+Current shared state is split by ownership. `RuntimeMutex::CacheMutex` protects
+method and field caches, `RuntimeMutex::FeatureMutex` protects complex feature
+collections such as table caches and selected shop targets, and
+`RuntimeMutex::UiMutex` protects UI/config strings. Primitive runtime flags,
+managed reference pointers, and feature counters are stored as `std::atomic`
+values. Code that reads complex collections should use the existing snapshot or
+access helpers and should not hold `FeatureMutex` while calling managed IL2CPP
+APIs.
 
 ## Requirements
 
@@ -259,6 +272,9 @@ The active C++ language mode is configured in `jni/Android.mk`:
 -std=c++26
 ```
 
+Default native C flags optimize for size with `-Oz` and define `NDEBUG`.
+Debug-oriented NDK builds add `-O0` when `NDK_DEBUG=1`.
+
 Unity compatibility defines are configured in `jni/Android.mk`:
 
 ```make
@@ -288,9 +304,12 @@ At load time and during frame presentation, `jni/Main.cpp` performs the followin
 12. Forwards Unity touch input into ImGui mouse input.
 13. Resolves feature methods and fields through `ResolveFeatureBindings()`.
 14. Retries missing method and field bindings periodically.
-15. Refreshes managed references such as battle bridge and shop panel state.
-16. Reloads hero, equipment, and GogoCard table caches when entering a match.
-17. Runs throttled shop automation and arena effects on separate 100 ms ticks.
+15. Refreshes managed references such as battle bridge and shop panel state and
+    publishes them through atomic shared state.
+16. Refreshes match state and reloads hero, equipment, and GogoCard table
+    caches through local snapshots before locked publication.
+17. Runs throttled shop automation and arena effects on separate 100 ms ticks,
+    using bounded selected-target snapshots for shop decisions.
 
 This order is intentional. Rendering and input are initialized separately from feature binding so the overlay can report partial runtime readiness while delayed IL2CPP objects continue to resolve.
 
@@ -305,6 +324,14 @@ This order is intentional. Rendering and input are initialized separately from f
 - Preserve retryable binding behavior. Do not permanently cache unresolved methods or fields as missing.
 - Preserve separate 100 ms ticks for shop automation and arena effects unless timing changes are part of the task.
 - Preserve shop automation throttles for buy, repeat-buy, refresh, target-worth, and Recommendation Lineup checks.
+- Guard direct access to `FeatureState::Heroes`, `FeatureState::Equips`,
+  `FeatureState::Cards`, and `FeatureState::ShopSelectedHeroes` with
+  `RuntimeMutex::FeatureMutex` or the existing snapshot/access helpers.
+- Avoid holding `RuntimeMutex::FeatureMutex` across managed IL2CPP calls.
+  Collect local data first, then publish the result under the lock.
+- Keep method and field cache changes under `RuntimeMutex::CacheMutex`, and
+  guard UI/config strings with `RuntimeMutex::UiMutex`.
+- Keep shop selected-target scans bounded and snapshot-based.
 - Keep the default ABI as `arm64-v8a`.
 - Keep Unity compatibility aligned with `2019.4.22f1`.
 - Keep the native language mode aligned with `c++26` unless the build configuration changes intentionally.
@@ -396,6 +423,9 @@ The Appearance tab falls back to the default ImGui font when the embedded Noto S
 The default config path is resolved from the running game process and stored as `/data/data/<game-package>/files/mcgg_config.ini`. If the Settings tab reports a save or load failure, check that the process can read and write the game app data directory.
 
 ### CI build failed
+
+The workflow runs on pushes to `master` and pull requests targeting `master`.
+Stacked or side branches still need local verification before merge.
 
 Check the GitHub Actions log for:
 

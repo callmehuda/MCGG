@@ -130,9 +130,22 @@ Secara umum, proyek ini berisi:
 - Forwarding input touch Unity ke input mouse ImGui.
 - Setup appearance runtime dengan persistence `.ini` ImGui yang dinonaktifkan.
 - Persistence konfigurasi milik proyek untuk overlay dan feature state.
+- State runtime primitive yang bersifat atomic dengan domain mutex terpisah
+  untuk cache IL2CPP, koleksi fitur, dan string UI/config.
+- Helper snapshot untuk data hero, equipment, GogoCard, dan selected target
+  shop yang dipakai overlay serta tick fitur yang di-throttle.
 - Local reference artifacts untuk validasi signature method, field, dan type.
 
 Sebagian besar logic fitur tetap berada di `jni/Main.cpp` agar native entry point, runtime state, dan retry behavior mudah diperiksa. Refactor besar sebaiknya tetap mempertahankan lifecycle binding yang ada, kecuali refactor tersebut memang secara eksplisit mengubah desain tersebut.
+
+Shared state saat ini dipisahkan berdasarkan ownership. `RuntimeMutex::CacheMutex`
+melindungi cache method dan field, `RuntimeMutex::FeatureMutex` melindungi
+koleksi fitur kompleks seperti cache tabel dan selected target shop, dan
+`RuntimeMutex::UiMutex` melindungi string UI/config. Flag runtime primitive,
+pointer managed reference, dan counter fitur disimpan sebagai nilai
+`std::atomic`. Kode yang membaca koleksi kompleks sebaiknya memakai helper
+snapshot atau access yang sudah ada dan tidak menahan `FeatureMutex` saat
+memanggil API IL2CPP managed.
 
 ## Kebutuhan
 
@@ -259,6 +272,10 @@ Mode bahasa C++ aktif dikonfigurasi di `jni/Android.mk`:
 -std=c++26
 ```
 
+Flag C native default mengoptimalkan ukuran dengan `-Oz` dan mendefinisikan
+`NDEBUG`. Build NDK yang berorientasi debug menambahkan `-O0` saat
+`NDK_DEBUG=1`.
+
 Unity compatibility defines dikonfigurasi di `jni/Android.mk`:
 
 ```make
@@ -288,9 +305,13 @@ Pada saat load dan selama frame presentation, `jni/Main.cpp` menjalankan urutan 
 12. Meneruskan input touch Unity ke input mouse ImGui.
 13. Me-resolve method dan field fitur melalui `ResolveFeatureBindings()`.
 14. Mencoba ulang binding method dan field yang belum tersedia secara periodik.
-15. Me-refresh managed reference seperti battle bridge dan shop panel state.
-16. Me-reload cache tabel hero, equipment, dan GogoCard saat masuk match.
-17. Menjalankan shop automation yang di-throttle dan arena effects pada tick terpisah 100 ms.
+15. Me-refresh managed reference seperti battle bridge dan shop panel state
+    lalu mem-publish-nya melalui shared state atomic.
+16. Me-refresh state match dan me-reload cache tabel hero, equipment, dan
+    GogoCard melalui snapshot lokal sebelum publikasi terkunci.
+17. Menjalankan shop automation yang di-throttle dan arena effects pada tick
+    terpisah 100 ms, menggunakan snapshot selected-target yang bounded untuk
+    keputusan shop.
 
 Urutan ini disengaja. Rendering dan input diinisialisasi terpisah dari feature binding agar overlay dapat melaporkan readiness runtime secara parsial sementara object IL2CPP yang terlambat tetap dicoba resolve.
 
@@ -305,6 +326,16 @@ Urutan ini disengaja. Rendering dan input diinisialisasi terpisah dari feature b
 - Pertahankan retryable binding behavior. Jangan menyimpan method atau field unresolved secara permanen sebagai missing.
 - Pertahankan tick terpisah 100 ms untuk shop automation dan arena effects, kecuali perubahan timing memang bagian dari task.
 - Pertahankan throttle shop automation untuk buy, repeat-buy, refresh, target-worth, dan pengecekan Recommendation Lineup.
+- Lindungi akses langsung ke `FeatureState::Heroes`, `FeatureState::Equips`,
+  `FeatureState::Cards`, dan `FeatureState::ShopSelectedHeroes` dengan
+  `RuntimeMutex::FeatureMutex` atau helper snapshot/access yang sudah ada.
+- Hindari menahan `RuntimeMutex::FeatureMutex` saat melakukan call IL2CPP
+  managed. Kumpulkan data lokal terlebih dahulu, lalu publish hasilnya di
+  bawah lock.
+- Jaga perubahan cache method dan field tetap berada di bawah
+  `RuntimeMutex::CacheMutex`, dan lindungi string UI/config dengan
+  `RuntimeMutex::UiMutex`.
+- Pertahankan scan selected-target shop tetap bounded dan berbasis snapshot.
 - Pertahankan default ABI sebagai `arm64-v8a`.
 - Jaga kompatibilitas Unity tetap selaras dengan `2019.4.22f1`.
 - Jaga mode bahasa native tetap selaras dengan `c++26` kecuali konfigurasi build memang diubah secara sengaja.
@@ -396,6 +427,10 @@ Tab Appearance akan fallback ke font default ImGui saat font Noto Sans CJK embed
 Path config default di-resolve dari process game yang sedang berjalan dan disimpan sebagai `/data/data/<game-package>/files/mcgg_config.ini`. Jika tab Settings melaporkan kegagalan save atau load, cek apakah process dapat membaca dan menulis direktori data app game.
 
 ### CI build gagal
+
+Workflow berjalan pada push ke `master` dan pull request yang menargetkan
+`master`. Stacked branch atau side branch tetap perlu verifikasi lokal sebelum
+merge.
 
 Periksa log GitHub Actions untuk:
 

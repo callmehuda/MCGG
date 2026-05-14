@@ -41,7 +41,8 @@ ndk-build -C jni
 Builds the native `main` module and outputs `libs/arm64-v8a/libmain.so`.
 The current build uses ABI `arm64-v8a`, platform `android-21`, STL
 `c++_static`, optimization `release`, thin archives disabled, PIE enabled, and
-C++ mode `c++26`.
+C++ mode `c++26`. `jni/Android.mk` optimizes native sources with `-Oz` by
+default and adds `-O0` when `NDK_DEBUG=1`.
 
 ## Coding Style & Naming Conventions
 
@@ -62,10 +63,21 @@ resolution can happen before the target metadata is ready, so missing entries
 must be allowed to resolve later. Preserve the separate 100 ms shop and arena
 feature ticks unless the task explicitly changes timing.
 
+Shared state is split across `RuntimeMutex::CacheMutex`,
+`RuntimeMutex::FeatureMutex`, and `RuntimeMutex::UiMutex`. Primitive feature
+flags, counters, and managed reference pointers use `std::atomic`. Guard direct
+access to complex feature collections such as `FeatureState::Heroes`,
+`FeatureState::Equips`, `FeatureState::Cards`, and
+`FeatureState::ShopSelectedHeroes` with `FeatureMutex` or the existing
+snapshot/access helpers. Do not hold `FeatureMutex` while calling managed IL2CPP
+APIs; gather local data first and publish results under the lock.
+
 Shop automation is intentionally single-threaded and throttled on the frame
 tick. Preserve the existing buy, repeat-buy, refresh, target-worth, and
-Recommendation Lineup cooldowns. Do not add mutexes, atomics, unbounded scans,
-or immediate retry loops to the shop hot path unless the task explicitly changes
+Recommendation Lineup cooldowns. Read selected target state through
+`GetShopHeroTargetsSnapshot()` or `GetSelectedShopHeroTargetsSnapshot()` and
+keep scans bounded by the existing runtime limits. Do not add unbounded scans or
+immediate retry loops to the shop hot path unless the task explicitly changes
 that design.
 
 ## Testing Guidelines
