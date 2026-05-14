@@ -13,14 +13,11 @@ include $(CLEAR_VARS)
 LOCAL_MODULE := main
 
 LOCAL_CFLAGS := \
-    -Oz \
+    -O0 \
     -DNDEBUG \
     -ffunction-sections \
     -fdata-sections \
     -fvisibility=hidden \
-    -fno-unwind-tables \
-    -fno-asynchronous-unwind-tables \
-    -fomit-frame-pointer \
     -w \
     -Wno-everything \
     -Wno-error \
