@@ -6487,6 +6487,7 @@ struct OpponentPredictionRow {
     double weight = 0.0;
     bool alive = false;
     bool mirror = false;
+    bool lockedPercent = false;
     std::string currentEnemyName;
 };
 
@@ -6496,6 +6497,8 @@ struct CurrentOpponentObservation {
     bool alive = false;
     bool mirror = false;
     bool fromCurrentApi = false;
+    bool fromInvasionPair = false;
+    bool fromManager = false;
     bool inferred = false;
 };
 
@@ -6641,6 +6644,22 @@ int CountRecentOpponentHistory(uint64_t accountId, uint64_t opponentId, int maxE
     return count;
 }
 
+int GetObservedOpponentConfidence(const CurrentOpponentObservation& observation) {
+    if (observation.opponentId == 0) {
+        return 0;
+    }
+
+    if (observation.fromCurrentApi) {
+        return 100;
+    }
+
+    if (observation.fromInvasionPair || observation.fromManager) {
+        return 95;
+    }
+
+    return observation.inferred ? 90 : 0;
+}
+
 void RefreshPredictionOpponentCache(
     uint64_t selfAccountId,
     void* selfManager,
@@ -6667,6 +6686,8 @@ void RefreshPredictionOpponentCache(
             alive,
             lookup.mirror,
             lookup.fromCurrentApi,
+            lookup.fromInvasionPair,
+            lookup.fromManager,
             false
         };
     };
@@ -6783,6 +6804,7 @@ std::vector<OpponentPredictionRow> BuildOpponentPredictions(uint64_t selfAccount
             0.0,
             player.alive,
             false,
+            false,
             {}
         });
     }
@@ -6800,6 +6822,10 @@ std::vector<OpponentPredictionRow> BuildOpponentPredictions(uint64_t selfAccount
             FindCurrentOpponentObservation(row.accountId);
         if (observation) {
             row.currentEnemyName = FormatObservedEnemyName(*observation);
+            row.percent = GetObservedOpponentConfidence(*observation);
+            row.weight = static_cast<double>(row.percent);
+            row.mirror = observation->mirror;
+            row.lockedPercent = row.percent > 0;
         }
     }
 
@@ -6850,6 +6876,7 @@ std::vector<OpponentPredictionRow> BuildOpponentPredictions(uint64_t selfAccount
                 row.percent = 100;
                 row.weight = 100.0;
                 row.mirror = exactMirror;
+                row.lockedPercent = true;
                 foundExactRow = true;
                 break;
             }
@@ -6868,11 +6895,10 @@ std::vector<OpponentPredictionRow> BuildOpponentPredictions(uint64_t selfAccount
                 100.0,
                 true,
                 exactMirror,
+                true,
                 {}
             });
         }
-
-        return rows;
     }
 
     if (!realPlayerMode) {
@@ -6923,6 +6949,10 @@ std::vector<OpponentPredictionRow> BuildOpponentPredictions(uint64_t selfAccount
                 return player.accountId == row.accountId;
             }
         );
+
+        if (row.lockedPercent) {
+            continue;
+        }
 
         if (playerIt == players.end() || !playerIt->alive) {
             row.weight = 0.0;
@@ -6998,6 +7028,10 @@ std::vector<OpponentPredictionRow> BuildOpponentPredictions(uint64_t selfAccount
     int strongestIndex = -1;
 
     for (size_t i = 0; i < rows.size(); ++i) {
+        if (rows[i].lockedPercent) {
+            continue;
+        }
+
         totalWeight += rows[i].weight;
 
         if (strongestIndex < 0 || rows[i].weight > rows[static_cast<size_t>(strongestIndex)].weight) {
@@ -7012,6 +7046,10 @@ std::vector<OpponentPredictionRow> BuildOpponentPredictions(uint64_t selfAccount
     int totalPercent = 0;
 
     for (OpponentPredictionRow& row : rows) {
+        if (row.lockedPercent) {
+            continue;
+        }
+
         row.percent = static_cast<int>((row.weight * 100.0 / totalWeight) + 0.5);
         row.percent = std::clamp(row.percent, 0, 100);
         totalPercent += row.percent;
