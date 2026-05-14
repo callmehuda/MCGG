@@ -75,8 +75,8 @@ Target default yang didukung:
 ### Appearance
 
 - Selector theme ImGui Dark dan Catppuccin Mocha.
-- Selector font Default dan font Roboto opsional.
-- Status kesiapan font saat `Roboto-Medium.ttf` tidak tersedia dari direktori font ImGui.
+- Selector font Default dan font Noto Sans CJK embedded.
+- Status kesiapan font saat font Noto Sans CJK embedded tidak tersedia.
 
 ### Settings
 
@@ -387,9 +387,9 @@ Saat menelusuri masalah penggunaan terus-menerus, verifikasi:
 - Target count belum tercapai.
 - Cooldown buy dan refresh sudah selesai.
 
-### Font Roboto tidak tersedia
+### Font Noto Sans CJK tidak tersedia
 
-Tab Appearance akan fallback ke font default ImGui saat `jni/imgui/misc/fonts/Roboto-Medium.ttf` tidak dapat dibaca. Ini tidak memblokir overlay atau native build.
+Tab Appearance akan fallback ke font default ImGui saat font Noto Sans CJK embedded tidak dapat dimuat. Ini tidak memblokir overlay atau native build.
 
 ### Konfigurasi tidak tersimpan atau termuat
 
@@ -412,7 +412,7 @@ Periksa log GitHub Actions untuk:
 - Runtime binding dapat berubah ketika target application update.
 - Ketersediaan fitur bergantung pada runtime state dan managed object yang sedang loaded.
 - Automation Recommendation Lineup bergantung pada data lineup match aktif yang diekspos runtime.
-- Font Roboto opsional bergantung pada isi submodule ImGui yang ter-checkout.
+- Font Noto Sans CJK embedded menambah ukuran input source native dan waktu build atlas font.
 - Termux tidak dikelola sebagai target build resmi.
 - Dokumentasi sengaja tidak menyertakan instruksi deployment runtime dan instruksi yang berorientasi penyalahgunaan.
 

@@ -32,7 +32,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Current Feature Areas
 - **Info**: runtime status, player/enemy table, and GGC round 7/13 quality display.
 - **Combat**: Invisible Scout toggle.
-- **Appearance**: ImGui Dark/Catppuccin Mocha theme selection plus Default/Roboto font selection.
+- **Appearance**: ImGui Dark/Catppuccin Mocha theme selection plus Default/Noto Sans CJK font selection.
 - **Settings**: menu size, fixed position, font scale, style tuning, and save/load configuration.
 - **Shop**: auto-buy free heroes, auto-buy selected targets, auto-buy Recommendation Lineup heroes, auto-refresh, pause-refresh conditions, keep-gold threshold, manual target counts, and Recommendation Lineup target counts.
 - **Arena**: hero spawn, equipment grant, GogoCard forcing, active synergy forcing, level 99, outside-map placement, enemy HP 1, and gold grant helpers.
@@ -55,5 +55,5 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Shop automation**: Preserve the single-threaded, throttled frame-tick model. Avoid mutexes, atomics, unbounded scans, or immediate retry loops in the hot path unless a future design explicitly requires them.
 - **Comments**: Add concise comments before risky IL2CPP calls, hook signatures, value-type layouts, or timing-sensitive blocks.
 - **Scope**: Do not modify vendored directories (`jni/imgui/`, `jni/xDL/`, `jni/dobby/`, `jni/Il2CppVersions/`) unless explicitly requested.
-- **Appearance**: Keep theme/font changes in the existing appearance setup and preserve fallback to the default ImGui font when Roboto is unavailable.
+- **Appearance**: Keep theme/font changes in the existing appearance setup and preserve fallback to the default ImGui font when Noto Sans CJK is unavailable.
 - **Settings**: Keep persistence in the project config file under the game app data directory; do not re-enable ImGui `.ini` persistence unless explicitly requested.

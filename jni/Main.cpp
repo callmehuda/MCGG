@@ -19,6 +19,10 @@
 #include <utility>
 #include <vector>
 
+#define IMGUI_DISABLE_DEMO_WINDOWS
+#define IMGUI_DISABLE_DEBUG_TOOLS
+#define IMGUI_USE_WCHAR32
+
 #include "structures/Structures.hpp"
 #include "xdl.h"
 #include "dobby/dobby.h"
@@ -244,7 +248,7 @@ namespace UiState {
 
 namespace AppearanceState {
     ImFont* DefaultFont = nullptr;
-    ImFont* RobotoFont = nullptr;
+    ImFont* NotoCjkFont = nullptr;
     int AppliedThemeIndex = -1;
     int AppliedFontIndex = -1;
 }
@@ -3295,7 +3299,7 @@ void ClampConfigurableState() {
 
 void ResetVisualSettings() {
     UiState::ThemeIndex = 1;
-    UiState::FontIndex = AppearanceState::RobotoFont ? 1 : 0;
+    UiState::FontIndex = AppearanceState::NotoCjkFont ? 1 : 0;
     UiState::MoveFromTitleBarOnly = true;
     UiState::ResizeFromEdges = false;
     UiState::UseFixedMenuPosition = false;
@@ -3821,14 +3825,14 @@ void ApplyUserStyleSettings() {
 }
 
 void ApplySelectedFont() {
-    if (UiState::FontIndex == 1 && !AppearanceState::RobotoFont) {
+    if (UiState::FontIndex == 1 && !AppearanceState::NotoCjkFont) {
         UiState::FontIndex = 0;
     }
 
     ImGuiIO& io = ImGui::GetIO();
     ImFont* selectedFont =
-        UiState::FontIndex == 1 && AppearanceState::RobotoFont ?
-            AppearanceState::RobotoFont :
+        UiState::FontIndex == 1 && AppearanceState::NotoCjkFont ?
+            AppearanceState::NotoCjkFont :
             AppearanceState::DefaultFont;
 
     if (!selectedFont) {
@@ -3843,25 +3847,32 @@ void LoadAppearanceFonts() {
     ImGuiIO& io = ImGui::GetIO();
     AppearanceState::DefaultFont = io.Fonts->AddFontDefault();
 
-    const char* robotoPaths[] = {
-        "jni/imgui/misc/fonts/Roboto-Medium.ttf",
-        "./jni/imgui/misc/fonts/Roboto-Medium.ttf"
+    ImFontConfig fontConfig;
+    fontConfig.FontDataOwnedByAtlas = false;
+    fontConfig.PixelSnapH = true;
+
+    static const ImWchar fullRanges[] = {
+        0x0001, 0x10FFFF,
+        0
     };
 
-    for (const char* path : robotoPaths) {
-        if (access(path, R_OK) != 0) {
-            continue;
-        }
+    static const unsigned char notoCjkFontData[] = {
+        #embed "fonts/Noto Sans CJK Regular.otf"
+    };
 
-        AppearanceState::RobotoFont = io.Fonts->AddFontFromFileTTF(path, 18.0f);
-        if (AppearanceState::RobotoFont) {
-            break;
-        }
-    }
+    AppearanceState::NotoCjkFont = io.Fonts->AddFontFromMemoryTTF(
+        (void*)notoCjkFontData,
+        sizeof(notoCjkFontData),
+        20.0f,
+        &fontConfig,
+        fullRanges
+    );
 
-    if (!AppearanceState::RobotoFont) {
+    if (!AppearanceState::NotoCjkFont) {
         UiState::FontIndex = 0;
     }
+
+    io.Fonts->Build();
 }
 
 void ApplyAppearance() {
@@ -4328,12 +4339,12 @@ void DrawAppearanceTab() {
 
     const char* fonts[] = {
         "Default",
-        "Roboto"
+        "Noto Sans CJK"
     };
 
     ImGui::SetNextItemWidth(220.0f);
     if (ImGui::Combo("Font", &UiState::FontIndex, fonts, IM_ARRAYSIZE(fonts))) {
-        if (UiState::FontIndex == 1 && !AppearanceState::RobotoFont) {
+        if (UiState::FontIndex == 1 && !AppearanceState::NotoCjkFont) {
             UiState::FontIndex = 0;
         }
 
@@ -4341,8 +4352,8 @@ void DrawAppearanceTab() {
         ApplyAppearance();
     }
 
-    if (!AppearanceState::RobotoFont) {
-        DrawWaitingText("Waiting for Roboto font");
+    if (!AppearanceState::NotoCjkFont) {
+        DrawWaitingText("Waiting for Noto Sans CJK font");
     }
 }
 
@@ -5821,7 +5832,7 @@ ImVec2 GetValidatedMenuPosition(const ImVec2& menuSize) {
 }
 
 void DrawMainMenu() {
-    const MainMenuTab tabs[] = {
+    static const MainMenuTab tabs[] = {
         {"Info", DrawInfoTab},
         {"Combat", DrawCombatTab},
         {"Shop", DrawShopTab},
@@ -5831,18 +5842,20 @@ void DrawMainMenu() {
         {"Test", DrawTestTab}
     };
 
-    int tabCount = static_cast<int>(IM_ARRAYSIZE(tabs));
+    constexpr int tabCount = static_cast<int>(IM_ARRAYSIZE(tabs));
+    static_assert(tabCount > 0);
+
     UiState::MainTabIndex = std::clamp(UiState::MainTabIndex, 0, tabCount - 1);
 
-    ImVec2 menuSize = GetValidatedMenuSize();
+    const ImVec2 menuSize = GetValidatedMenuSize();
 
     if (UiState::UseFixedMenuPosition) {
         ImGui::SetNextWindowPos(GetValidatedMenuPosition(menuSize), ImGuiCond_Always);
     }
 
-    ImGui::SetNextWindowSize(menuSize, ImGuiCond_Always);
+    ImGui::SetNextWindowSize(menuSize, ImGuiCond_Once);
 
-    if (!ImGui::Begin("MCGG", nullptr, ImGuiWindowFlags_NoCollapse)) {
+    if (!ImGui::Begin("MCGG", nullptr)) {
         ImGui::End();
         return;
     }
@@ -5850,25 +5863,23 @@ void DrawMainMenu() {
     UiCache::MenuWindowPos = ImGui::GetWindowPos();
     UiCache::MenuWindowSize = ImGui::GetWindowSize();
 
-    ImGui::BeginChild("##MainNav", ImVec2(132.0f, 0.0f), false);
-    ImGui::TextUnformatted("MCGG");
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Spacing();
+    if (ImGui::BeginTabBar("##MainTabs", ImGuiTabBarFlags_FittingPolicyScroll)) {
+        for (int i = 0; i < tabCount; ++i) {
+            if (ImGui::BeginTabItem(tabs[i].label)) {
+                UiState::MainTabIndex = i;
 
-    for (int i = 0; i < tabCount; ++i) {
-        DrawMenuTabButton(tabs[i].label, i);
+                ImGui::Spacing();
+
+                if (tabs[i].draw != nullptr) {
+                    tabs[i].draw();
+                }
+
+                ImGui::EndTabItem();
+            }
+        }
+
+        ImGui::EndTabBar();
     }
-
-    ImGui::EndChild();
-    ImGui::SameLine();
-
-    ImGui::BeginChild("##MainContent", ImVec2(0.0f, 0.0f), false);
-    ImGui::TextUnformatted(tabs[UiState::MainTabIndex].label);
-    ImGui::Separator();
-    ImGui::Spacing();
-    tabs[UiState::MainTabIndex].draw();
-    ImGui::EndChild();
 
     ImGui::End();
 }
@@ -5892,7 +5903,7 @@ bool InitializeOverlay() {
 
     if (!ImGui_ImplOpenGL3_Init("#version 300 es")) {
         AppearanceState::DefaultFont = nullptr;
-        AppearanceState::RobotoFont = nullptr;
+        AppearanceState::NotoCjkFont = nullptr;
         ImGui::DestroyContext();
         return false;
     }
@@ -6124,13 +6135,15 @@ namespace Hooks {
 
 // Waits for game libraries, resolves IL2CPP APIs, and installs hooks.
 void SetupThread() {
+    sleep(5);
+
     void* swapBuffers = nullptr;
 
     while (!swapBuffers) {
         swapBuffers = DobbySymbolResolver(nullptr, "eglSwapBuffers");
 
         if (!swapBuffers) {
-            sleep(1);
+            sleep(2);
         }
     }
 
@@ -6185,9 +6198,13 @@ void SetupThread() {
 // Starts hook setup when this shared library is loaded in the target process.
 __attribute__((constructor))
 void InitLibrary() {
+    sleep(1);
+
     if (!IsUnityMoontonProcess()) {
         return;
     }
+
+    sleep(2);
 
     std::thread(SetupThread).detach();
 }

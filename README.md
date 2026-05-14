@@ -75,8 +75,8 @@ The default supported target is:
 ### Appearance
 
 - ImGui Dark and Catppuccin Mocha theme selector.
-- Default font and optional Roboto font selector.
-- Font readiness status when `Roboto-Medium.ttf` is unavailable from the ImGui font directory.
+- Default font and embedded Noto Sans CJK font selector.
+- Font readiness status when the embedded Noto Sans CJK font is unavailable.
 
 ### Settings
 
@@ -387,9 +387,9 @@ When investigating continuous-use issues, verify:
 - Target counts have not already been reached.
 - Buy and refresh cooldowns are not still active.
 
-### Roboto font is unavailable
+### Noto Sans CJK font is unavailable
 
-The Appearance tab falls back to the default ImGui font when `jni/imgui/misc/fonts/Roboto-Medium.ttf` cannot be read. This does not block the overlay or native build.
+The Appearance tab falls back to the default ImGui font when the embedded Noto Sans CJK font cannot be loaded. This does not block the overlay or native build.
 
 ### Configuration does not save or load
 
@@ -412,7 +412,7 @@ Check the GitHub Actions log for:
 - Runtime bindings may change when the target application updates.
 - Feature availability depends on current runtime state and loaded managed objects.
 - Recommendation Lineup automation depends on the active match lineup data exposed by the runtime.
-- The optional Roboto font depends on the checked-out ImGui submodule contents.
+- The embedded Noto Sans CJK font increases native source input size and font atlas build time.
 - Termux is not maintained as an official build target.
 - Documentation intentionally excludes runtime deployment and abuse-oriented instructions.
 
