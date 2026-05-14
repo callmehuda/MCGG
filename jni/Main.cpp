@@ -4968,34 +4968,20 @@ std::vector<OpponentPredictionRow> BuildOpponentPredictions(uint64_t selfAccount
 
     void* selfManager = GetBattleManagerByAccountId(selfAccountId);
     void* invasionManager = GetLogicInvasionManager();
-    bool monsterRound = IsCurrentMonsterRound(invasionManager);
-    bool realPlayerMode = IsRealPlayerPairingMode(invasionManager);
-    uint64_t exactOpponent = FindExactPredictedOpponent(
+
+    const bool monsterRound = IsCurrentMonsterRound(invasionManager);
+    const bool realPlayerMode = IsRealPlayerPairingMode(invasionManager);
+
+    if (monsterRound || !realPlayerMode) {
+        return rows;
+    }
+
+    const uint64_t currentOpponent = FindExactPredictedOpponent(
         selfAccountId,
         selfManager,
         invasionManager,
         players
     );
-
-    if (monsterRound) {
-        return rows;
-    }
-
-    if (exactOpponent != 0) {
-        for (OpponentPredictionRow& row : rows) {
-            if (row.accountId == exactOpponent && row.alive) {
-                row.percent = 100;
-                row.weight = 100.0;
-                break;
-            }
-        }
-
-        return rows;
-    }
-
-    if (!realPlayerMode) {
-        return rows;
-    }
 
     std::vector<uint64_t> aliveAccounts;
     aliveAccounts.push_back(selfAccountId);
@@ -5006,18 +4992,15 @@ std::vector<OpponentPredictionRow> BuildOpponentPredictions(uint64_t selfAccount
         }
     }
 
-    uint32_t round = Originals::MCLogicBattleData_ILOGIC_GetGameRound ?
+    const uint32_t round = Originals::MCLogicBattleData_ILOGIC_GetGameRound ?
         Originals::MCLogicBattleData_ILOGIC_GetGameRound(nullptr) :
         0;
-    uint64_t roundRobinOpponent = PredictRoundRobinOpponent(
+
+    const uint64_t roundRobinOpponent = PredictRoundRobinOpponent(
         aliveAccounts,
         selfAccountId,
-        round
+        round + 1
     );
-
-    if (roundRobinOpponent == 0 && aliveAccounts.size() % 2 == 1) {
-        return rows;
-    }
 
     static FieldInfo* lastRoundEnemyField = nullptr;
     static FieldInfo* prevRealPlayerEnemyField = nullptr;
@@ -5032,9 +5015,10 @@ std::vector<OpponentPredictionRow> BuildOpponentPredictions(uint64_t selfAccount
             GetFieldInfoFromName("", "MCLogicBattleManager", "prevRealPlayerEnemy");
     }
 
-    uint64_t lastRoundEnemyId =
+    const uint64_t lastRoundEnemyId =
         GetManagerPointerAccountField(selfManager, lastRoundEnemyField);
-    uint64_t prevRealPlayerEnemyId =
+
+    const uint64_t prevRealPlayerEnemyId =
         GetManagerPointerAccountField(selfManager, prevRealPlayerEnemyField);
 
     for (OpponentPredictionRow& row : rows) {
@@ -5052,29 +5036,9 @@ std::vector<OpponentPredictionRow> BuildOpponentPredictions(uint64_t selfAccount
         }
 
         double weight = 100.0;
-        uint64_t candidatePair = GetCurrentPairFromInvasion(
-            invasionManager,
-            playerIt->accountId
-        );
 
-        if (candidatePair == selfAccountId) {
-            weight *= 5.0;
-        } else if (candidatePair != 0) {
-            weight *= 0.03;
-        }
-
-        uint64_t candidateCurrentOpponent =
-            Originals::MCLogicBattleData_ILOGIC_GetCurrentOpponentAccountID ?
-                Originals::MCLogicBattleData_ILOGIC_GetCurrentOpponentAccountID(
-                    nullptr,
-                    playerIt->accountId
-                ) :
-                0;
-
-        if (candidateCurrentOpponent == selfAccountId) {
-            weight *= 4.0;
-        } else if (candidateCurrentOpponent != 0) {
-            weight *= 0.08;
+        if (row.accountId == currentOpponent) {
+            weight *= 0.05;
         }
 
         if (row.accountId == lastRoundEnemyId) {
@@ -5085,9 +5049,10 @@ std::vector<OpponentPredictionRow> BuildOpponentPredictions(uint64_t selfAccount
             weight *= 0.35;
         }
 
-        uint64_t candidateLastEnemy =
+        const uint64_t candidateLastEnemy =
             GetManagerPointerAccountField(playerIt->manager, lastRoundEnemyField);
-        uint64_t candidatePrevEnemy =
+
+        const uint64_t candidatePrevEnemy =
             GetManagerPointerAccountField(playerIt->manager, prevRealPlayerEnemyField);
 
         if (candidateLastEnemy == selfAccountId) {
@@ -5099,7 +5064,7 @@ std::vector<OpponentPredictionRow> BuildOpponentPredictions(uint64_t selfAccount
         }
 
         if (roundRobinOpponent != 0) {
-            weight *= row.accountId == roundRobinOpponent ? 4.5 : 0.55;
+            weight *= row.accountId == roundRobinOpponent ? 4.5 : 0.75;
         }
 
         row.weight = std::max(weight, 0.0);
@@ -5111,7 +5076,9 @@ std::vector<OpponentPredictionRow> BuildOpponentPredictions(uint64_t selfAccount
     for (size_t i = 0; i < rows.size(); ++i) {
         totalWeight += rows[i].weight;
 
-        if (strongestIndex < 0 || rows[i].weight > rows[static_cast<size_t>(strongestIndex)].weight) {
+        if (rows[i].weight > 0.0 &&
+            (strongestIndex < 0 ||
+             rows[i].weight > rows[static_cast<size_t>(strongestIndex)].weight)) {
             strongestIndex = static_cast<int>(i);
         }
     }
@@ -5167,7 +5134,7 @@ void DrawOpponentPredictionTable(uint64_t selfAccountId) {
 
     if (!ImGui::BeginTable(
         "##OpponentPredictionTable",
-        2,
+        3,
         ImGuiTableFlags_Borders |
             ImGuiTableFlags_RowBg |
             ImGuiTableFlags_SizingStretchProp |
@@ -5179,6 +5146,7 @@ void DrawOpponentPredictionTable(uint64_t selfAccountId) {
 
     ImGui::TableSetupColumn("Player");
     ImGui::TableSetupColumn("Will fight", ImGuiTableColumnFlags_WidthFixed, 110.0f);
+    ImGui::TableSetupColumn("Weight", ImGuiTableColumnFlags_WidthFixed, 90.0f);
     ImGui::TableHeadersRow();
 
     for (const OpponentPredictionRow& row : rows) {
@@ -5187,6 +5155,8 @@ void DrawOpponentPredictionTable(uint64_t selfAccountId) {
         ImGui::TextUnformatted(row.name.c_str());
         ImGui::TableSetColumnIndex(1);
         ImGui::Text("%d%%", row.percent);
+        ImGui::TableSetColumnIndex(2);
+        ImGui::Text("%.2f", row.weight);
     }
 
     ImGui::EndTable();
