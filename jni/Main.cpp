@@ -339,6 +339,70 @@ namespace Originals {
         int heroId
     );
     int (*MCLogicBattleData_ILOGIC_GetHeroByRecommendLineup)(void* instance);
+    uint32_t (*MCLogicBattleData_ILOGIC_GetBuidByAccID)(void* instance, uint64_t accountId);
+    uint32_t (*MCLogicBattleData_ILOGIC_GetGuidByAccID)(void* instance, uint64_t accountId);
+    uint32_t (*MCLogicBattleData_ILOGIC_GetChessPlayerGuid)(
+        void* instance,
+        uint64_t accountId
+    );
+    int (*MCLogicBattleData_ILOGIC_GetChessPlayerConfigID)(
+        void* instance,
+        uint64_t accountId
+    );
+    int (*MCLogicBattleData_ILOGIC_GetChessSkinId)(void* instance, uint64_t accountId);
+    int (*MCLogicBattleData_ILOGIC_GetRank)(void* instance, uint64_t accountId);
+    int (*MCLogicBattleData_ILGOIC_GetCampAliveCountByAccId)(
+        void* instance,
+        uint64_t accountId
+    );
+    int (*MCLogicBattleData_ILOGIC_GetCampRankByAccId)(
+        void* instance,
+        uint64_t accountId
+    );
+    uint32_t (*MCLogicBattleData_ILOGIC_GetCup)(void* instance, uint64_t accountId);
+    uint32_t (*MCLogicBattleData_ILOGIC_GetWarmValue)(void* instance, uint64_t accountId);
+    uint32_t (*MCLogicBattleData_ILOGIC_GetRankLevel)(void* instance, uint64_t accountId);
+    int (*MCLogicBattleData_ILOGIC_GetCommanderLv)(void* instance, uint64_t accountId);
+    int (*MCLogicBattleData_ILOGIC_GetPlayerLevel)(void* instance, uint64_t accountId);
+    int (*MCLogicBattleData_ILOGIC_GetUpgradeCost)(void* instance, uint64_t accountId);
+    bool (*MCLogicBattleData_ILOGIC_CanUpgrade)(
+        void* instance,
+        uint64_t accountId,
+        int coin
+    );
+    bool (*MCLogicBattleData_ILOGIC_GetShopIsForbid)(void* instance, uint64_t accountId);
+    AstarInt2 (*MCLogicBattleData_ILOGIC_GetShopStarLv)(void* instance, uint64_t accountId);
+    int (*MCLogicBattleData_ILOGIC_GetShopRuleBuyTimes)(
+        void* instance,
+        uint64_t accountId
+    );
+    int (*MCLogicBattleData_GetFreeFreshShopCount)(void* instance, uint64_t accountId);
+    int (*MCLogicBattleData_ILOGIC_GetCurRefreshShopLevel)(
+        void* instance,
+        uint64_t accountId
+    );
+    int (*MCLogicBattleData_ILOGIC_GetHeroItemCount)(void* instance, uint64_t accountId);
+    int (*MCLogicBattleData_ILOGIC_GetHeroSlotDict_Count)(
+        void* instance,
+        uint64_t accountId
+    );
+    int (*MCLogicBattleData_ILOGIC_GetBattleHeroNum)(void* instance, uint64_t accountId);
+    int (*MCLogicBattleData_ILOGIC_GetAllHeroNum)(void* instance, uint64_t accountId);
+    int (*MCLogicBattleData_ILOGIC_GetBattleHeroTotalStart)(
+        void* instance,
+        uint64_t accountId
+    );
+    int (*MCLogicBattleData_ILOGIC_GetBattleCount)(void* instance, uint64_t accountId);
+    bool (*MCLogicBattleData_ILOGIC_IsCurrentLogic)(void* instance, uint64_t accountId);
+    bool (*MCLogicBattleData_ILOGIC_IsPlayerCanPauseJudger)(
+        void* instance,
+        uint64_t accountId
+    );
+    int (*MCLogicBattleData_ILOGIC_GetSelfCamp)(void* instance);
+    int (*MCLogicBattleData_ILOGIC_SelfTotalPopulation)(void* instance);
+    int (*MCLogicBattleData_ILOGIC_SelfCurPopulation)(void* instance);
+    int (*MCLogicBattleData_ILOGIC_GetSpareChessNum)(void* instance);
+    int (*MCLogicBattleData_ILOGIC_GetHeroByStarUp)(void* instance);
 
     void* (*MCComp_GetGamer)(uint64_t accountId);
     void* (*MCComp_GetGoGoCardComp)(uint64_t accountId);
@@ -387,7 +451,18 @@ namespace Originals {
     void (*UIPanelBattleHeroShop_KeyBoardShopSelect)(void* instance, int slot);
     void (*UIPanelBattleHeroShop_BuyHero)(void* instance, uint8_t slot, bool refreshSameHero);
     void (*UIPanelBattleHeroShop_HeroItemList_OnSelectHero)(void* instance, uint8_t slot);
+    uint32_t (*UIPanelBattleHeroShop_get_lastOperationTime)(void* instance);
+    bool (*UIPanelBattleHeroShop_IsDelayOpen)(void* instance);
+    bool (*UIPanelBattleHeroShop_GetInfoAfterSpectate)(void* instance);
+    bool (*UIPanelBattleHeroShop_CanOperate)(void* instance, bool onlyCheckState);
     bool (*MCBattleBridge_IsHeroInRecommendLineup)(void* instance, int heroId);
+    bool (*MCBattleBridge_IsSuperCrystalShopOpen)(void* instance);
+    bool (*MCBattleBridge_IsGoGoCardPanelOpen)(void* instance);
+    bool (*MCBattleBridge_CheckEnableKeyBoard)(void* instance);
+    int64_t (*MCBattleBridge_GetFreeMemory)(void* instance);
+    uint32_t (*MCBattleBridge_GetPingTimes)(void* instance);
+    float (*MCBattleBridge_GetStdevPing)(void* instance);
+    float (*MCBattleBridge_GetStdevFps)(void* instance);
     void (*MCChessPlayerData_UpdateCoin)(void* instance, int addValue, int changeType);
 
     void (*MCShowSpectatorComp_SetSpectate)(void* instance, uint64_t accountId);
@@ -1419,6 +1494,237 @@ void ResolveFeatureBindings() {
         "ILOGIC_GetHeroByRecommendLineup",
         {}
     );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_GetBuidByAccID,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_GetBuidByAccID",
+        {"UInt64"}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_GetGuidByAccID,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_GetGuidByAccID",
+        {"UInt64"}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_GetChessPlayerGuid,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_GetChessPlayerGuid",
+        {"UInt64"}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_GetChessPlayerConfigID,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_GetChessPlayerConfigID",
+        {"UInt64"}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_GetChessSkinId,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_GetChessSkinId",
+        {"UInt64"}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_GetRank,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_GetRank",
+        {"UInt64"}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILGOIC_GetCampAliveCountByAccId,
+        "",
+        "MCLogicBattleData",
+        "ILGOIC_GetCampAliveCountByAccId",
+        {"UInt64"}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_GetCampRankByAccId,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_GetCampRankByAccId",
+        {"UInt64"}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_GetCup,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_GetCup",
+        {"UInt64"}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_GetWarmValue,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_GetWarmValue",
+        {"UInt64"}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_GetRankLevel,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_GetRankLevel",
+        {"UInt64"}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_GetCommanderLv,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_GetCommanderLv",
+        {"UInt64"}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_GetPlayerLevel,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_GetPlayerLevel",
+        {"UInt64"}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_GetUpgradeCost,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_GetUpgradeCost",
+        {"UInt64"}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_CanUpgrade,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_CanUpgrade",
+        {"UInt64", "Int32"}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_GetShopIsForbid,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_GetShopIsForbid",
+        {"UInt64"}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_GetShopStarLv,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_GetShopStarLv",
+        {"UInt64"}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_GetShopRuleBuyTimes,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_GetShopRuleBuyTimes",
+        {"UInt64"}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_GetFreeFreshShopCount,
+        "",
+        "MCLogicBattleData",
+        "GetFreeFreshShopCount",
+        {"UInt64"}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_GetCurRefreshShopLevel,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_GetCurRefreshShopLevel",
+        {"UInt64"}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_GetHeroItemCount,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_GetHeroItemCount",
+        {"UInt64"}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_GetHeroSlotDict_Count,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_GetHeroSlotDict_Count",
+        {"UInt64"}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_GetBattleHeroNum,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_GetBattleHeroNum",
+        {"UInt64"}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_GetAllHeroNum,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_GetAllHeroNum",
+        {"UInt64"}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_GetBattleHeroTotalStart,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_GetBattleHeroTotalStart",
+        {"UInt64"}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_GetBattleCount,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_GetBattleCount",
+        {"UInt64"}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_IsCurrentLogic,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_IsCurrentLogic",
+        {"UInt64"}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_IsPlayerCanPauseJudger,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_IsPlayerCanPauseJudger",
+        {"UInt64"}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_GetSelfCamp,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_GetSelfCamp",
+        {}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_SelfTotalPopulation,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_SelfTotalPopulation",
+        {}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_SelfCurPopulation,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_SelfCurPopulation",
+        {}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_GetSpareChessNum,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_GetSpareChessNum",
+        {}
+    );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_GetHeroByStarUp,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_GetHeroByStarUp",
+        {}
+    );
     ResolveOriginal(Originals::MCComp_GetGamer, "", "MCComp", "GetGamer", {"UInt64"});
     ResolveOriginal(
         Originals::MCComp_GetGoGoCardComp,
@@ -1599,11 +1905,88 @@ void ResolveFeatureBindings() {
         {"Byte"}
     );
     ResolveOriginal(
+        Originals::UIPanelBattleHeroShop_get_lastOperationTime,
+        "",
+        "UIPanelBattleHeroShop",
+        "get_lastOperationTime",
+        {}
+    );
+    ResolveOriginal(
+        Originals::UIPanelBattleHeroShop_IsDelayOpen,
+        "",
+        "UIPanelBattleHeroShop",
+        "IsDelayOpen",
+        {}
+    );
+    ResolveOriginal(
+        Originals::UIPanelBattleHeroShop_GetInfoAfterSpectate,
+        "",
+        "UIPanelBattleHeroShop",
+        "GetInfoAfterSpectate",
+        {}
+    );
+    ResolveOriginal(
+        Originals::UIPanelBattleHeroShop_CanOperate,
+        "",
+        "UIPanelBattleHeroShop",
+        "CanOperate",
+        {"Boolean"}
+    );
+    ResolveOriginal(
         Originals::MCBattleBridge_IsHeroInRecommendLineup,
         "",
         "MCBattleBridge",
         "IsHeroInRecommendLineup",
         {"Int32"}
+    );
+    ResolveOriginal(
+        Originals::MCBattleBridge_IsSuperCrystalShopOpen,
+        "",
+        "MCBattleBridge",
+        "IsSuperCrystalShopOpen",
+        {}
+    );
+    ResolveOriginal(
+        Originals::MCBattleBridge_IsGoGoCardPanelOpen,
+        "",
+        "MCBattleBridge",
+        "IsGoGoCardPanelOpen",
+        {}
+    );
+    ResolveOriginal(
+        Originals::MCBattleBridge_CheckEnableKeyBoard,
+        "",
+        "MCBattleBridge",
+        "CheckEnableKeyBoard",
+        {}
+    );
+    ResolveOriginal(
+        Originals::MCBattleBridge_GetFreeMemory,
+        "",
+        "MCBattleBridge",
+        "GetFreeMemory",
+        {}
+    );
+    ResolveOriginal(
+        Originals::MCBattleBridge_GetPingTimes,
+        "",
+        "MCBattleBridge",
+        "GetPingTimes",
+        {}
+    );
+    ResolveOriginal(
+        Originals::MCBattleBridge_GetStdevPing,
+        "",
+        "MCBattleBridge",
+        "GetStdevPing",
+        {}
+    );
+    ResolveOriginal(
+        Originals::MCBattleBridge_GetStdevFps,
+        "",
+        "MCBattleBridge",
+        "GetStdevFps",
+        {}
     );
     ResolveOriginal(
         Originals::MCChessPlayerData_UpdateCoin,
@@ -3327,8 +3710,22 @@ std::string FormatUInt64(uint64_t value) {
     return std::to_string(static_cast<unsigned long long>(value));
 }
 
+std::string FormatUInt32(uint32_t value) {
+    return std::to_string(static_cast<unsigned int>(value));
+}
+
+std::string FormatInt64(int64_t value) {
+    return std::to_string(static_cast<long long>(value));
+}
+
 std::string FormatInt(int value) {
     return std::to_string(value);
+}
+
+std::string FormatFloat(float value) {
+    char buffer[32];
+    snprintf(buffer, sizeof(buffer), "%.2f", value);
+    return buffer;
 }
 
 ImVec4 HexColor(unsigned int rgb, float alpha = 1.0f) {
@@ -3408,8 +3805,8 @@ void ClampConfigurableState() {
     UiState::MainTabIndex = std::clamp(UiState::MainTabIndex.load(), 0, 6);
     UiState::ThemeIndex = std::clamp(UiState::ThemeIndex.load(), 0, 1);
     UiState::FontIndex = std::clamp(UiState::FontIndex.load(), 0, 1);
-    UiState::MenuWidth = std::clamp(UiState::MenuWidth.load(), 360.0f, 1600.0f);
-    UiState::MenuHeight = std::clamp(UiState::MenuHeight.load(), 280.0f, 1200.0f);
+    UiState::MenuWidth = std::clamp(UiState::MenuWidth.load(), 320.0f, 1600.0f);
+    UiState::MenuHeight = std::clamp(UiState::MenuHeight.load(), 260.0f, 1200.0f);
     UiState::MenuPosX = std::clamp(UiState::MenuPosX.load(), -2000.0f, 4000.0f);
     UiState::MenuPosY = std::clamp(UiState::MenuPosY.load(), -2000.0f, 4000.0f);
     UiState::FontScale = std::clamp(UiState::FontScale.load(), 0.65f, 2.0f);
@@ -4050,12 +4447,36 @@ std::string FormatFieldInt(void* instance, FieldInfo* field) {
     return FormatInt(GetField<int>(reinterpret_cast<Il2CppObject*>(instance), field));
 }
 
+std::string FormatFieldUInt32(void* instance, FieldInfo* field) {
+    if (!instance || !field) {
+        return "Waiting";
+    }
+
+    return FormatUInt32(GetField<uint32_t>(reinterpret_cast<Il2CppObject*>(instance), field));
+}
+
 std::string FormatFieldUInt64(void* instance, FieldInfo* field) {
     if (!instance || !field) {
         return "Waiting";
     }
 
     return FormatUInt64(GetField<uint64_t>(reinterpret_cast<Il2CppObject*>(instance), field));
+}
+
+std::string FormatFieldFloat(void* instance, FieldInfo* field) {
+    if (!instance || !field) {
+        return "Waiting";
+    }
+
+    return FormatFloat(GetField<float>(reinterpret_cast<Il2CppObject*>(instance), field));
+}
+
+std::string FormatFieldPointer(void* instance, FieldInfo* field) {
+    if (!instance || !field) {
+        return "Waiting";
+    }
+
+    return FormatPointer(GetField<void*>(reinterpret_cast<Il2CppObject*>(instance), field));
 }
 
 bool HasShopSelectBinding();
@@ -4811,12 +5232,21 @@ void DrawTestBindingRows() {
     DrawStatusRow("Fight section", Originals::MCLogicBattleData_ILOGIC_IsFightSection);
     DrawStatusRow("Self fight over", Originals::MCLogicBattleData_ILOGIC_IsSelfFightOver);
     DrawStatusRow("Player HP", Originals::MCLogicBattleData_ILOGIC_GetPlayerHP);
+    DrawStatusRow("Player identity", Originals::MCLogicBattleData_ILOGIC_GetBuidByAccID);
+    DrawStatusRow("Player rank", Originals::MCLogicBattleData_ILOGIC_GetRank);
+    DrawStatusRow("Player level", Originals::MCLogicBattleData_ILOGIC_GetPlayerLevel);
+    DrawStatusRow("Population", Originals::MCLogicBattleData_ILOGIC_SelfCurPopulation);
+    DrawStatusRow("Shop diagnostics", Originals::MCLogicBattleData_ILOGIC_GetShopStarLv);
+    DrawStatusRow("Hero counts", Originals::MCLogicBattleData_ILOGIC_GetBattleHeroNum);
     DrawStatusRow("Result history", Originals::MCLogicBattleData_ILOGIC_GetBattleResultHistory);
     DrawStatusRow(
         "Recommend hero",
         Originals::MCLogicBattleData_ILOGIC_GetHeroByRecommendLineup
     );
+    DrawStatusRow("Star-up hero", Originals::MCLogicBattleData_ILOGIC_GetHeroByStarUp);
     DrawStatusRow("Recommend membership", Originals::MCBattleBridge_IsHeroInRecommendLineup);
+    DrawStatusRow("Battle bridge UI", Originals::MCBattleBridge_CheckEnableKeyBoard);
+    DrawStatusRow("Shop panel state", Originals::UIPanelBattleHeroShop_CanOperate);
     DrawStatusRow("Battle manager flags", Originals::MCLogicBattleManager_get_m_bDefendFaild);
     DrawStatusRow("Alive fighter counts", Originals::MCLogicBattleManager_GetAliveFighter);
     DrawStatusRow("Behavior API", Originals::MCBehaviorThreeApi_Get);
@@ -4916,6 +5346,243 @@ void DrawTestRoundRows(
                 targetAccountId,
                 static_cast<int>(round)
             )) :
+            "Waiting"
+    );
+
+    ImGui::EndTable();
+}
+
+std::string FormatAccountInt(
+    uint64_t accountId,
+    int (*reader)(void* instance, uint64_t accountId)
+) {
+    return accountId && reader ? FormatInt(reader(nullptr, accountId)) : "Waiting";
+}
+
+std::string FormatAccountUInt32(
+    uint64_t accountId,
+    uint32_t (*reader)(void* instance, uint64_t accountId)
+) {
+    return accountId && reader ? FormatUInt32(reader(nullptr, accountId)) : "Waiting";
+}
+
+std::string FormatAccountBool(
+    uint64_t accountId,
+    bool (*reader)(void* instance, uint64_t accountId)
+) {
+    return accountId && reader ? FormatBool(reader(nullptr, accountId)) : "Waiting";
+}
+
+std::string FormatGlobalInt(int (*reader)(void* instance)) {
+    return reader ? FormatInt(reader(nullptr)) : "Waiting";
+}
+
+std::string FormatShopStarLevel(uint64_t accountId) {
+    if (!accountId || !Originals::MCLogicBattleData_ILOGIC_GetShopStarLv) {
+        return "Waiting";
+    }
+
+    AstarInt2 shopStar = Originals::MCLogicBattleData_ILOGIC_GetShopStarLv(
+        nullptr,
+        accountId
+    );
+    return FormatInt(shopStar.x) + " / " + FormatInt(shopStar.y);
+}
+
+void DrawTestPlayerRows(uint64_t targetAccountId) {
+    if (!ImGui::BeginTable(
+        "##TestPlayerDataTable",
+        2,
+        ImGuiTableFlags_Borders |
+            ImGuiTableFlags_RowBg |
+            ImGuiTableFlags_SizingStretchProp
+    )) {
+        return;
+    }
+
+    ImGui::TableSetupColumn("Value");
+    ImGui::TableSetupColumn("Current", ImGuiTableColumnFlags_WidthFixed, 180.0f);
+    ImGui::TableHeadersRow();
+
+    int coin = 0;
+    bool hasCoin = targetAccountId && Originals::MCLogicBattleData_ILOGIC_GetPlayerCoin;
+
+    if (hasCoin) {
+        coin = Originals::MCLogicBattleData_ILOGIC_GetPlayerCoin(nullptr, targetAccountId);
+    }
+
+    DrawValueRow("Account", targetAccountId ? FormatUInt64(targetAccountId) : "Waiting");
+    DrawValueRow(
+        "BUID",
+        FormatAccountUInt32(targetAccountId, Originals::MCLogicBattleData_ILOGIC_GetBuidByAccID)
+    );
+    DrawValueRow(
+        "GUID",
+        FormatAccountUInt32(targetAccountId, Originals::MCLogicBattleData_ILOGIC_GetGuidByAccID)
+    );
+    DrawValueRow(
+        "Chess player GUID",
+        FormatAccountUInt32(
+            targetAccountId,
+            Originals::MCLogicBattleData_ILOGIC_GetChessPlayerGuid
+        )
+    );
+    DrawValueRow(
+        "Chess player config",
+        FormatAccountInt(
+            targetAccountId,
+            Originals::MCLogicBattleData_ILOGIC_GetChessPlayerConfigID
+        )
+    );
+    DrawValueRow(
+        "Chess skin",
+        FormatAccountInt(targetAccountId, Originals::MCLogicBattleData_ILOGIC_GetChessSkinId)
+    );
+    DrawValueRow(
+        "HP",
+        FormatAccountInt(targetAccountId, Originals::MCLogicBattleData_ILOGIC_GetPlayerHP)
+    );
+    DrawValueRow("Gold", hasCoin ? FormatInt(coin) : "Waiting");
+    DrawValueRow(
+        "Player level",
+        FormatAccountInt(targetAccountId, Originals::MCLogicBattleData_ILOGIC_GetPlayerLevel)
+    );
+    DrawValueRow(
+        "Upgrade cost",
+        FormatAccountInt(targetAccountId, Originals::MCLogicBattleData_ILOGIC_GetUpgradeCost)
+    );
+    DrawValueRow(
+        "Can upgrade now",
+        targetAccountId && hasCoin && Originals::MCLogicBattleData_ILOGIC_CanUpgrade ?
+            FormatBool(Originals::MCLogicBattleData_ILOGIC_CanUpgrade(
+                nullptr,
+                targetAccountId,
+                coin
+            )) :
+            "Waiting"
+    );
+    DrawValueRow(
+        "Rank",
+        FormatAccountInt(targetAccountId, Originals::MCLogicBattleData_ILOGIC_GetRank)
+    );
+    DrawValueRow(
+        "Camp rank",
+        FormatAccountInt(targetAccountId, Originals::MCLogicBattleData_ILOGIC_GetCampRankByAccId)
+    );
+    DrawValueRow(
+        "Camp alive count",
+        FormatAccountInt(
+            targetAccountId,
+            Originals::MCLogicBattleData_ILGOIC_GetCampAliveCountByAccId
+        )
+    );
+    DrawValueRow(
+        "Cup",
+        FormatAccountUInt32(targetAccountId, Originals::MCLogicBattleData_ILOGIC_GetCup)
+    );
+    DrawValueRow(
+        "Warm value",
+        FormatAccountUInt32(targetAccountId, Originals::MCLogicBattleData_ILOGIC_GetWarmValue)
+    );
+    DrawValueRow(
+        "Rank level",
+        FormatAccountUInt32(targetAccountId, Originals::MCLogicBattleData_ILOGIC_GetRankLevel)
+    );
+    DrawValueRow(
+        "Commander level",
+        FormatAccountInt(targetAccountId, Originals::MCLogicBattleData_ILOGIC_GetCommanderLv)
+    );
+    DrawValueRow(
+        "Current logic",
+        FormatAccountBool(targetAccountId, Originals::MCLogicBattleData_ILOGIC_IsCurrentLogic)
+    );
+    DrawValueRow(
+        "Can pause judge",
+        FormatAccountBool(
+            targetAccountId,
+            Originals::MCLogicBattleData_ILOGIC_IsPlayerCanPauseJudger
+        )
+    );
+    DrawValueRow(
+        "Shop forbidden",
+        FormatAccountBool(targetAccountId, Originals::MCLogicBattleData_ILOGIC_GetShopIsForbid)
+    );
+    DrawValueRow(
+        "Refresh free",
+        FormatAccountBool(targetAccountId, Originals::MCLogicBattleData_ILOGIC_IsRefreshFree)
+    );
+    DrawValueRow("Shop star level", FormatShopStarLevel(targetAccountId));
+    DrawValueRow(
+        "Shop rule buy times",
+        FormatAccountInt(
+            targetAccountId,
+            Originals::MCLogicBattleData_ILOGIC_GetShopRuleBuyTimes
+        )
+    );
+    DrawValueRow(
+        "Free refresh count",
+        FormatAccountInt(targetAccountId, Originals::MCLogicBattleData_GetFreeFreshShopCount)
+    );
+    DrawValueRow(
+        "Refresh shop level",
+        FormatAccountInt(
+            targetAccountId,
+            Originals::MCLogicBattleData_ILOGIC_GetCurRefreshShopLevel
+        )
+    );
+    DrawValueRow(
+        "Hero item count",
+        FormatAccountInt(targetAccountId, Originals::MCLogicBattleData_ILOGIC_GetHeroItemCount)
+    );
+    DrawValueRow(
+        "Hero slot count",
+        FormatAccountInt(
+            targetAccountId,
+            Originals::MCLogicBattleData_ILOGIC_GetHeroSlotDict_Count
+        )
+    );
+    DrawValueRow(
+        "Battle hero count",
+        FormatAccountInt(targetAccountId, Originals::MCLogicBattleData_ILOGIC_GetBattleHeroNum)
+    );
+    DrawValueRow(
+        "All hero count",
+        FormatAccountInt(targetAccountId, Originals::MCLogicBattleData_ILOGIC_GetAllHeroNum)
+    );
+    DrawValueRow(
+        "Battle hero total star",
+        FormatAccountInt(
+            targetAccountId,
+            Originals::MCLogicBattleData_ILOGIC_GetBattleHeroTotalStart
+        )
+    );
+    DrawValueRow(
+        "Battle count",
+        FormatAccountInt(targetAccountId, Originals::MCLogicBattleData_ILOGIC_GetBattleCount)
+    );
+    DrawValueRow(
+        "Self camp",
+        Originals::MCLogicBattleData_ILOGIC_GetSelfCamp ?
+            FormatInt(Originals::MCLogicBattleData_ILOGIC_GetSelfCamp(nullptr)) :
+            "Waiting"
+    );
+    DrawValueRow(
+        "Self population",
+        Originals::MCLogicBattleData_ILOGIC_SelfCurPopulation &&
+                Originals::MCLogicBattleData_ILOGIC_SelfTotalPopulation ?
+            FormatInt(Originals::MCLogicBattleData_ILOGIC_SelfCurPopulation(nullptr)) +
+                " / " +
+                FormatInt(Originals::MCLogicBattleData_ILOGIC_SelfTotalPopulation(nullptr)) :
+            "Waiting"
+    );
+    DrawValueRow(
+        "Spare chess count",
+        FormatGlobalInt(Originals::MCLogicBattleData_ILOGIC_GetSpareChessNum)
+    );
+    DrawValueRow(
+        "Star-up recommendation",
+        Originals::MCLogicBattleData_ILOGIC_GetHeroByStarUp ?
+            FormatHeroLabel(Originals::MCLogicBattleData_ILOGIC_GetHeroByStarUp(nullptr)) :
             "Waiting"
     );
 
@@ -5080,6 +5747,342 @@ void DrawTestBehaviorRows(uint64_t targetAccountId) {
         "Current phase type",
         behaviorApi && Originals::MCBehaviorThreeApi_GetCurrentPhaseType ?
             FormatInt(Originals::MCBehaviorThreeApi_GetCurrentPhaseType(behaviorApi)) :
+            "Waiting"
+    );
+
+    ImGui::EndTable();
+}
+
+std::string FormatListFieldCount(void* instance, FieldInfo* field) {
+    if (!instance || !field) {
+        return "Waiting";
+    }
+
+    void* listObject = GetField<void*>(reinterpret_cast<Il2CppObject*>(instance), field);
+    if (!listObject) {
+        return "Waiting";
+    }
+
+    auto* list = reinterpret_cast<MonoStructures::List<void*>*>(listObject);
+    void* const* data = nullptr;
+    int size = 0;
+
+    return TryGetManagedListData(list, &data, &size) ? FormatInt(size) : "Unreadable";
+}
+
+std::string FormatIntDictionaryFieldCount(void* instance, FieldInfo* field) {
+    if (!instance || !field) {
+        return "Waiting";
+    }
+
+    void* dictionaryObject = GetField<void*>(reinterpret_cast<Il2CppObject*>(instance), field);
+    if (!dictionaryObject) {
+        return "Waiting";
+    }
+
+    auto* dictionary =
+        reinterpret_cast<MonoStructures::Dictionary<int, int>*>(dictionaryObject);
+    const MonoStructures::Dictionary<int, int>::Entry* entries = nullptr;
+    int entryLimit = 0;
+
+    if (!TryGetDictionaryEntries(dictionary, &entries, &entryLimit)) {
+        return "Unreadable";
+    }
+
+    int activeEntries = 0;
+    for (int i = 0; entries && i < entryLimit; ++i) {
+        if (entries[i].hashCode >= 0) {
+            ++activeEntries;
+        }
+    }
+
+    return FormatInt(activeEntries);
+}
+
+void DrawTestBridgeRows() {
+    void* battleBridge = FeatureState::BattleBridge.load();
+
+    static FieldInfo* debugInfoField = nullptr;
+    static FieldInfo* startBattleField = nullptr;
+    static FieldInfo* offlineField = nullptr;
+    static FieldInfo* heroShopField = nullptr;
+    static FieldInfo* recommendLineupField = nullptr;
+    static FieldInfo* gogoCardPanelField = nullptr;
+    static FieldInfo* selectHeroField = nullptr;
+    static FieldInfo* autoOpenDpsField = nullptr;
+    static FieldInfo* autoOpenRoundResultField = nullptr;
+    static FieldInfo* showChangeEquipTipField = nullptr;
+    static FieldInfo* hurtItemsField = nullptr;
+
+    if (!debugInfoField) {
+        debugInfoField = GetFieldInfoFromName("", "MCBattleBridge", "debugInfo");
+    }
+
+    if (!startBattleField) {
+        startBattleField = GetFieldInfoFromName("", "MCBattleBridge", "bStartBattle");
+    }
+
+    if (!offlineField) {
+        offlineField = GetFieldInfoFromName("", "MCBattleBridge", "bOffline");
+    }
+
+    if (!heroShopField) {
+        heroShopField = GetFieldInfoFromName("", "MCBattleBridge", "uiPanelBattleHeroShop");
+    }
+
+    if (!recommendLineupField) {
+        recommendLineupField =
+            GetFieldInfoFromName("", "MCBattleBridge", "uiPanelBattleRecommendLineupNew");
+    }
+
+    if (!gogoCardPanelField) {
+        gogoCardPanelField = GetFieldInfoFromName("", "MCBattleBridge", "uiGOGOCardPanel");
+    }
+
+    if (!selectHeroField) {
+        selectHeroField = GetFieldInfoFromName("", "MCBattleBridge", "m_selectHero");
+    }
+
+    if (!autoOpenDpsField) {
+        autoOpenDpsField =
+            GetFieldInfoFromName("", "MCBattleBridge", "m_bAutoOpenBeginFightDPSPanel");
+    }
+
+    if (!autoOpenRoundResultField) {
+        autoOpenRoundResultField =
+            GetFieldInfoFromName("", "MCBattleBridge", "m_bAutoOpenRoundResltOverUI");
+    }
+
+    if (!showChangeEquipTipField) {
+        showChangeEquipTipField =
+            GetFieldInfoFromName("", "MCBattleBridge", "m_bShowChangeEquipTip");
+    }
+
+    if (!hurtItemsField) {
+        hurtItemsField = GetFieldInfoFromName("", "MCBattleBridge", "m_HurtItems");
+    }
+
+    if (!ImGui::BeginTable(
+        "##TestBridgeTable",
+        2,
+        ImGuiTableFlags_Borders |
+            ImGuiTableFlags_RowBg |
+            ImGuiTableFlags_SizingStretchProp
+    )) {
+        return;
+    }
+
+    ImGui::TableSetupColumn("Value");
+    ImGui::TableSetupColumn("Current", ImGuiTableColumnFlags_WidthFixed, 180.0f);
+    ImGui::TableHeadersRow();
+
+    DrawValueRow("Battle bridge pointer", FormatPointer(battleBridge));
+    DrawValueRow("Debug info pointer", FormatFieldPointer(battleBridge, debugInfoField));
+    DrawValueRow("Start battle", FormatFieldBool(battleBridge, startBattleField));
+    DrawValueRow("Offline", FormatFieldBool(battleBridge, offlineField));
+    DrawValueRow("Hero shop panel", FormatFieldPointer(battleBridge, heroShopField));
+    DrawValueRow("Recommend lineup UI", FormatFieldPointer(battleBridge, recommendLineupField));
+    DrawValueRow("GogoCard panel", FormatFieldPointer(battleBridge, gogoCardPanelField));
+    DrawValueRow("Selected hero GUID", FormatFieldUInt32(battleBridge, selectHeroField));
+    DrawValueRow("Auto-open DPS panel", FormatFieldBool(battleBridge, autoOpenDpsField));
+    DrawValueRow(
+        "Auto-open round result",
+        FormatFieldBool(battleBridge, autoOpenRoundResultField)
+    );
+    DrawValueRow(
+        "Show change equip tip",
+        FormatFieldBool(battleBridge, showChangeEquipTipField)
+    );
+    DrawValueRow("Hurt items dictionary", FormatFieldPointer(battleBridge, hurtItemsField));
+    DrawValueRow(
+        "Super crystal shop open",
+        battleBridge && Originals::MCBattleBridge_IsSuperCrystalShopOpen ?
+            FormatBool(Originals::MCBattleBridge_IsSuperCrystalShopOpen(battleBridge)) :
+            "Waiting"
+    );
+    DrawValueRow(
+        "GogoCard panel open",
+        battleBridge && Originals::MCBattleBridge_IsGoGoCardPanelOpen ?
+            FormatBool(Originals::MCBattleBridge_IsGoGoCardPanelOpen(battleBridge)) :
+            "Waiting"
+    );
+    DrawValueRow(
+        "Keyboard enabled",
+        battleBridge && Originals::MCBattleBridge_CheckEnableKeyBoard ?
+            FormatBool(Originals::MCBattleBridge_CheckEnableKeyBoard(battleBridge)) :
+            "Waiting"
+    );
+    DrawValueRow(
+        "Free memory",
+        battleBridge && Originals::MCBattleBridge_GetFreeMemory ?
+            FormatInt64(Originals::MCBattleBridge_GetFreeMemory(battleBridge)) :
+            "Waiting"
+    );
+    DrawValueRow(
+        "Ping samples",
+        battleBridge && Originals::MCBattleBridge_GetPingTimes ?
+            FormatUInt32(Originals::MCBattleBridge_GetPingTimes(battleBridge)) :
+            "Waiting"
+    );
+    DrawValueRow(
+        "Ping stdev",
+        battleBridge && Originals::MCBattleBridge_GetStdevPing ?
+            FormatFloat(Originals::MCBattleBridge_GetStdevPing(battleBridge)) :
+            "Waiting"
+    );
+    DrawValueRow(
+        "FPS stdev",
+        battleBridge && Originals::MCBattleBridge_GetStdevFps ?
+            FormatFloat(Originals::MCBattleBridge_GetStdevFps(battleBridge)) :
+            "Waiting"
+    );
+
+    ImGui::EndTable();
+}
+
+void DrawTestShopPanelRows() {
+    void* heroShopPanel = FeatureState::HeroShopPanel.load();
+    void* heroShopItemList = FeatureState::HeroShopItemList.load();
+
+    static FieldInfo* needToShowField = nullptr;
+    static FieldInfo* lastSelectHeroIndexField = nullptr;
+    static FieldInfo* dictHeroSlotField = nullptr;
+    static FieldInfo* sameRefreshHeroField = nullptr;
+    static FieldInfo* operationCloseFlagField = nullptr;
+    static FieldInfo* activeTimeField = nullptr;
+    static FieldInfo* shopTypeField = nullptr;
+    static FieldInfo* currentProbabilityLevelField = nullptr;
+    static FieldInfo* tempHeroSlotField = nullptr;
+    static FieldInfo* tempSameRefreshHeroField = nullptr;
+    static FieldInfo* forbidRefreshHeroField = nullptr;
+    static FieldInfo* shopStateField = nullptr;
+    static FieldInfo* shopStateTimeField = nullptr;
+    static FieldInfo* playingEffectField = nullptr;
+    static FieldInfo* heroItemListField = nullptr;
+
+    if (!needToShowField) {
+        needToShowField = GetFieldInfoFromName("", "UIPanelBattleHeroShop", "needToShow");
+    }
+
+    if (!lastSelectHeroIndexField) {
+        lastSelectHeroIndexField =
+            GetFieldInfoFromName("", "UIPanelBattleHeroShop", "m_lastSelectHeroIndex");
+    }
+
+    if (!dictHeroSlotField) {
+        dictHeroSlotField = GetFieldInfoFromName("", "UIPanelBattleHeroShop", "dictHeroSlot");
+    }
+
+    if (!sameRefreshHeroField) {
+        sameRefreshHeroField =
+            GetFieldInfoFromName("", "UIPanelBattleHeroShop", "sameRefreshHero");
+    }
+
+    if (!operationCloseFlagField) {
+        operationCloseFlagField =
+            GetFieldInfoFromName("", "UIPanelBattleHeroShop", "m_OperationCloseFlag");
+    }
+
+    if (!activeTimeField) {
+        activeTimeField = GetFieldInfoFromName("", "UIPanelBattleHeroShop", "m_ActiveTime");
+    }
+
+    if (!shopTypeField) {
+        shopTypeField = GetFieldInfoFromName("", "UIPanelBattleHeroShop", "m_eMCHeroShopType");
+    }
+
+    if (!currentProbabilityLevelField) {
+        currentProbabilityLevelField =
+            GetFieldInfoFromName("", "UIPanelBattleHeroShop", "m_curShowProLevel");
+    }
+
+    if (!tempHeroSlotField) {
+        tempHeroSlotField = GetFieldInfoFromName("", "UIPanelBattleHeroShop", "m_TempHeroSlot");
+    }
+
+    if (!tempSameRefreshHeroField) {
+        tempSameRefreshHeroField =
+            GetFieldInfoFromName("", "UIPanelBattleHeroShop", "m_TempSameRefreshHero");
+    }
+
+    if (!forbidRefreshHeroField) {
+        forbidRefreshHeroField =
+            GetFieldInfoFromName("", "UIPanelBattleHeroShop", "m_bForbidRefershHero");
+    }
+
+    if (!shopStateField) {
+        shopStateField = GetFieldInfoFromName("", "UIPanelBattleHeroShop", "m_eShopState");
+    }
+
+    if (!shopStateTimeField) {
+        shopStateTimeField = GetFieldInfoFromName("", "UIPanelBattleHeroShop", "m_iStateTime");
+    }
+
+    if (!playingEffectField) {
+        playingEffectField = GetFieldInfoFromName("", "UIPanelBattleHeroShop", "m_playingEffect");
+    }
+
+    if (!heroItemListField) {
+        heroItemListField =
+            GetFieldInfoFromName("", "UIPanelBattleHeroShop_HeroItemList", "heroItemList");
+    }
+
+    if (!ImGui::BeginTable(
+        "##TestShopPanelTable",
+        2,
+        ImGuiTableFlags_Borders |
+            ImGuiTableFlags_RowBg |
+            ImGuiTableFlags_SizingStretchProp
+    )) {
+        return;
+    }
+
+    ImGui::TableSetupColumn("Value");
+    ImGui::TableSetupColumn("Current", ImGuiTableColumnFlags_WidthFixed, 180.0f);
+    ImGui::TableHeadersRow();
+
+    DrawValueRow("Shop panel pointer", FormatPointer(heroShopPanel));
+    DrawValueRow("Hero item list pointer", FormatPointer(heroShopItemList));
+    DrawValueRow("Need to show", FormatFieldBool(heroShopPanel, needToShowField));
+    DrawValueRow("Operation close flag", FormatFieldBool(heroShopPanel, operationCloseFlagField));
+    DrawValueRow("Active time", FormatFieldFloat(heroShopPanel, activeTimeField));
+    DrawValueRow("Last selected index", FormatFieldInt(heroShopPanel, lastSelectHeroIndexField));
+    DrawValueRow("Shop type", FormatFieldInt(heroShopPanel, shopTypeField));
+    DrawValueRow("Probability level", FormatFieldInt(heroShopPanel, currentProbabilityLevelField));
+    DrawValueRow("State", FormatFieldInt(heroShopPanel, shopStateField));
+    DrawValueRow("State time", FormatFieldInt(heroShopPanel, shopStateTimeField));
+    DrawValueRow("Forbid refresh", FormatFieldBool(heroShopPanel, forbidRefreshHeroField));
+    DrawValueRow("Playing effect", FormatFieldBool(heroShopPanel, playingEffectField));
+    DrawValueRow("Hero slot entries", FormatIntDictionaryFieldCount(heroShopPanel, dictHeroSlotField));
+    DrawValueRow("Temp hero slot entries", FormatIntDictionaryFieldCount(heroShopPanel, tempHeroSlotField));
+    DrawValueRow("Same refresh heroes", FormatListFieldCount(heroShopPanel, sameRefreshHeroField));
+    DrawValueRow(
+        "Temp same refresh heroes",
+        FormatListFieldCount(heroShopPanel, tempSameRefreshHeroField)
+    );
+    DrawValueRow("Visible hero items", FormatListFieldCount(heroShopItemList, heroItemListField));
+    DrawValueRow(
+        "Last operation time",
+        heroShopPanel && Originals::UIPanelBattleHeroShop_get_lastOperationTime ?
+            FormatUInt32(Originals::UIPanelBattleHeroShop_get_lastOperationTime(heroShopPanel)) :
+            "Waiting"
+    );
+    DrawValueRow(
+        "Delay open",
+        heroShopPanel && Originals::UIPanelBattleHeroShop_IsDelayOpen ?
+            FormatBool(Originals::UIPanelBattleHeroShop_IsDelayOpen(heroShopPanel)) :
+            "Waiting"
+    );
+    DrawValueRow(
+        "Info after spectate",
+        heroShopPanel && Originals::UIPanelBattleHeroShop_GetInfoAfterSpectate ?
+            FormatBool(Originals::UIPanelBattleHeroShop_GetInfoAfterSpectate(heroShopPanel)) :
+            "Waiting"
+    );
+    DrawValueRow(
+        "Can operate",
+        heroShopPanel && Originals::UIPanelBattleHeroShop_CanOperate ?
+            FormatBool(Originals::UIPanelBattleHeroShop_CanOperate(heroShopPanel, true)) :
             "Waiting"
     );
 
@@ -5600,23 +6603,54 @@ void DrawTestTab() {
             0;
     void* targetManager = GetBattleManagerByAccountId(targetAccountId);
 
-    ImGui::SeparatorText("Fight Prediction");
-    DrawOpponentPredictionTable(selfAccountId);
+    if (ImGui::BeginTabBar("##TestTabBar", ImGuiTabBarFlags_FittingPolicyScroll)) {
+        if (ImGui::BeginTabItem("Predict")) {
+            DrawOpponentPredictionTable(selfAccountId);
+            ImGui::EndTabItem();
+        }
 
-    ImGui::SeparatorText("Bindings");
-    DrawTestBindingRows();
+        if (ImGui::BeginTabItem("Bindings")) {
+            DrawTestBindingRows();
+            ImGui::EndTabItem();
+        }
 
-    ImGui::SeparatorText("Round State");
-    DrawTestRoundRows(selfAccountId, targetAccountId, opponentAccountId);
+        if (ImGui::BeginTabItem("Round")) {
+            DrawTestRoundRows(selfAccountId, targetAccountId, opponentAccountId);
+            ImGui::EndTabItem();
+        }
 
-    ImGui::SeparatorText("Battle Manager");
-    DrawTestManagerRows(targetManager);
+        if (ImGui::BeginTabItem("Player")) {
+            DrawTestPlayerRows(targetAccountId);
+            ImGui::EndTabItem();
+        }
 
-    ImGui::SeparatorText("Behavior API");
-    DrawTestBehaviorRows(targetAccountId);
+        if (ImGui::BeginTabItem("Manager")) {
+            DrawTestManagerRows(targetManager);
+            ImGui::EndTabItem();
+        }
 
-    ImGui::SeparatorText("All Managers");
-    DrawTestAllManagersTable();
+        if (ImGui::BeginTabItem("Bridge")) {
+            DrawTestBridgeRows();
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Shop UI")) {
+            DrawTestShopPanelRows();
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Behavior")) {
+            DrawTestBehaviorRows(targetAccountId);
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Managers")) {
+            DrawTestAllManagersTable();
+            ImGui::EndTabItem();
+        }
+
+        ImGui::EndTabBar();
+    }
 }
 
 void DrawShopTab() {
@@ -6057,6 +7091,38 @@ struct MainMenuTab {
     void (*draw)();
 };
 
+bool IsCompactDisplay() {
+    ImGuiIO& io = ImGui::GetIO();
+    return io.DisplaySize.x > 0.0f &&
+        (io.DisplaySize.x < 700.0f || io.DisplaySize.y < 520.0f);
+}
+
+void DrawMainTabQuickControls(const MainMenuTab* tabs, int tabCount) {
+    if (!IsCompactDisplay() || !tabs || tabCount <= 0) {
+        return;
+    }
+
+    int current = std::clamp(UiState::MainTabIndex.load(), 0, tabCount - 1);
+    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(14.0f, 10.0f));
+
+    if (ImGui::Button("Prev", ImVec2(92.0f, 0.0f))) {
+        current = (current + tabCount - 1) % tabCount;
+        UiState::MainTabIndex = current;
+    }
+
+    ImGui::SameLine();
+    ImGui::TextUnformatted(tabs[current].label);
+    ImGui::SameLine();
+
+    if (ImGui::Button("Next", ImVec2(92.0f, 0.0f))) {
+        current = (current + 1) % tabCount;
+        UiState::MainTabIndex = current;
+    }
+
+    ImGui::PopStyleVar();
+    ImGui::Spacing();
+}
+
 void DrawMenuTabButton(const char* label, int index) {
     bool selected = UiState::MainTabIndex.load() == index;
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 6.0f);
@@ -6073,16 +7139,19 @@ ImVec2 GetValidatedMenuSize() {
     ClampConfigurableState();
 
     ImGuiIO& io = ImGui::GetIO();
+    const bool compactDisplay = IsCompactDisplay();
+    float minWidth = compactDisplay ? 300.0f : 320.0f;
+    float minHeight = compactDisplay ? 250.0f : 260.0f;
     float maxWidth = io.DisplaySize.x > 0.0f ?
-        std::max(360.0f, io.DisplaySize.x - 24.0f) :
+        std::max(minWidth, io.DisplaySize.x - (compactDisplay ? 12.0f : 24.0f)) :
         1600.0f;
     float maxHeight = io.DisplaySize.y > 0.0f ?
-        std::max(280.0f, io.DisplaySize.y - 24.0f) :
+        std::max(minHeight, io.DisplaySize.y - (compactDisplay ? 12.0f : 24.0f)) :
         1200.0f;
 
     return ImVec2(
-        std::clamp(UiState::MenuWidth.load(), 360.0f, maxWidth),
-        std::clamp(UiState::MenuHeight.load(), 280.0f, maxHeight)
+        std::clamp(UiState::MenuWidth.load(), minWidth, maxWidth),
+        std::clamp(UiState::MenuHeight.load(), minHeight, maxHeight)
     );
 }
 
@@ -6116,12 +7185,15 @@ void DrawMainMenu() {
     UiState::MainTabIndex = std::clamp(UiState::MainTabIndex.load(), 0, tabCount - 1);
 
     const ImVec2 menuSize = GetValidatedMenuSize();
+    const bool compactDisplay = IsCompactDisplay();
 
     if (UiState::UseFixedMenuPosition.load()) {
         ImGui::SetNextWindowPos(GetValidatedMenuPosition(menuSize), ImGuiCond_Always);
+    } else if (compactDisplay) {
+        ImGui::SetNextWindowPos(ImVec2(6.0f, 6.0f), ImGuiCond_Once);
     }
 
-    ImGui::SetNextWindowSize(menuSize, ImGuiCond_Once);
+    ImGui::SetNextWindowSize(menuSize, compactDisplay ? ImGuiCond_Always : ImGuiCond_Once);
 
     if (!ImGui::Begin("MCGG", nullptr)) {
         ImGui::End();
@@ -6131,9 +7203,14 @@ void DrawMainMenu() {
     UiCache::MenuWindowPos = ImGui::GetWindowPos();
     UiCache::MenuWindowSize = ImGui::GetWindowSize();
 
+    DrawMainTabQuickControls(tabs, tabCount);
+
     if (ImGui::BeginTabBar("##MainTabs", ImGuiTabBarFlags_FittingPolicyScroll)) {
         for (int i = 0; i < tabCount; ++i) {
-            if (ImGui::BeginTabItem(tabs[i].label)) {
+            ImGuiTabItemFlags itemFlags =
+                UiState::MainTabIndex.load() == i ? ImGuiTabItemFlags_SetSelected : 0;
+
+            if (ImGui::BeginTabItem(tabs[i].label, nullptr, itemFlags)) {
                 UiState::MainTabIndex = i;
 
                 ImGui::Spacing();

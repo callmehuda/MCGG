@@ -43,7 +43,8 @@ git lfs pull
 - Keep native language mode aligned with `c++26` unless the build configuration
   intentionally changes.
 - Use the Runtime Status and Test tabs to validate binding readiness, managed
-  references, round state, battle manager fields, behavior API state, and
+  references, round state, player economy/rank/shop state, battle manager
+  fields, battle bridge state, shop panel state, behavior API state, and
   opponent prediction behavior after feature changes.
 - For Shop changes, preserve the existing throttled automation model: buy,
   repeat-buy, refresh, target-worth, and Recommendation Lineup checks must stay
@@ -61,8 +62,11 @@ git lfs pull
 Current user-facing overlay areas are Info, Combat, Appearance, Settings, Shop,
 Arena, and Test. Shop currently includes free-hero buying, manual target buying,
 Recommendation Lineup buying, auto-refresh pause conditions, keep-gold reserve,
-and target counts. New user-facing controls should report delayed runtime
-dependencies with a clear `Waiting for ...` state where practical.
+and target counts. Test diagnostics are split into tabbed sections for
+prediction, bindings, round state, player data, battle managers, battle bridge,
+shop UI, behavior API, and all-manager views. New user-facing controls should
+report delayed runtime dependencies with a clear `Waiting for ...` state where
+practical.
 
 ## Threading and Shared State
 
@@ -92,6 +96,9 @@ Follow the existing C++ style in `jni/Main.cpp`:
   rename is part of the requested change.
 - Keep appearance changes local to the existing theme/font setup unless a
   broader UI refactor is part of the requested change.
+- Keep mobile menu accessibility changes compatible with the main ImGui TabBar;
+  helper controls may select tabs, but the TabBar should remain the primary
+  navigation surface.
 - Keep config parsing simple, bounded, and compatible with the existing
   key-value Settings file format.
 

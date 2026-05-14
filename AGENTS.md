@@ -126,7 +126,11 @@ show a `Waiting for ...` state rather than failing silently. Shop currently
 includes free-hero buying, selected target buying, Recommendation Lineup buying,
 auto-refresh pause conditions, keep-gold reserve, and target counts. Use the
 Runtime Status and Test tabs when checking binding readiness, managed
-references, round state, battle manager fields, behavior API state,
-Recommendation Lineup state, or opponent prediction logic.
+references, round state, player economy/rank/shop state, battle manager fields,
+battle bridge state, shop panel state, behavior API state, Recommendation
+Lineup state, or opponent prediction logic. Test diagnostics should stay
+read-only unless the task explicitly requests an action.
+Keep mobile accessibility changes compatible with the main ImGui TabBar. Helper
+buttons may select tabs, but the TabBar should remain visible and authoritative.
 Settings config should default to the running game package directory as
 `/data/data/<game-package>/files/mcgg_config.ini`.
