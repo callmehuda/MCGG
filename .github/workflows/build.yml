@@ -5,18 +5,25 @@ on:
     branches: [ master ]
   pull_request:
     branches: [ master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-latest
     env:
       ANDROID_NDK_VERSION: 29.0.14206865
+      MODULE_NAME: main
+      RELEASE_PREFIX: MCGG
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           submodules: recursive
+          fetch-depth: 0
 
       - name: Setup Android SDK
         uses: android-actions/setup-android@v4
@@ -28,9 +35,66 @@ jobs:
           SDK_ROOT="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
           "$SDK_ROOT/ndk/$ANDROID_NDK_VERSION/ndk-build" -C jni
 
+      - name: Prepare release package
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          version="v$(date -u +'%Y.%m.%d').${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}"
+          short_sha="${GITHUB_SHA::7}"
+          asset_base="${RELEASE_PREFIX}-${version}-${short_sha}"
+          asset_name="${asset_base}.zip"
+
+          mkdir -p dist/"$asset_base"/libs
+          cp -R libs/. dist/"$asset_base"/libs/
+          cat > dist/"$asset_base"/BUILD_INFO.txt <<EOF
+          repository=${GITHUB_REPOSITORY}
+          ref=${GITHUB_REF_NAME}
+          commit=${GITHUB_SHA}
+          version=${version}
+          run_id=${GITHUB_RUN_ID}
+          run_number=${GITHUB_RUN_NUMBER}
+          run_attempt=${GITHUB_RUN_ATTEMPT}
+          ndk=${ANDROID_NDK_VERSION}
+          module=${MODULE_NAME}
+          EOF
+
+          (cd dist && zip -r "$asset_name" "$asset_base")
+
+          {
+            echo "version=${version}"
+            echo "tag=${version}"
+            echo "asset_name=${asset_name}"
+            echo "asset_path=dist/${asset_name}"
+            echo "release_name=${RELEASE_PREFIX} ${version}"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: native-libs
-          path: libs/**/*.so
+          name: ${{ steps.package.outputs.asset_name }}
+          path: ${{ steps.package.outputs.asset_path }}
           if-no-files-found: error
+
+      - name: Publish GitHub release
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ steps.package.outputs.tag }}
+          RELEASE_NAME: ${{ steps.package.outputs.release_name }}
+          RELEASE_ASSET: ${{ steps.package.outputs.asset_path }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" "$RELEASE_ASSET" --clobber
+          else
+            gh release create "$RELEASE_TAG" "$RELEASE_ASSET" \
+              --target "$GITHUB_SHA" \
+              --title "$RELEASE_NAME" \
+              --notes "Automated build for ${GITHUB_SHA}."
+          fi
+
+          echo "Published ${RELEASE_NAME} (${RELEASE_TAG})" >> "$GITHUB_STEP_SUMMARY"
