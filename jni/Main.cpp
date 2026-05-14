@@ -147,6 +147,7 @@ namespace RuntimeConfig {
     constexpr int MaxManagedDictionaryEntries = 8192;
     constexpr int MaxManagedListItems = 2048;
     constexpr int MaxManagedStringChars = 4096;
+    constexpr int MaxOpponentHistoryRounds = 32;
 }
 
 namespace RuntimeMutex {
@@ -2406,17 +2407,83 @@ uint64_t GetCurrentPairFromInvasion(void* invasionManager, uint64_t accountId) {
     return LookupPairInDictionary(pairDict, accountId);
 }
 
-uint64_t GetCurrentOpponentFromManager(void* battleManager) {
+struct CurrentOpponentLookup {
+    uint64_t accountId = 0;
+    bool fromCurrentApi = false;
+    bool fromInvasionPair = false;
+    bool fromManager = false;
+    bool mirror = false;
+};
+
+CurrentOpponentLookup GetCurrentOpponentFromManagerDetailed(void* battleManager) {
+    CurrentOpponentLookup result{};
+
     void* currentOpponent = battleManager && Originals::MCLogicBattleManager_GetCurrentOpponent ?
         Originals::MCLogicBattleManager_GetCurrentOpponent(battleManager) :
         nullptr;
 
     uint64_t accountId = GetBattleManagerAccountId(currentOpponent);
     if (accountId != 0) {
-        return accountId;
+        result.accountId = accountId;
+        result.fromManager = true;
+        return result;
     }
 
-    return GetMirrorOriginAccountId(currentOpponent);
+    uint64_t mirrorOriginAccountId = GetMirrorOriginAccountId(currentOpponent);
+    if (mirrorOriginAccountId != 0) {
+        result.accountId = mirrorOriginAccountId;
+        result.fromManager = true;
+        result.mirror = true;
+    }
+
+    return result;
+}
+
+uint64_t GetCurrentOpponentFromManager(void* battleManager) {
+    return GetCurrentOpponentFromManagerDetailed(battleManager).accountId;
+}
+
+CurrentOpponentLookup GetCurrentOpponentForAccount(
+    uint64_t accountId,
+    void* battleManager,
+    void* invasionManager
+) {
+    CurrentOpponentLookup result{};
+
+    if (accountId == 0) {
+        return result;
+    }
+
+    if (Originals::MCLogicBattleData_ILOGIC_GetCurrentOpponentAccountID) {
+        uint64_t currentOpponent =
+            Originals::MCLogicBattleData_ILOGIC_GetCurrentOpponentAccountID(
+                nullptr,
+                accountId
+            );
+
+        if (currentOpponent != 0) {
+            result.accountId = currentOpponent;
+            result.fromCurrentApi = true;
+
+            CurrentOpponentLookup managerOpponent =
+                GetCurrentOpponentFromManagerDetailed(battleManager);
+            if (managerOpponent.accountId == currentOpponent && managerOpponent.mirror) {
+                result.mirror = true;
+            }
+
+            return result;
+        }
+    }
+
+    uint64_t pairId = GetCurrentPairFromInvasion(invasionManager, accountId);
+    if (pairId != 0) {
+        result.accountId = pairId;
+        result.fromInvasionPair = true;
+        return result;
+    }
+
+    result = GetCurrentOpponentFromManagerDetailed(battleManager);
+    return result;
 }
 
 uint64_t GetManagerPointerAccountField(void* battleManager, FieldInfo* field) {
@@ -6419,7 +6486,31 @@ struct OpponentPredictionRow {
     int percent = 0;
     double weight = 0.0;
     bool alive = false;
+    bool mirror = false;
+    std::string currentEnemyName;
 };
+
+struct CurrentOpponentObservation {
+    uint64_t accountId = 0;
+    uint64_t opponentId = 0;
+    bool alive = false;
+    bool mirror = false;
+    bool fromCurrentApi = false;
+    bool inferred = false;
+};
+
+struct OpponentHistoryEntry {
+    uint32_t round = 0;
+    uint64_t opponentId = 0;
+    bool mirror = false;
+    bool fromCurrentApi = false;
+};
+
+namespace PredictionCache {
+    std::unordered_map<uint64_t, CurrentOpponentObservation> CurrentRoundOpponents;
+    std::unordered_map<uint64_t, std::vector<OpponentHistoryEntry>> OpponentHistory;
+    uint64_t HistorySelfAccountId = 0;
+}
 
 std::vector<PredictionPlayer> CollectPredictionPlayers(uint64_t selfAccountId) {
     std::vector<PredictionPlayer> players;
@@ -6459,6 +6550,164 @@ std::vector<PredictionPlayer> CollectPredictionPlayers(uint64_t selfAccountId) {
     }
 
     return players;
+}
+
+void ResetOpponentPredictionHistoryIfNeeded(uint64_t selfAccountId) {
+    if (selfAccountId == 0) {
+        return;
+    }
+
+    if (PredictionCache::HistorySelfAccountId != 0 &&
+        PredictionCache::HistorySelfAccountId != selfAccountId) {
+        PredictionCache::OpponentHistory.clear();
+    }
+
+    PredictionCache::HistorySelfAccountId = selfAccountId;
+}
+
+void RememberOpponentObservation(
+    const CurrentOpponentObservation& observation,
+    uint32_t round
+) {
+    if (round == 0 || observation.accountId == 0 || observation.opponentId == 0) {
+        return;
+    }
+
+    std::vector<OpponentHistoryEntry>& history =
+        PredictionCache::OpponentHistory[observation.accountId];
+
+    if (!history.empty() && history.back().round == round) {
+        history.back().opponentId = observation.opponentId;
+        history.back().mirror = observation.mirror;
+        history.back().fromCurrentApi = observation.fromCurrentApi;
+        return;
+    }
+
+    history.push_back({
+        round,
+        observation.opponentId,
+        observation.mirror,
+        observation.fromCurrentApi
+    });
+
+    if (history.size() > static_cast<size_t>(RuntimeConfig::MaxOpponentHistoryRounds)) {
+        history.erase(history.begin());
+    }
+}
+
+const CurrentOpponentObservation* FindCurrentOpponentObservation(uint64_t accountId) {
+    auto found = PredictionCache::CurrentRoundOpponents.find(accountId);
+    return found != PredictionCache::CurrentRoundOpponents.end() ? &found->second : nullptr;
+}
+
+std::string FormatObservedEnemyName(const CurrentOpponentObservation& observation) {
+    if (observation.opponentId == 0) {
+        return {};
+    }
+
+    std::string enemyName = GetBattlePlayerName(observation.opponentId);
+    if (enemyName.empty()) {
+        enemyName = FormatUInt64(observation.opponentId);
+    }
+
+    if (observation.mirror) {
+        enemyName += " (Mirror)";
+    }
+
+    return enemyName;
+}
+
+int CountRecentOpponentHistory(uint64_t accountId, uint64_t opponentId, int maxEntries) {
+    if (accountId == 0 || opponentId == 0 || maxEntries <= 0) {
+        return 0;
+    }
+
+    auto found = PredictionCache::OpponentHistory.find(accountId);
+    if (found == PredictionCache::OpponentHistory.end()) {
+        return 0;
+    }
+
+    const std::vector<OpponentHistoryEntry>& history = found->second;
+    int count = 0;
+    int inspected = 0;
+
+    for (auto it = history.rbegin(); it != history.rend() && inspected < maxEntries; ++it) {
+        ++inspected;
+        if (it->opponentId == opponentId) {
+            ++count;
+        }
+    }
+
+    return count;
+}
+
+void RefreshPredictionOpponentCache(
+    uint64_t selfAccountId,
+    void* selfManager,
+    void* invasionManager,
+    const std::vector<PredictionPlayer>& players
+) {
+    ResetOpponentPredictionHistoryIfNeeded(selfAccountId);
+    PredictionCache::CurrentRoundOpponents.clear();
+
+    uint32_t round = Originals::MCLogicBattleData_ILOGIC_GetGameRound ?
+        Originals::MCLogicBattleData_ILOGIC_GetGameRound(nullptr) :
+        0;
+
+    auto addObservation = [invasionManager](uint64_t accountId, void* manager, bool alive) {
+        if (accountId == 0) {
+            return;
+        }
+
+        CurrentOpponentLookup lookup =
+            GetCurrentOpponentForAccount(accountId, manager, invasionManager);
+        PredictionCache::CurrentRoundOpponents[accountId] = {
+            accountId,
+            lookup.accountId,
+            alive,
+            lookup.mirror,
+            lookup.fromCurrentApi,
+            false
+        };
+    };
+
+    addObservation(selfAccountId, selfManager, true);
+
+    for (const PredictionPlayer& player : players) {
+        addObservation(player.accountId, player.manager, player.alive);
+    }
+
+    std::vector<uint64_t> accounts;
+    accounts.reserve(PredictionCache::CurrentRoundOpponents.size());
+
+    for (const auto& observed : PredictionCache::CurrentRoundOpponents) {
+        accounts.push_back(observed.first);
+    }
+
+    for (uint64_t accountId : accounts) {
+        auto observed = PredictionCache::CurrentRoundOpponents.find(accountId);
+        if (observed == PredictionCache::CurrentRoundOpponents.end()) {
+            continue;
+        }
+
+        const CurrentOpponentObservation& observation = observed->second;
+        if (observation.opponentId == 0 ||
+            observation.opponentId == observation.accountId ||
+            observation.mirror) {
+            continue;
+        }
+
+        auto reverse = PredictionCache::CurrentRoundOpponents.find(observation.opponentId);
+        if (reverse != PredictionCache::CurrentRoundOpponents.end() &&
+            reverse->second.opponentId == 0) {
+            reverse->second.opponentId = observation.accountId;
+            reverse->second.inferred = true;
+        }
+    }
+
+    for (const auto& observed : PredictionCache::CurrentRoundOpponents) {
+        RememberOpponentObservation(observed.second, round);
+    }
 }
 
 uint64_t FindExactPredictedOpponent(
@@ -6532,7 +6781,9 @@ std::vector<OpponentPredictionRow> BuildOpponentPredictions(uint64_t selfAccount
             player.name.empty() ? FormatUInt64(player.accountId) : player.name,
             0,
             0.0,
-            player.alive
+            player.alive,
+            false,
+            {}
         });
     }
 
@@ -6542,26 +6793,83 @@ std::vector<OpponentPredictionRow> BuildOpponentPredictions(uint64_t selfAccount
 
     void* selfManager = GetBattleManagerByAccountId(selfAccountId);
     void* invasionManager = GetLogicInvasionManager();
+    RefreshPredictionOpponentCache(selfAccountId, selfManager, invasionManager, players);
+
+    for (OpponentPredictionRow& row : rows) {
+        const CurrentOpponentObservation* observation =
+            FindCurrentOpponentObservation(row.accountId);
+        if (observation) {
+            row.currentEnemyName = FormatObservedEnemyName(*observation);
+        }
+    }
+
     bool monsterRound = IsCurrentMonsterRound(invasionManager);
     bool realPlayerMode = IsRealPlayerPairingMode(invasionManager);
-    uint64_t exactOpponent = FindExactPredictedOpponent(
-        selfAccountId,
-        selfManager,
-        invasionManager,
-        players
-    );
+    uint64_t exactOpponent = 0;
+    bool exactMirror = false;
+
+    const CurrentOpponentObservation* selfObservation =
+        FindCurrentOpponentObservation(selfAccountId);
+    if (selfObservation && selfObservation->opponentId != 0) {
+        exactOpponent = selfObservation->opponentId;
+        exactMirror = selfObservation->mirror ||
+            selfObservation->opponentId == selfAccountId;
+    }
+
+    if (exactOpponent == 0) {
+        for (const auto& observed : PredictionCache::CurrentRoundOpponents) {
+            const CurrentOpponentObservation& observation = observed.second;
+            if (observation.accountId != selfAccountId &&
+                observation.opponentId == selfAccountId &&
+                observation.alive) {
+                exactOpponent = observation.accountId;
+                exactMirror = observation.mirror;
+                break;
+            }
+        }
+    }
+
+    if (exactOpponent == 0) {
+        exactOpponent = FindExactPredictedOpponent(
+            selfAccountId,
+            selfManager,
+            invasionManager,
+            players
+        );
+    }
 
     if (monsterRound) {
         return rows;
     }
 
-    if (exactOpponent != 0) {
+    if (exactOpponent != 0 && (exactOpponent != selfAccountId || exactMirror)) {
+        bool foundExactRow = false;
+
         for (OpponentPredictionRow& row : rows) {
-            if (row.accountId == exactOpponent && row.alive) {
+            if (row.accountId == exactOpponent) {
                 row.percent = 100;
                 row.weight = 100.0;
+                row.mirror = exactMirror;
+                foundExactRow = true;
                 break;
             }
+        }
+
+        if (!foundExactRow) {
+            std::string exactName = GetBattlePlayerName(exactOpponent);
+            if (exactName.empty()) {
+                exactName = FormatUInt64(exactOpponent);
+            }
+
+            rows.push_back({
+                exactOpponent,
+                exactName,
+                100,
+                100.0,
+                true,
+                exactMirror,
+                {}
+            });
         }
 
         return rows;
@@ -6588,10 +6896,6 @@ std::vector<OpponentPredictionRow> BuildOpponentPredictions(uint64_t selfAccount
         selfAccountId,
         round
     );
-
-    if (roundRobinOpponent == 0 && aliveAccounts.size() % 2 == 1) {
-        return rows;
-    }
 
     static FieldInfo* lastRoundEnemyField = nullptr;
     static FieldInfo* prevRealPlayerEnemyField = nullptr;
@@ -6637,18 +6941,16 @@ std::vector<OpponentPredictionRow> BuildOpponentPredictions(uint64_t selfAccount
             weight *= 0.03;
         }
 
-        uint64_t candidateCurrentOpponent =
-            Originals::MCLogicBattleData_ILOGIC_GetCurrentOpponentAccountID ?
-                Originals::MCLogicBattleData_ILOGIC_GetCurrentOpponentAccountID(
-                    nullptr,
-                    playerIt->accountId
-                ) :
-                0;
+        const CurrentOpponentObservation* candidateObservation =
+            FindCurrentOpponentObservation(playerIt->accountId);
+        uint64_t candidateCurrentOpponent = candidateObservation ?
+            candidateObservation->opponentId :
+            0;
 
         if (candidateCurrentOpponent == selfAccountId) {
-            weight *= 4.0;
+            weight *= candidateObservation && candidateObservation->mirror ? 2.5 : 4.0;
         } else if (candidateCurrentOpponent != 0) {
-            weight *= 0.08;
+            weight *= candidateObservation && candidateObservation->inferred ? 0.15 : 0.08;
         }
 
         if (row.accountId == lastRoundEnemyId) {
@@ -6674,6 +6976,19 @@ std::vector<OpponentPredictionRow> BuildOpponentPredictions(uint64_t selfAccount
 
         if (roundRobinOpponent != 0) {
             weight *= row.accountId == roundRobinOpponent ? 4.5 : 0.55;
+        }
+
+        int recentSelfMeetings = std::max(
+            CountRecentOpponentHistory(selfAccountId, row.accountId, 6),
+            CountRecentOpponentHistory(row.accountId, selfAccountId, 6)
+        );
+
+        if (recentSelfMeetings >= 2) {
+            weight *= 0.45;
+        } else if (recentSelfMeetings == 1) {
+            weight *= 0.70;
+        } else {
+            weight *= 1.12;
         }
 
         row.weight = std::max(weight, 0.0);
@@ -6741,7 +7056,7 @@ void DrawOpponentPredictionTable(uint64_t selfAccountId) {
 
     if (!ImGui::BeginTable(
         "##OpponentPredictionTable",
-        2,
+        3,
         ImGuiTableFlags_Borders |
             ImGuiTableFlags_RowBg |
             ImGuiTableFlags_SizingStretchProp |
@@ -6752,15 +7067,22 @@ void DrawOpponentPredictionTable(uint64_t selfAccountId) {
     }
 
     ImGui::TableSetupColumn("Player");
-    ImGui::TableSetupColumn("Will fight", ImGuiTableColumnFlags_WidthFixed, 110.0f);
+    ImGui::TableSetupColumn("Will fight", ImGuiTableColumnFlags_WidthFixed, 90.0f);
+    ImGui::TableSetupColumn("Current enemy");
     ImGui::TableHeadersRow();
 
     for (const OpponentPredictionRow& row : rows) {
         ImGui::TableNextRow();
         ImGui::TableSetColumnIndex(0);
-        ImGui::TextUnformatted(row.name.c_str());
+        std::string playerName = row.name;
+        if (row.mirror) {
+            playerName += " (Mirror)";
+        }
+        ImGui::TextUnformatted(playerName.c_str());
         ImGui::TableSetColumnIndex(1);
         ImGui::Text("%d%%", row.percent);
+        ImGui::TableSetColumnIndex(2);
+        ImGui::TextUnformatted(row.currentEnemyName.empty() ? "-" : row.currentEnemyName.c_str());
     }
 
     ImGui::EndTable();
