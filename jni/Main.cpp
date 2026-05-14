@@ -7843,13 +7843,20 @@ void DrawMainMenu() {
 
     DrawMainTabQuickControls(tabs, tabCount);
 
+    static int lastDrawnTabIndex = -1;
+    int requestedTabIndex = std::clamp(UiState::MainTabIndex.load(), 0, tabCount - 1);
+    bool applyRequestedTab = requestedTabIndex != lastDrawnTabIndex;
+    int activeTabIndex = -1;
+
     if (ImGui::BeginTabBar("##MainTabs", ImGuiTabBarFlags_FittingPolicyScroll)) {
         for (int i = 0; i < tabCount; ++i) {
             ImGuiTabItemFlags itemFlags =
-                UiState::MainTabIndex.load() == i ? ImGuiTabItemFlags_SetSelected : 0;
+                applyRequestedTab && requestedTabIndex == i ?
+                    ImGuiTabItemFlags_SetSelected :
+                    0;
 
             if (ImGui::BeginTabItem(tabs[i].label, nullptr, itemFlags)) {
-                UiState::MainTabIndex = i;
+                activeTabIndex = i;
 
                 ImGui::Spacing();
 
@@ -7862,6 +7869,11 @@ void DrawMainMenu() {
         }
 
         ImGui::EndTabBar();
+    }
+
+    if (activeTabIndex >= 0) {
+        UiState::MainTabIndex = activeTabIndex;
+        lastDrawnTabIndex = activeTabIndex;
     }
 
     ImGui::End();
