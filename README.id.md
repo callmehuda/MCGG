@@ -63,7 +63,9 @@ Target default yang didukung:
 
 ### Info
 
-- Tabel runtime status untuk binding battle data, GGC, shop, Recommendation Lineup, Combat power, arena, test, spectator, synergy, dan placement.
+- Tabel runtime status untuk binding battle data, GGC, shop, Recommendation
+  Lineup, Combat power, arena, round skip, speedhack, test, spectator, synergy,
+  dan placement.
 - Tabel player dan next-enemy yang diurutkan dengan player lokal di posisi pertama.
 - Readout kualitas GGC untuk round 7 dan round 13.
 - Indikator status overlay untuk binding yang terlambat atau belum tersedia.
@@ -113,6 +115,8 @@ Target default yang didukung:
 - Helper enemy HP 1.
 - Helper gold manual dan pasif.
 - Helper free shop/upgrade economy, unlimited hero pool, dan bypass shop lock.
+- Kontrol Skip Round untuk memindahkan round manager lokal ke target round yang dipilih.
+- Kontrol SpeedHack berbasis `UnityEngine.Time.set_timeScale`.
 
 ### Test
 
@@ -324,7 +328,7 @@ Pada saat load dan selama frame presentation, `jni/Main.cpp` menjalankan urutan 
     GogoCard melalui snapshot lokal sebelum publikasi terkunci.
 17. Menjalankan shop automation yang di-throttle dan arena effects pada tick
     terpisah 100 ms, menggunakan snapshot selected-target yang bounded untuk
-    keputusan shop.
+    keputusan shop dan cooldown bounded untuk round skipping.
 
 Urutan ini disengaja. Rendering dan input diinisialisasi terpisah dari feature binding agar overlay dapat melaporkan readiness runtime secara parsial sementara object IL2CPP yang terlambat tetap dicoba resolve.
 
@@ -335,6 +339,13 @@ Urutan ini disengaja. Rendering dan input diinisialisasi terpisah dari feature b
 - Pertahankan runtime code fitur di `jni/Main.cpp` kecuali refactor memang diminta secara eksplisit.
 - Gunakan section lokal yang jelas dan komentar singkat di sekitar IL2CPP call yang berisiko.
 - Gunakan tab Runtime Status dan Test saat memvalidasi binding baru atau menelusuri runtime state yang terlambat tersedia.
+- Untuk perubahan Arena Skip Round, verifikasi
+  `MCLogicBattleData.get_logicRoundMgr`, `LogicRoundMgr.SetRound(UInt32)`, dan
+  `LogicRoundMgr.NextRound(Boolean)` terhadap `dump/dump.cs`; bagian yang belum
+  siap harus tetap muncul sebagai `Waiting for ...`.
+- Untuk perubahan Arena SpeedHack, verifikasi
+  `UnityEngine.Time.set_timeScale(Single)` terhadap `dump/dump.cs` dan reset
+  scale ke normal saat fitur dinonaktifkan.
 - Prediksi opponent sebaiknya memprioritaskan runtime state berbasis dump
   seperti `LogicInvasionMgr`, `LogicRealPlayerInvader.lbmList`,
   `PairGenRoundTable`/`PairGenTwoPlayerMode`, `lastRoundEnemy`, dan

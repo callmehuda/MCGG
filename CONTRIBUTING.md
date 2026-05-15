@@ -60,6 +60,11 @@ git lfs pull
 - Recommendation Lineup automation depends on both `MCLogicBattleData` and
   `MCBattleBridge` bindings. Verify signatures against `dump/dump.cs` before
   changing related method pointers.
+- Arena Skip Round depends on `MCLogicBattleData.get_logicRoundMgr`,
+  `LogicRoundMgr.SetRound(UInt32)`, and `LogicRoundMgr.NextRound(Boolean)`.
+  Keep the UI in a `Waiting for ...` state while those bindings are missing.
+- Arena SpeedHack depends on `UnityEngine.Time.set_timeScale(Single)`. Reset
+  the time scale when disabling the feature or resetting feature state.
 - Keep Settings save/load behavior scoped to the project config file under the
   running game package directory, normally
   `/data/data/<game-package>/files/mcgg_config.ini`.
@@ -74,7 +79,8 @@ and target counts. Combat includes Invisible Scout, force-win, HP-loss
 prevention, attack-ratio boosting, fight-value boosting, and enemy-board
 crippling. Arena includes hero/item/card granting, active synergy forcing,
 level/population forcing, enemy HP pressure, passive gold, free economy,
-unlimited hero pool, and shop-lock bypass helpers. Appearance includes ImGui
+unlimited hero pool, shop-lock bypass helpers, Skip Round, and SpeedHack.
+Appearance includes ImGui
 Dark, Catppuccin Mocha, and additional palettes inspired by Dear ImGui issue #707.
 Test diagnostics are split into tabbed sections for prediction, bindings, round
 state, player data, battle managers, battle bridge, shop UI, behavior API, and

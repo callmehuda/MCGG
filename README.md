@@ -63,7 +63,9 @@ The default supported target is:
 
 ### Info
 
-- Runtime status table for battle data, GGC, shop, Recommendation Lineup, Combat power, arena, test, spectator, synergy, and placement bindings.
+- Runtime status table for battle data, GGC, shop, Recommendation Lineup,
+  Combat power, arena, round skip, speedhack, test, spectator, synergy, and
+  placement bindings.
 - Player and next-enemy table sorted with the local player first.
 - GGC quality readout for round 7 and round 13.
 - Overlay status indicators for delayed or unavailable bindings.
@@ -112,6 +114,8 @@ The default supported target is:
 - Enemy HP 1 helper.
 - Manual and passive gold helpers.
 - Free shop/upgrade economy, unlimited hero pool, and shop-lock bypass helpers.
+- Skip Round controls that move the local round manager to a selected target round.
+- SpeedHack controls backed by `UnityEngine.Time.set_timeScale`.
 
 ### Test
 
@@ -321,7 +325,8 @@ At load time and during frame presentation, `jni/Main.cpp` performs the followin
 16. Refreshes match state and reloads hero, equipment, and GogoCard table
     caches through local snapshots before locked publication.
 17. Runs throttled shop automation and arena effects on separate 100 ms ticks,
-    using bounded selected-target snapshots for shop decisions.
+    using bounded selected-target snapshots for shop decisions and bounded
+    cooldowns for round skipping.
 
 This order is intentional. Rendering and input are initialized separately from feature binding so the overlay can report partial runtime readiness while delayed IL2CPP objects continue to resolve.
 
@@ -332,6 +337,11 @@ This order is intentional. Rendering and input are initialized separately from f
 - Keep feature runtime code in `jni/Main.cpp` unless a refactor is explicitly requested.
 - Use clear local sections and concise comments around risky IL2CPP calls.
 - Use the Runtime Status and Test tabs when validating new bindings or investigating delayed runtime state.
+- For Arena Skip Round changes, verify `MCLogicBattleData.get_logicRoundMgr`,
+  `LogicRoundMgr.SetRound(UInt32)`, and `LogicRoundMgr.NextRound(Boolean)`
+  against `dump/dump.cs`; keep missing pieces visible as `Waiting for ...`.
+- For Arena SpeedHack changes, verify `UnityEngine.Time.set_timeScale(Single)`
+  against `dump/dump.cs` and reset the scale to normal when the feature is disabled.
 - Opponent prediction should prefer dump-backed runtime state such as
   `LogicInvasionMgr`, `LogicRealPlayerInvader.lbmList`,
   `PairGenRoundTable`/`PairGenTwoPlayerMode`, `lastRoundEnemy`, and

@@ -97,6 +97,15 @@ When changing Recommendation Lineup automation, verify the related
 `MCLogicBattleData` and `MCBattleBridge` signatures against `dump/dump.cs` and
 keep the overlay in a `Waiting for ...` state while runtime data is unavailable.
 
+When changing Arena Skip Round automation, verify
+`MCLogicBattleData.get_logicRoundMgr`, `LogicRoundMgr.SetRound(UInt32)`, and
+`LogicRoundMgr.NextRound(Boolean)` against `dump/dump.cs`. Keep the overlay in
+a `Waiting for ...` state while round-manager bindings are unavailable.
+
+When changing Arena SpeedHack, verify `UnityEngine.Time.set_timeScale(Single)`
+against `dump/dump.cs` and reset the time scale when disabling the feature or
+resetting feature state.
+
 For documentation-only changes, at minimum inspect the rendered Markdown diff.
 For native or mixed changes, also run:
 
@@ -128,11 +137,12 @@ auto-refresh pause conditions, keep-gold reserve, and target counts. Combat
 includes Invisible Scout, force-win, HP-loss prevention, attack-ratio boosting,
 fight-value boosting, and enemy-board crippling. Arena includes hero/item/card
 granting, active synergy forcing, level/population forcing, enemy HP pressure,
-passive gold, free economy, unlimited hero pool, and shop-lock bypass helpers.
-Use the Runtime Status and Test tabs when checking binding
-readiness, managed references, round state, player economy/rank/shop state,
-battle manager fields, battle bridge state, shop panel state, behavior API
-state, Recommendation Lineup state, or opponent prediction logic. Test
+passive gold, free economy, unlimited hero pool, shop-lock bypass helpers, Skip
+Round, and SpeedHack. Use the Runtime Status and Test tabs when checking binding
+readiness, managed references, round state, round-manager state, timeScale
+binding readiness, player economy/rank/shop state, battle manager fields, battle
+bridge state, shop panel state, behavior API state, Recommendation Lineup state,
+or opponent prediction logic. Test
 diagnostics should stay read-only unless the task explicitly requests an action.
 In the Test prediction table, `Will fight` is the local player's opponent
 probability and `Current enemy` is the observed opponent for that row. Only the

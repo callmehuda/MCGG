@@ -144,6 +144,7 @@ namespace RuntimeConfig {
     constexpr int ShopRefreshCooldownMs = 650;
     constexpr int ShopWorthCheckMs = 500;
     constexpr int RecommendLineupCheckMs = 500;
+    constexpr int ArenaSkipCooldownMs = 750;
     constexpr int MaxShopTargetChecks = 256;
     constexpr int MaxManagedDictionaryEntries = 8192;
     constexpr int MaxManagedListItems = 2048;
@@ -202,6 +203,10 @@ namespace FeatureState {
     std::atomic<bool> ArenaUnlimitedHeroPool{false};
     std::atomic<bool> ArenaNoShopLock{false};
     std::atomic<int> ArenaPrice{5};
+    std::atomic<bool> ArenaSkipRound{false};
+    std::atomic<int> ArenaSkipTargetRound{1};
+    std::atomic<bool> ArenaSpeedHack{false};
+    std::atomic<float> ArenaTimeScale{2.0f};
 
     std::atomic<void*> BattleBridge{nullptr};
     std::atomic<void*> HeroShopPanel{nullptr};
@@ -227,6 +232,7 @@ namespace FeatureState {
     std::chrono::steady_clock::time_point LastShopRefreshAttempt{};
     std::chrono::steady_clock::time_point LastShopWorthCheck{};
     std::chrono::steady_clock::time_point LastRecommendLineupCheck{};
+    std::chrono::steady_clock::time_point LastArenaSkipAttempt{};
     std::atomic<bool> CachedShopHasWorthwhileTarget{false};
     std::atomic<int> CachedRecommendLineupHeroId{0};
     std::atomic<uint64_t> LastShopBuyAccountId{0};
@@ -448,6 +454,10 @@ namespace Originals {
     int (*MCLogicBattleData_ILOGIC_SelfCurPopulation)(void* instance);
     int (*MCLogicBattleData_ILOGIC_GetSpareChessNum)(void* instance);
     int (*MCLogicBattleData_ILOGIC_GetHeroByStarUp)(void* instance);
+    void* (*MCLogicBattleData_get_logicRoundMgr)(void* instance);
+    void (*LogicRoundMgr_SetRound)(void* instance, uint32_t round);
+    void (*LogicRoundMgr_NextRound)(void* instance, bool isAfterWelfare);
+    void (*UnityEngine_Time_set_timeScale)(float value);
 
     void* (*MCComp_GetGamer)(uint64_t accountId);
     void* (*MCComp_GetGoGoCardComp)(uint64_t accountId);
@@ -1824,6 +1834,34 @@ void ResolveFeatureBindings() {
         "ILOGIC_GetHeroByStarUp",
         {}
     );
+    ResolveOriginal(
+        Originals::MCLogicBattleData_get_logicRoundMgr,
+        "",
+        "MCLogicBattleData",
+        "get_logicRoundMgr",
+        {}
+    );
+    ResolveOriginal(
+        Originals::LogicRoundMgr_SetRound,
+        "",
+        "LogicRoundMgr",
+        "SetRound",
+        {"UInt32"}
+    );
+    ResolveOriginal(
+        Originals::LogicRoundMgr_NextRound,
+        "",
+        "LogicRoundMgr",
+        "NextRound",
+        {"Boolean"}
+    );
+    ResolveOriginal(
+        Originals::UnityEngine_Time_set_timeScale,
+        "UnityEngine",
+        "Time",
+        "set_timeScale",
+        {"Single"}
+    );
     ResolveOriginal(Originals::MCComp_GetGamer, "", "MCComp", "GetGamer", {"UInt64"});
     ResolveOriginal(
         Originals::MCComp_GetGoGoCardComp,
@@ -2896,6 +2934,7 @@ void ClearTableDataCacheUnlocked() {
     FeatureState::LastShopRefreshAttempt = {};
     FeatureState::LastShopWorthCheck = {};
     FeatureState::LastRecommendLineupCheck = {};
+    FeatureState::LastArenaSkipAttempt = {};
     FeatureState::CachedShopHasWorthwhileTarget = false;
     FeatureState::CachedRecommendLineupHeroId = 0;
     FeatureState::LastShopBuyAccountId = 0;
@@ -3477,6 +3516,70 @@ void GiveGold() {
     }
 }
 
+float ClampArenaTimeScale(float value) {
+    return std::clamp(value, 0.1f, 20.0f);
+}
+
+void ApplyArenaSpeedHack(uint64_t selfAccountId) {
+    if (!Originals::UnityEngine_Time_set_timeScale) {
+        return;
+    }
+
+    static float appliedTimeScale = 1.0f;
+    bool active = FeatureState::ArenaSpeedHack.load() && selfAccountId != 0;
+    float targetTimeScale =
+        active ? ClampArenaTimeScale(FeatureState::ArenaTimeScale.load()) : 1.0f;
+    FeatureState::ArenaTimeScale = ClampArenaTimeScale(FeatureState::ArenaTimeScale.load());
+
+    if (appliedTimeScale > targetTimeScale - 0.001f &&
+        appliedTimeScale < targetTimeScale + 0.001f) {
+        return;
+    }
+
+    Originals::UnityEngine_Time_set_timeScale(targetTimeScale);
+    appliedTimeScale = targetTimeScale;
+}
+
+bool TrySkipArenaRoundToTarget(bool force) {
+    if (!IsIl2CppRuntimeReady() ||
+        !Originals::MCLogicBattleData_ILOGIC_GetGameRound ||
+        !Originals::MCLogicBattleData_get_logicRoundMgr ||
+        !Originals::LogicRoundMgr_SetRound ||
+        !Originals::LogicRoundMgr_NextRound) {
+        return false;
+    }
+
+    int targetRound = std::clamp(FeatureState::ArenaSkipTargetRound.load(), 1, 99);
+    FeatureState::ArenaSkipTargetRound = targetRound;
+
+    uint32_t currentRound = Originals::MCLogicBattleData_ILOGIC_GetGameRound(nullptr);
+    if (currentRound == 0 || currentRound >= static_cast<uint32_t>(targetRound)) {
+        return false;
+    }
+
+    auto now = std::chrono::steady_clock::now();
+    if (!force &&
+        !CooldownElapsed(
+            FeatureState::LastArenaSkipAttempt,
+            RuntimeConfig::ArenaSkipCooldownMs,
+            now
+        )) {
+        return false;
+    }
+
+    void* roundManager = Originals::MCLogicBattleData_get_logicRoundMgr(nullptr);
+    if (!roundManager) {
+        return false;
+    }
+
+    // Stage the manager on the previous round so NextRound performs normal phase setup.
+    uint32_t stagedRound = static_cast<uint32_t>(std::max(targetRound - 1, 1));
+    Originals::LogicRoundMgr_SetRound(roundManager, stagedRound);
+    Originals::LogicRoundMgr_NextRound(roundManager, false);
+    FeatureState::LastArenaSkipAttempt = now;
+    return true;
+}
+
 bool HasAnyCombatPowerState() {
     return FeatureState::CombatForceWin ||
         FeatureState::CombatPreventHpLoss ||
@@ -3638,8 +3741,18 @@ void ApplyCombatState(uint64_t selfAccountId) {
 }
 
 void ApplyArenaState(uint64_t selfAccountId) {
-    if (!IsIl2CppRuntimeReady() || selfAccountId == 0) {
+    if (!IsIl2CppRuntimeReady()) {
         return;
+    }
+
+    ApplyArenaSpeedHack(selfAccountId);
+
+    if (selfAccountId == 0) {
+        return;
+    }
+
+    if (FeatureState::ArenaSkipRound) {
+        TrySkipArenaRoundToTarget(false);
     }
 
     if ((FeatureState::ArenaForceLevel99 ||
@@ -4257,6 +4370,9 @@ void ClampConfigurableState() {
     FeatureState::ArenaGoldTarget =
         std::clamp(FeatureState::ArenaGoldTarget.load(), 0, 999999999);
     FeatureState::ArenaPrice = std::clamp(FeatureState::ArenaPrice.load(), 0, 99);
+    FeatureState::ArenaSkipTargetRound =
+        std::clamp(FeatureState::ArenaSkipTargetRound.load(), 1, 99);
+    FeatureState::ArenaTimeScale = ClampArenaTimeScale(FeatureState::ArenaTimeScale.load());
 
     {
         std::lock_guard<std::mutex> lock(RuntimeMutex::FeatureMutex);
@@ -4332,6 +4448,11 @@ void ResetFeatureSettings() {
     FeatureState::ArenaUnlimitedHeroPool = false;
     FeatureState::ArenaNoShopLock = false;
     FeatureState::ArenaPrice = 5;
+    FeatureState::ArenaSkipRound = false;
+    FeatureState::ArenaSkipTargetRound = 1;
+    FeatureState::ArenaSpeedHack = false;
+    FeatureState::ArenaTimeScale = 2.0f;
+    ApplyArenaSpeedHack(0);
 }
 
 bool EnsureDirectoryPath(const std::string& directory) {
@@ -4560,6 +4681,10 @@ void ApplyConfigValue(const std::string& key, const std::string& value) {
     else if (key == "arenaUnlimitedHeroPool") FeatureState::ArenaUnlimitedHeroPool = ParseConfigBool(value, FeatureState::ArenaUnlimitedHeroPool);
     else if (key == "arenaNoShopLock") FeatureState::ArenaNoShopLock = ParseConfigBool(value, FeatureState::ArenaNoShopLock);
     else if (key == "arenaPrice") FeatureState::ArenaPrice = ParseConfigInt(value, FeatureState::ArenaPrice);
+    else if (key == "arenaSkipRound") FeatureState::ArenaSkipRound = ParseConfigBool(value, FeatureState::ArenaSkipRound);
+    else if (key == "arenaSkipTargetRound") FeatureState::ArenaSkipTargetRound = ParseConfigInt(value, FeatureState::ArenaSkipTargetRound);
+    else if (key == "arenaSpeedHack") FeatureState::ArenaSpeedHack = ParseConfigBool(value, FeatureState::ArenaSpeedHack);
+    else if (key == "arenaTimeScale") FeatureState::ArenaTimeScale = ParseConfigFloat(value, FeatureState::ArenaTimeScale);
 }
 
 bool SaveConfigToFile(const std::string& path) {
@@ -4651,6 +4776,10 @@ bool SaveConfigToFile(const std::string& path) {
     WriteConfigBool(file, "arenaUnlimitedHeroPool", FeatureState::ArenaUnlimitedHeroPool);
     WriteConfigBool(file, "arenaNoShopLock", FeatureState::ArenaNoShopLock);
     WriteConfigInt(file, "arenaPrice", FeatureState::ArenaPrice);
+    WriteConfigBool(file, "arenaSkipRound", FeatureState::ArenaSkipRound);
+    WriteConfigInt(file, "arenaSkipTargetRound", FeatureState::ArenaSkipTargetRound);
+    WriteConfigBool(file, "arenaSpeedHack", FeatureState::ArenaSpeedHack);
+    WriteConfigFloat(file, "arenaTimeScale", FeatureState::ArenaTimeScale);
 
     fclose(file);
     SetConfigStatus("Saved", path, true);
@@ -5074,6 +5203,8 @@ bool HasArenaHeroBindings();
 bool HasArenaItemBindings();
 bool HasArenaGogoCardBindings();
 bool HasArenaGoldBindings();
+bool HasArenaRoundSkipBindings();
+bool HasArenaSpeedHackBindings();
 bool HasBattleTestBindings();
 std::string GetBattlePlayerName(uint64_t accountId);
 
@@ -5251,6 +5382,8 @@ void DrawRuntimeStatus() {
         DrawStatusRow("Arena items", HasArenaItemBindings());
         DrawStatusRow("Arena GogoCards", HasArenaGogoCardBindings());
         DrawStatusRow("Arena gold", HasArenaGoldBindings());
+        DrawStatusRow("Arena round skip", HasArenaRoundSkipBindings());
+        DrawStatusRow("Arena speedhack", HasArenaSpeedHackBindings());
         DrawStatusRow("Battle tests", HasBattleTestBindings());
         DrawStatusRow("Spectator hook", Originals::MCShowSpectatorComp_SetSpectate);
         DrawStatusRow(
@@ -5423,6 +5556,19 @@ bool HasArenaGoldBindings() {
         Originals::MCLogicBattleData_ILOGIC_GetPlayerData &&
         Originals::MCLogicBattleData_ILOGIC_GetPlayerCoin &&
         Originals::MCChessPlayerData_UpdateCoin;
+}
+
+bool HasArenaRoundSkipBindings() {
+    return IsIl2CppRuntimeReady() &&
+        Originals::MCLogicBattleData_ILOGIC_GetGameRound &&
+        Originals::MCLogicBattleData_get_logicRoundMgr &&
+        Originals::LogicRoundMgr_SetRound &&
+        Originals::LogicRoundMgr_NextRound;
+}
+
+bool HasArenaSpeedHackBindings() {
+    return IsIl2CppRuntimeReady() &&
+        Originals::UnityEngine_Time_set_timeScale;
 }
 
 bool HasBattleTestBindings() {
@@ -5849,6 +5995,8 @@ void DrawTestBindingRows() {
     ImGui::TableHeadersRow();
 
     DrawStatusRow("Round/phase", Originals::MCLogicBattleData_ILOGIC_GetRoundRemainTime);
+    DrawStatusRow("Round manager", HasArenaRoundSkipBindings());
+    DrawStatusRow("Unity time scale", HasArenaSpeedHackBindings());
     DrawStatusRow("Fight section", Originals::MCLogicBattleData_ILOGIC_IsFightSection);
     DrawStatusRow("Self fight over", Originals::MCLogicBattleData_ILOGIC_IsSelfFightOver);
     DrawStatusRow("Player HP", Originals::MCLogicBattleData_ILOGIC_GetPlayerHP);
@@ -8062,6 +8210,59 @@ void DrawArenaTab() {
                 }
 
                 ImGui::EndTable();
+            }
+
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Round")) {
+            if (!HasArenaRoundSkipBindings()) {
+                DrawWaitingText("Waiting for round skip bindings");
+            }
+
+            if (!HasArenaSpeedHackBindings()) {
+                DrawWaitingText("Waiting for timeScale binding");
+            }
+
+            uint32_t currentRound = Originals::MCLogicBattleData_ILOGIC_GetGameRound ?
+                Originals::MCLogicBattleData_ILOGIC_GetGameRound(nullptr) :
+                0;
+
+            ImGui::Text(
+                "Current round: %s",
+                currentRound > 0 ? FormatUInt32(currentRound).c_str() : "Waiting"
+            );
+
+            DrawAtomicCheckbox("Skip Round", FeatureState::ArenaSkipRound);
+            ImGui::SetNextItemWidth(120.0f);
+            DrawAtomicInputInt("Target round", FeatureState::ArenaSkipTargetRound);
+            FeatureState::ArenaSkipTargetRound =
+                std::clamp(FeatureState::ArenaSkipTargetRound.load(), 1, 99);
+
+            if (ImGui::Button("Apply Skip Round now", ImVec2(-1.0f, 0.0f))) {
+                UiState::ConfigStatus =
+                    TrySkipArenaRoundToTarget(true) ?
+                        "Skip Round requested" :
+                        "Skip Round unavailable or target reached";
+            }
+
+            ImGui::Separator();
+            DrawAtomicCheckbox("SpeedHack", FeatureState::ArenaSpeedHack);
+            ImGui::SetNextItemWidth(180.0f);
+            DrawAtomicSliderFloat(
+                "Time scale",
+                FeatureState::ArenaTimeScale,
+                0.1f,
+                20.0f,
+                "%.1fx"
+            );
+            FeatureState::ArenaTimeScale =
+                ClampArenaTimeScale(FeatureState::ArenaTimeScale.load());
+
+            if (ImGui::Button("Reset time scale", ImVec2(-1.0f, 0.0f))) {
+                FeatureState::ArenaSpeedHack = false;
+                FeatureState::ArenaTimeScale = 1.0f;
+                ApplyArenaSpeedHack(0);
             }
 
             ImGui::EndTabItem();
