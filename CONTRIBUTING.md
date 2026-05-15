@@ -142,6 +142,20 @@ libs/arm64-v8a/libmain.so
 Documentation-only changes do not require a native build, but mention that in
 the pull request.
 
+## Release Workflow
+
+The `.github/workflows/build.yml` workflow runs for pushes to `master`, pull
+requests targeting `master`, and manual dispatches. It builds with Android NDK
+`29.0.14206865`, packages `libs/`, writes `BUILD_INFO.txt`, and uploads the zip
+as a workflow artifact.
+
+For non-pull-request runs, the workflow publishes or updates a GitHub release.
+Release notes are generated from Git history and include commit descriptions
+for the GitHub push range when available, otherwise from the previous `v*` tag
+through the current commit, falling back to the current commit only. Commit
+subjects and body text are included where present, so write commit messages with
+enough context to stand alone in release notes.
+
 ## Commit Messages
 
 Use short typed commit messages when possible:

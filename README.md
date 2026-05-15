@@ -24,6 +24,7 @@ This repository builds an `arm64-v8a` shared library for a Unity `2019.4.22f1` I
 - [Build](#build)
 - [Repository Layout](#repository-layout)
 - [Build Configuration](#build-configuration)
+- [CI Release Packaging](#ci-release-packaging)
 - [Runtime Flow](#runtime-flow)
 - [Development Notes](#development-notes)
 - [Troubleshooting](#troubleshooting)
@@ -300,6 +301,24 @@ Unity compatibility defines are configured in `jni/Android.mk`:
 ```
 
 Keep these values aligned with the Unity headers under `jni/Il2CppVersions/`.
+
+## CI Release Packaging
+
+The GitHub Actions workflow at `.github/workflows/build.yml` builds the native
+module with Android NDK `29.0.14206865`, uploads the generated release zip as a
+workflow artifact, and publishes a GitHub release for non-pull-request runs.
+
+Release assets are named with the project prefix, UTC date-based version,
+workflow run metadata, and short commit SHA. Each package includes
+`BUILD_INFO.txt` with the repository, ref, commit, version, run, NDK, and module
+metadata used for that build.
+
+Release notes are generated from Git history. They include the repository/ref
+context plus commit descriptions for the push range when GitHub provides one,
+otherwise from the previous `v*` tag through the current commit, falling back to
+the current commit only. Commit subjects and any commit body text are included.
+Existing releases with the same generated tag are updated with the regenerated
+notes before the asset is uploaded with `--clobber`.
 
 ## Runtime Flow
 

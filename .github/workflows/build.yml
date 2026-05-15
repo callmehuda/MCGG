@@ -38,6 +38,8 @@ jobs:
       - name: Prepare release package
         id: package
         shell: bash
+        env:
+          EVENT_BEFORE: ${{ github.event.before || '' }}
         run: |
           set -euo pipefail
 
@@ -45,6 +47,7 @@ jobs:
           short_sha="${GITHUB_SHA::7}"
           asset_base="${RELEASE_PREFIX}-${version}-${short_sha}"
           asset_name="${asset_base}.zip"
+          release_notes_path="dist/${asset_base}-release-notes.md"
 
           mkdir -p dist/"$asset_base"/libs
           cp -R libs/. dist/"$asset_base"/libs/
@@ -60,6 +63,37 @@ jobs:
           module=${MODULE_NAME}
           EOF
 
+          previous_tag="$(git describe --tags --abbrev=0 --match 'v*' "${GITHUB_SHA}^" 2>/dev/null || true)"
+          zero_sha="0000000000000000000000000000000000000000"
+          if [[ -n "${EVENT_BEFORE:-}" && "${EVENT_BEFORE}" != "$zero_sha" ]] &&
+             git cat-file -e "${EVENT_BEFORE}^{commit}" 2>/dev/null; then
+            commit_range="${EVENT_BEFORE}..${GITHUB_SHA}"
+            commit_heading="Commit descriptions in this push"
+          elif [[ -n "$previous_tag" ]]; then
+            commit_range="${previous_tag}..${GITHUB_SHA}"
+            commit_heading="Commit descriptions since \`${previous_tag}\`"
+          elif git rev-parse "${GITHUB_SHA}^" >/dev/null 2>&1; then
+            commit_range="${GITHUB_SHA}^..${GITHUB_SHA}"
+            commit_heading="Commit descriptions"
+          else
+            commit_range="${GITHUB_SHA}"
+            commit_heading="Commit descriptions"
+          fi
+
+          {
+            echo "Automated build for \`${GITHUB_SHA}\`."
+            echo
+            echo "- Repository: \`${GITHUB_REPOSITORY}\`"
+            echo "- Ref: \`${GITHUB_REF_NAME}\`"
+            echo "- Version: \`${version}\`"
+            echo "- Run: \`${GITHUB_RUN_ID}\`"
+            echo
+            echo "## ${commit_heading}"
+            echo
+            git log --reverse --format='- `%h` %s%n%+b' "$commit_range" |
+              awk '/^- `/ { print; next } NF { print "  " $0; next } { print }'
+          } > "$release_notes_path"
+
           (cd dist && zip -r "$asset_name" "$asset_base")
 
           {
@@ -67,6 +101,7 @@ jobs:
             echo "tag=${version}"
             echo "asset_name=${asset_name}"
             echo "asset_path=dist/${asset_name}"
+            echo "release_notes_path=${release_notes_path}"
             echo "release_name=${RELEASE_PREFIX} ${version}"
           } >> "$GITHUB_OUTPUT"
 
@@ -84,17 +119,21 @@ jobs:
           RELEASE_TAG: ${{ steps.package.outputs.tag }}
           RELEASE_NAME: ${{ steps.package.outputs.release_name }}
           RELEASE_ASSET: ${{ steps.package.outputs.asset_path }}
+          RELEASE_NOTES: ${{ steps.package.outputs.release_notes_path }}
         shell: bash
         run: |
           set -euo pipefail
 
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" \
+              --title "$RELEASE_NAME" \
+              --notes-file "$RELEASE_NOTES"
             gh release upload "$RELEASE_TAG" "$RELEASE_ASSET" --clobber
           else
             gh release create "$RELEASE_TAG" "$RELEASE_ASSET" \
               --target "$GITHUB_SHA" \
               --title "$RELEASE_NAME" \
-              --notes "Automated build for ${GITHUB_SHA}."
+              --notes-file "$RELEASE_NOTES"
           fi
 
           echo "Published ${RELEASE_NAME} (${RELEASE_TAG})" >> "$GITHUB_STEP_SUMMARY"

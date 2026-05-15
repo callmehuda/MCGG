@@ -44,6 +44,12 @@ The current build uses ABI `arm64-v8a`, platform `android-21`, STL
 C++ mode `c++26`. `jni/Android.mk` optimizes native sources with `-Oz` by
 default and adds `-O0` when `NDK_DEBUG=1`.
 
+`.github/workflows/build.yml` is the CI release workflow. It builds with Android
+NDK `29.0.14206865`, packages the generated `libs/` output with
+`BUILD_INFO.txt`, uploads the zip as a workflow artifact, and publishes or
+updates GitHub releases whose notes include commit descriptions from Git
+history.
+
 ## Coding Style & Naming Conventions
 
 Follow the existing C++ style in `jni/Main.cpp`: 4-space indentation, concise
@@ -117,6 +123,8 @@ git diff --check
 
 Recent commits use short, imperative summaries such as `Add enemy predictor and
 project documentation`. Keep commit messages direct and focused on the change.
+Release notes are generated from commit subjects and body text, so include
+enough context in commits for them to stand alone in automated releases.
 
 Pull requests should include a clear description, the build command result,
 affected files, and any relevant notes about IL2CPP signatures or runtime hooks.

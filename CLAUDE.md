@@ -15,6 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - For IL2CPP changes, verify method signatures and field offsets against `dump/dump.cs`.
 - Run `git diff --check` for native or mixed code changes.
 - For documentation-only edits, inspect the Markdown diff before finishing.
+- The GitHub Actions release workflow is `.github/workflows/build.yml`; it builds with Android NDK `29.0.14206865`, packages `libs/`, and publishes release notes that include commit descriptions.
 
 ## Code Architecture & Standards
 
@@ -26,6 +27,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Runtime Caches**: Managed references are cached through atomic pointers. Hero/equipment/GogoCard table data is collected locally and published under `RuntimeMutex::FeatureMutex` when entering a new match.
 - **Diagnostics**: Runtime Status and Test tabs expose binding readiness, Recommendation Lineup readiness, managed reference refresh, Battle Power readiness, round state, Arena round-manager readiness, Unity timeScale readiness, player economy/rank/shop state, battle manager fields, battle bridge state, shop panel state, behavior API state, all manager entries, and opponent prediction signals. In the prediction table, `Will fight` is local-player opponent probability; `Current enemy` is the observed opponent for that row; `Recent` comes from the per-player opponent history.
 - **Configuration**: Settings saves and loads visual settings plus Combat, Shop, and Arena controls from `/data/data/<game-package>/files/mcgg_config.ini`.
+- **CI Releases**: `.github/workflows/build.yml` creates UTC date-based release tags, packages `libs/` with `BUILD_INFO.txt`, and generates release notes from commit subjects and body text in the push range or release-tag fallback.
 - **Memory Mapping**: `jni/structures/Structures.hpp` defines the layout of Unity/Mono types to allow native interaction with managed objects.
 - **Reference**: `dump/dump.cs` serves as the source of truth for the target game's internal C# structure.
 

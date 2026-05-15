@@ -24,6 +24,7 @@ Repository ini membangun shared library `arm64-v8a` untuk lingkungan Android Uni
 - [Build](#build)
 - [Struktur Repository](#struktur-repository)
 - [Konfigurasi Build](#konfigurasi-build)
+- [Packaging Rilis CI](#packaging-rilis-ci)
 - [Alur Runtime](#alur-runtime)
 - [Catatan Development](#catatan-development)
 - [Troubleshooting](#troubleshooting)
@@ -302,6 +303,25 @@ Unity compatibility defines dikonfigurasi di `jni/Android.mk`:
 ```
 
 Pastikan nilai tersebut tetap selaras dengan header Unity di `jni/Il2CppVersions/`.
+
+## Packaging Rilis CI
+
+Workflow GitHub Actions di `.github/workflows/build.yml` membangun native module
+dengan Android NDK `29.0.14206865`, mengunggah zip rilis sebagai workflow
+artifact, dan memublikasikan GitHub release untuk run yang bukan pull request.
+
+Nama asset rilis memakai prefix proyek, versi berbasis tanggal UTC, metadata
+workflow run, dan short commit SHA. Setiap package menyertakan
+`BUILD_INFO.txt` berisi metadata repository, ref, commit, versi, run, NDK, dan
+module yang digunakan untuk build tersebut.
+
+Release notes dibuat dari Git history. Isinya mencakup konteks repository/ref
+serta deskripsi commit untuk push range saat GitHub menyediakannya; jika tidak,
+workflow memakai rentang dari tag `v*` sebelumnya sampai commit saat ini, lalu
+fallback ke commit saat ini saja. Subject commit dan body commit akan disertakan
+jika ada. Release yang sudah ada dengan tag generated yang sama akan diperbarui
+dengan notes hasil generate terbaru sebelum asset diunggah ulang memakai
+`--clobber`.
 
 ## Alur Runtime
 
