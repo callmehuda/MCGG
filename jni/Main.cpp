@@ -137,7 +137,7 @@ namespace RuntimeConfig {
     constexpr int TableRetryMs = 2000;
     constexpr int ArenaTickMs = 100;
     constexpr int ShopTickMs = 100;
-    constexpr int LocalUiTickMs = 250;
+    constexpr int CombatTickMs = 250;
     constexpr int OpponentPredictionTickMs = 500;
     constexpr int ShopActionCooldownMs = 350;
     constexpr int ShopRepeatBuyCooldownMs = 1500;
@@ -167,12 +167,13 @@ void TickOpponentPredictionHistory(uint64_t selfAccountId);
 // Feature toggles, cached managed references, and throttled runtime state.
 namespace FeatureState {
     std::atomic<bool> CombatInvisibleScout{false};
-    std::atomic<bool> CombatHideAllBloodBars{false};
-    std::atomic<bool> CombatHideJoystick{false};
-    std::atomic<bool> CombatHideSocialDragArea{false};
-    std::atomic<bool> CombatBloodBarsHiddenApplied{false};
-    std::atomic<bool> CombatJoystickHiddenApplied{false};
-    std::atomic<bool> CombatSocialDragAreaHiddenApplied{false};
+    std::atomic<bool> CombatForceWin{false};
+    std::atomic<bool> CombatPreventHpLoss{false};
+    std::atomic<bool> CombatBoostAttackRatio{false};
+    std::atomic<bool> CombatCrippleEnemies{false};
+    std::atomic<int> CombatAttackRatioPercent{5000};
+    std::atomic<int> CombatEnemyAttackRatioPercent{1};
+    std::atomic<int> CombatFightValue{999999999};
 
     std::atomic<bool> ShopBuyFreeHero{false};
     std::atomic<bool> ShopBuySelectedHero{false};
@@ -185,11 +186,6 @@ namespace FeatureState {
     std::atomic<int> ShopKeepGoldAt{20};
     std::atomic<int> ShopRecommendTargetCount{9};
     std::unordered_map<int, HeroAutomationState> ShopSelectedHeroes;
-    std::atomic<bool> AutomationOpenShopDuringPrepare{false};
-    std::atomic<bool> AutomationCloseShopDuringFight{false};
-    std::atomic<bool> AutomationHideShopEntry{false};
-    std::atomic<bool> AutomationKeepChatClosed{false};
-    std::atomic<bool> AutomationShopEntryHiddenApplied{false};
 
     std::atomic<int> ArenaHeroStar{1};
     std::atomic<bool> ArenaItemEnhanced{false};
@@ -200,6 +196,11 @@ namespace FeatureState {
     std::atomic<bool> ArenaForceLevel99{false};
     std::atomic<bool> ArenaOutsideMapPlacement{false};
     std::atomic<bool> ArenaAllEnemyHpOne{false};
+    std::atomic<bool> ArenaPassiveGold{false};
+    std::atomic<int> ArenaGoldTarget{999999};
+    std::atomic<bool> ArenaFreeEconomy{false};
+    std::atomic<bool> ArenaUnlimitedHeroPool{false};
+    std::atomic<bool> ArenaNoShopLock{false};
     std::atomic<int> ArenaPrice{5};
 
     std::atomic<void*> BattleBridge{nullptr};
@@ -218,7 +219,7 @@ namespace FeatureState {
     std::chrono::steady_clock::time_point LastReferenceRefresh{};
     std::chrono::steady_clock::time_point LastArenaTick{};
     std::chrono::steady_clock::time_point LastShopTick{};
-    std::chrono::steady_clock::time_point LastLocalUiTick{};
+    std::chrono::steady_clock::time_point LastCombatTick{};
     std::chrono::steady_clock::time_point LastOpponentPredictionTick{};
     std::chrono::steady_clock::time_point LastTableLoadAttempt{};
     std::chrono::steady_clock::time_point LastShopAction{};
@@ -470,6 +471,18 @@ namespace Originals {
     bool (*MCLogicBattleManager_get_IsHost)(void* instance);
     uint64_t (*MCLogicBattleManager_get_m_uAccountId)(void* instance);
     void* (*MCLogicBattleManager_GetCurrentOpponent)(void* instance);
+    void (*MCLogicBattleManager_OnModifyPlayerBlood)(
+        void* instance,
+        int reduceHp,
+        bool isFromCurse,
+        int effectId
+    );
+    void (*MCLogicBattleManager_OnFightOver)(
+        void* instance,
+        bool failed,
+        bool includeInvader,
+        bool doubleFailed
+    );
     bool (*MCLogicBattleManager_HasAliveFighter)(void* instance, int campType);
     void (*MCLogicBattleManager_GetAliveFighter)(
         void* instance,
@@ -502,18 +515,11 @@ namespace Originals {
     bool (*MCBattleBridge_IsHeroInRecommendLineup)(void* instance, int heroId);
     bool (*MCBattleBridge_IsSuperCrystalShopOpen)(void* instance);
     bool (*MCBattleBridge_IsGoGoCardPanelOpen)(void* instance);
-    void (*MCBattleBridge_OpenShop)(void* instance, bool open);
-    void (*MCBattleBridge_CloseChatUI)(void* instance);
     bool (*MCBattleBridge_CheckEnableKeyBoard)(void* instance);
     int64_t (*MCBattleBridge_GetFreeMemory)(void* instance);
     uint32_t (*MCBattleBridge_GetPingTimes)(void* instance);
     float (*MCBattleBridge_GetStdevPing)(void* instance);
     float (*MCBattleBridge_GetStdevFps)(void* instance);
-    void (*MCBattleBridge_SetJoyStickVisible)(void* instance, bool visible);
-    void (*MCBattleBridge_SetSocialDragAreaVisible)(void* instance, bool visible);
-    void (*MCBattleBridge_SetJoyStickUIShow)(void* instance, bool show);
-    void (*MCBattleBridge_SetShopEnterActive)(void* instance, bool active);
-    void (*MCBattleBridge_SetAllBloodVisible)(void* instance, bool visible);
     void (*MCChessPlayerData_UpdateCoin)(void* instance, int addValue, int changeType);
 
     void (*MCShowSpectatorComp_SetSpectate)(void* instance, uint64_t accountId);
@@ -1354,6 +1360,40 @@ std::vector<std::pair<TKey, TValue>> CopyDictionaryEntries(
 
 namespace Hooks {
     void MCShowSpectatorComp_SetSpectate(void* instance, uint64_t accountId);
+    bool MCLogicBattleData_ILOGIC_IsCurrFreeBuy(
+        void* instance,
+        uint64_t accountId,
+        int slot,
+        bool* needFx
+    );
+    int MCLogicBattleData_ILOGIC_GetRefreshCost(void* instance, uint64_t accountId);
+    bool MCLogicBattleData_ILOGIC_IsRefreshFree(void* instance, uint64_t accountId);
+    int MCLogicBattleData_ILogic_HeroCountInPool(void* instance, int heroId);
+    bool MCLogicBattleData_ILOGIC_GetBattleResultHistory(
+        void* instance,
+        uint64_t accountId,
+        int round
+    );
+    bool MCLogicBattleData_ILOGIC_CanUpgrade(
+        void* instance,
+        uint64_t accountId,
+        int coin
+    );
+    bool MCLogicBattleData_ILOGIC_GetShopIsForbid(void* instance, uint64_t accountId);
+    int MCLogicBattleData_ILOGIC_GetUpgradeCost(void* instance, uint64_t accountId);
+    bool MCLogicBattleManager_get_m_bDefendFaild(void* instance);
+    void MCLogicBattleManager_OnModifyPlayerBlood(
+        void* instance,
+        int reduceHp,
+        bool isFromCurse,
+        int effectId
+    );
+    void MCLogicBattleManager_OnFightOver(
+        void* instance,
+        bool failed,
+        bool includeInvader,
+        bool doubleFailed
+    );
     bool MCBondUtil_CheckRelationActive_Config(
         void* config,
         int curActiveCount,
@@ -1482,8 +1522,9 @@ void ResolveFeatureBindings() {
         "ILOGIC_GetPlayerHP",
         {"UInt64"}
     );
-    ResolveOriginal(
+    HookResolvedMethod(
         Originals::MCLogicBattleData_ILOGIC_GetBattleResultHistory,
+        (void*)Hooks::MCLogicBattleData_ILOGIC_GetBattleResultHistory,
         "",
         "MCLogicBattleData",
         "ILOGIC_GetBattleResultHistory",
@@ -1503,22 +1544,25 @@ void ResolveFeatureBindings() {
         "ILOGIC_GetShopItemData",
         {"UInt64", "Int32"}
     );
-    ResolveOriginal(
+    HookResolvedMethod(
         Originals::MCLogicBattleData_ILOGIC_IsCurrFreeBuy,
+        (void*)Hooks::MCLogicBattleData_ILOGIC_IsCurrFreeBuy,
         "",
         "MCLogicBattleData",
         "ILOGIC_IsCurrFreeBuy",
         {"UInt64", "Int32", "Boolean"}
     );
-    ResolveOriginal(
+    HookResolvedMethod(
         Originals::MCLogicBattleData_ILOGIC_GetRefreshCost,
+        (void*)Hooks::MCLogicBattleData_ILOGIC_GetRefreshCost,
         "",
         "MCLogicBattleData",
         "ILOGIC_GetRefreshCost",
         {"UInt64"}
     );
-    ResolveOriginal(
+    HookResolvedMethod(
         Originals::MCLogicBattleData_ILOGIC_IsRefreshFree,
+        (void*)Hooks::MCLogicBattleData_ILOGIC_IsRefreshFree,
         "",
         "MCLogicBattleData",
         "ILOGIC_IsRefreshFree",
@@ -1531,8 +1575,9 @@ void ResolveFeatureBindings() {
         "ILogic_HeroOwnCount",
         {"UInt64", "Int32"}
     );
-    ResolveOriginal(
+    HookResolvedMethod(
         Originals::MCLogicBattleData_ILogic_HeroCountInPool,
+        (void*)Hooks::MCLogicBattleData_ILogic_HeroCountInPool,
         "",
         "MCLogicBattleData",
         "ILogic_HeroCountInPool",
@@ -1636,22 +1681,25 @@ void ResolveFeatureBindings() {
         "ILOGIC_GetPlayerLevel",
         {"UInt64"}
     );
-    ResolveOriginal(
+    HookResolvedMethod(
         Originals::MCLogicBattleData_ILOGIC_GetUpgradeCost,
+        (void*)Hooks::MCLogicBattleData_ILOGIC_GetUpgradeCost,
         "",
         "MCLogicBattleData",
         "ILOGIC_GetUpgradeCost",
         {"UInt64"}
     );
-    ResolveOriginal(
+    HookResolvedMethod(
         Originals::MCLogicBattleData_ILOGIC_CanUpgrade,
+        (void*)Hooks::MCLogicBattleData_ILOGIC_CanUpgrade,
         "",
         "MCLogicBattleData",
         "ILOGIC_CanUpgrade",
         {"UInt64", "Int32"}
     );
-    ResolveOriginal(
+    HookResolvedMethod(
         Originals::MCLogicBattleData_ILOGIC_GetShopIsForbid,
+        (void*)Hooks::MCLogicBattleData_ILOGIC_GetShopIsForbid,
         "",
         "MCLogicBattleData",
         "ILOGIC_GetShopIsForbid",
@@ -1829,8 +1877,9 @@ void ResolveFeatureBindings() {
         "BuyNormalHero",
         {"MCLogicHeroShopItemData", "Boolean"}
     );
-    ResolveOriginal(
+    HookResolvedMethod(
         Originals::MCLogicBattleManager_get_m_bDefendFaild,
+        (void*)Hooks::MCLogicBattleManager_get_m_bDefendFaild,
         "",
         "MCLogicBattleManager",
         "get_m_bDefendFaild",
@@ -1856,6 +1905,22 @@ void ResolveFeatureBindings() {
         "MCLogicBattleManager",
         "GetCurrentOpponent",
         {}
+    );
+    HookResolvedMethod(
+        Originals::MCLogicBattleManager_OnModifyPlayerBlood,
+        (void*)Hooks::MCLogicBattleManager_OnModifyPlayerBlood,
+        "",
+        "MCLogicBattleManager",
+        "OnModifyPlayerBlood",
+        {"Int32", "Boolean", "Int32"}
+    );
+    HookResolvedMethod(
+        Originals::MCLogicBattleManager_OnFightOver,
+        (void*)Hooks::MCLogicBattleManager_OnFightOver,
+        "",
+        "MCLogicBattleManager",
+        "OnFightOver",
+        {"Boolean", "Boolean", "Boolean"}
     );
     ResolveOriginal(
         Originals::MCLogicBattleManager_HasAliveFighter,
@@ -2005,20 +2070,6 @@ void ResolveFeatureBindings() {
         {}
     );
     ResolveOriginal(
-        Originals::MCBattleBridge_OpenShop,
-        "",
-        "MCBattleBridge",
-        "OpenShop",
-        {"Boolean"}
-    );
-    ResolveOriginal(
-        Originals::MCBattleBridge_CloseChatUI,
-        "",
-        "MCBattleBridge",
-        "CloseChatUI",
-        {}
-    );
-    ResolveOriginal(
         Originals::MCBattleBridge_CheckEnableKeyBoard,
         "",
         "MCBattleBridge",
@@ -2052,41 +2103,6 @@ void ResolveFeatureBindings() {
         "MCBattleBridge",
         "GetStdevFps",
         {}
-    );
-    ResolveOriginal(
-        Originals::MCBattleBridge_SetJoyStickVisible,
-        "",
-        "MCBattleBridge",
-        "SetJoyStickVisible",
-        {"Boolean"}
-    );
-    ResolveOriginal(
-        Originals::MCBattleBridge_SetSocialDragAreaVisible,
-        "",
-        "MCBattleBridge",
-        "SetSocialDragAreaVisible",
-        {"Boolean"}
-    );
-    ResolveOriginal(
-        Originals::MCBattleBridge_SetJoyStickUIShow,
-        "",
-        "MCBattleBridge",
-        "SetJoyStickUIShow",
-        {"Boolean"}
-    );
-    ResolveOriginal(
-        Originals::MCBattleBridge_SetShopEnterActive,
-        "",
-        "MCBattleBridge",
-        "SetShopEnterActive",
-        {"Boolean"}
-    );
-    ResolveOriginal(
-        Originals::MCBattleBridge_SetAllBloodVisible,
-        "",
-        "MCBattleBridge",
-        "SetAllBloodVisible",
-        {"Boolean"}
     );
     ResolveOriginal(
         Originals::MCChessPlayerData_UpdateCoin,
@@ -2247,6 +2263,27 @@ void* GetBattleManagerByAccountId(uint64_t accountId) {
     }
 
     return nullptr;
+}
+
+bool IsSelfAccount(uint64_t accountId) {
+    uint64_t selfAccountId = GetSelfAccountId();
+    return selfAccountId != 0 && accountId == selfAccountId;
+}
+
+bool IsSelfBattleManager(void* battleManager) {
+    if (!battleManager) {
+        return false;
+    }
+
+    if (battleManager == GetSelfLogicBattleManager()) {
+        return true;
+    }
+
+    if (!Originals::MCLogicBattleManager_get_m_uAccountId) {
+        return false;
+    }
+
+    return IsSelfAccount(Originals::MCLogicBattleManager_get_m_uAccountId(battleManager));
 }
 
 uint64_t ParseAccountIdOrDefault(const std::string& value, uint64_t fallback) {
@@ -3440,14 +3477,181 @@ void GiveGold() {
     }
 }
 
+bool HasAnyCombatPowerState() {
+    return FeatureState::CombatForceWin ||
+        FeatureState::CombatPreventHpLoss ||
+        FeatureState::CombatBoostAttackRatio ||
+        FeatureState::CombatCrippleEnemies;
+}
+
+void ApplyPlayerHpFields(void* playerData, int hpValue, bool useMaxHp) {
+    if (!playerData) {
+        return;
+    }
+
+    static FieldInfo* currentHpField = nullptr;
+    static FieldInfo* maxHpField = nullptr;
+    static FieldInfo* lastReduceHpField = nullptr;
+    static FieldInfo* failField = nullptr;
+
+    if (!currentHpField) {
+        currentHpField = GetFieldInfoFromName("", "MCChessPlayerData", "m_iCurrentHP");
+    }
+
+    if (!maxHpField) {
+        maxHpField = GetFieldInfoFromName("", "MCChessPlayerData", "m_iMaxHP");
+    }
+
+    if (!lastReduceHpField) {
+        lastReduceHpField = GetFieldInfoFromName("", "MCChessPlayerData", "m_iLastReduceHP");
+    }
+
+    if (!failField) {
+        failField = GetFieldInfoFromName("", "MCChessPlayerData", "<m_bFail>k__BackingField");
+    }
+
+    int targetHp = hpValue;
+    if (useMaxHp && maxHpField) {
+        targetHp = std::max(GetField<int>(reinterpret_cast<Il2CppObject*>(playerData), maxHpField), 1);
+    }
+
+    SetField(reinterpret_cast<Il2CppObject*>(playerData), currentHpField, targetHp);
+
+    if (useMaxHp) {
+        SetField(reinterpret_cast<Il2CppObject*>(playerData), lastReduceHpField, 0);
+        SetField(reinterpret_cast<Il2CppObject*>(playerData), failField, false);
+    }
+}
+
+void ApplyBattleManagerPowerFields(
+    void* battleManager,
+    bool forceWin,
+    bool boostAttack,
+    double attackRatio,
+    int fightValue
+) {
+    if (!battleManager) {
+        return;
+    }
+
+    static FieldInfo* attackRatioField = nullptr;
+    static FieldInfo* selfFightValueField = nullptr;
+    static FieldInfo* killerFightValueField = nullptr;
+    static FieldInfo* defendFailedField = nullptr;
+    static FieldInfo* lastRoundWinField = nullptr;
+
+    if (!attackRatioField) {
+        attackRatioField = GetFieldInfoFromName("", "MCLogicBattleManager", "m_AtkRatio");
+    }
+
+    if (!selfFightValueField) {
+        selfFightValueField = GetFieldInfoFromName("", "MCLogicBattleManager", "_selfFightValue");
+    }
+
+    if (!killerFightValueField) {
+        killerFightValueField = GetFieldInfoFromName("", "MCLogicBattleManager", "killerFightValue");
+    }
+
+    if (!defendFailedField) {
+        defendFailedField =
+            GetFieldInfoFromName("", "MCLogicBattleManager", "<m_bDefendFaild>k__BackingField");
+    }
+
+    if (!lastRoundWinField) {
+        lastRoundWinField = GetFieldInfoFromName("", "MCLogicBattleManager", "isLastRoundWin");
+    }
+
+    if (boostAttack) {
+        SetField(reinterpret_cast<Il2CppObject*>(battleManager), attackRatioField, attackRatio);
+        SetField(reinterpret_cast<Il2CppObject*>(battleManager), selfFightValueField, fightValue);
+        SetField(reinterpret_cast<Il2CppObject*>(battleManager), killerFightValueField, fightValue);
+    }
+
+    if (forceWin) {
+        SetField(reinterpret_cast<Il2CppObject*>(battleManager), defendFailedField, false);
+        SetField(reinterpret_cast<Il2CppObject*>(battleManager), lastRoundWinField, true);
+    }
+}
+
+void ApplyCombatState(uint64_t selfAccountId) {
+    if (!IsIl2CppRuntimeReady() || selfAccountId == 0 || !HasAnyCombatPowerState()) {
+        return;
+    }
+
+    bool forceWin = FeatureState::CombatForceWin.load();
+    bool preventHpLoss = FeatureState::CombatPreventHpLoss.load();
+    bool boostAttack = FeatureState::CombatBoostAttackRatio.load();
+    bool crippleEnemies = FeatureState::CombatCrippleEnemies.load();
+    double selfAttackRatio =
+        static_cast<double>(std::clamp(FeatureState::CombatAttackRatioPercent.load(), 100, 100000)) /
+        100.0;
+    double enemyAttackRatio =
+        static_cast<double>(std::clamp(FeatureState::CombatEnemyAttackRatioPercent.load(), 0, 100)) /
+        100.0;
+    int fightValue = std::clamp(FeatureState::CombatFightValue.load(), 0, 999999999);
+
+    void* selfManager = GetSelfLogicBattleManager();
+    ApplyBattleManagerPowerFields(selfManager, forceWin, boostAttack, selfAttackRatio, fightValue);
+
+    if ((preventHpLoss || forceWin) && Originals::MCLogicBattleData_ILOGIC_GetPlayerData) {
+        void* selfPlayerData =
+            Originals::MCLogicBattleData_ILOGIC_GetPlayerData(nullptr, selfAccountId);
+        ApplyPlayerHpFields(selfPlayerData, 1, true);
+    }
+
+    if (!crippleEnemies) {
+        return;
+    }
+
+    if (!Originals::MCLogicBattleData_ILOGIC_GetAllBattleMgr ||
+        !Originals::MCLogicBattleData_ILOGIC_GetPlayerData) {
+        return;
+    }
+
+    auto* battleManagers = Originals::MCLogicBattleData_ILOGIC_GetAllBattleMgr(nullptr);
+    const MonoStructures::Dictionary<uint64_t, void*>::Entry* entries = nullptr;
+    int entryLimit = 0;
+
+    if (!TryGetDictionaryEntries(battleManagers, &entries, &entryLimit)) {
+        return;
+    }
+
+    for (int i = 0; entries && i < entryLimit; ++i) {
+        const auto& entry = entries[i];
+
+        if (entry.hashCode < 0 || entry.key == 0 || entry.key == selfAccountId) {
+            continue;
+        }
+
+        ApplyBattleManagerPowerFields(
+            entry.value,
+            false,
+            true,
+            enemyAttackRatio,
+            0
+        );
+
+        void* enemyPlayerData =
+            Originals::MCLogicBattleData_ILOGIC_GetPlayerData(nullptr, entry.key);
+        ApplyPlayerHpFields(enemyPlayerData, 1, false);
+    }
+}
+
 void ApplyArenaState(uint64_t selfAccountId) {
     if (!IsIl2CppRuntimeReady() || selfAccountId == 0) {
         return;
     }
 
-    if ((FeatureState::ArenaForceLevel99 || FeatureState::ArenaAllEnemyHpOne) &&
+    if ((FeatureState::ArenaForceLevel99 ||
+         FeatureState::ArenaAllEnemyHpOne ||
+         FeatureState::ArenaPassiveGold) &&
         Originals::MCLogicBattleData_ILOGIC_GetPlayerData) {
         static FieldInfo* populationField = nullptr;
+        static FieldInfo* slotPopulationField = nullptr;
+        static FieldInfo* maxPopulationField = nullptr;
+        static FieldInfo* levelField = nullptr;
+        static FieldInfo* maxLevelField = nullptr;
+        static FieldInfo* extraPopulationField = nullptr;
         static FieldInfo* hpField = nullptr;
 
         if (!populationField) {
@@ -3455,19 +3659,59 @@ void ApplyArenaState(uint64_t selfAccountId) {
                 GetFieldInfoFromName("", "MCChessPlayerData", "m_iTotallPopulation");
         }
 
+        if (!slotPopulationField) {
+            slotPopulationField =
+                GetFieldInfoFromName("", "MCChessPlayerData", "m_iSlotPopulation");
+        }
+
+        if (!maxPopulationField) {
+            maxPopulationField =
+                GetFieldInfoFromName("", "MCChessPlayerData", "<m_iMaxTotalPopulation>k__BackingField");
+        }
+
+        if (!levelField) {
+            levelField = GetFieldInfoFromName("", "MCChessPlayerData", "m_iLevel");
+        }
+
+        if (!maxLevelField) {
+            maxLevelField = GetFieldInfoFromName("", "MCChessPlayerData", "m_iMaxLevel");
+        }
+
+        if (!extraPopulationField) {
+            extraPopulationField =
+                GetFieldInfoFromName("", "MCChessPlayerData", "<m_iExtraPopulation>k__BackingField");
+        }
+
         if (!hpField) {
             hpField = GetFieldInfoFromName("", "MCChessPlayerData", "m_iCurrentHP");
         }
 
-        if (FeatureState::ArenaForceLevel99) {
-            void* selfPlayerData =
-                Originals::MCLogicBattleData_ILOGIC_GetPlayerData(nullptr, selfAccountId);
+        void* selfPlayerData =
+            Originals::MCLogicBattleData_ILOGIC_GetPlayerData(nullptr, selfAccountId);
 
-            if (selfPlayerData) {
-                SetField(
-                    reinterpret_cast<Il2CppObject*>(selfPlayerData),
-                    populationField,
-                    99
+        if (FeatureState::ArenaForceLevel99 && selfPlayerData) {
+            Il2CppObject* selfObject = reinterpret_cast<Il2CppObject*>(selfPlayerData);
+            SetField(selfObject, levelField, 99);
+            SetField(selfObject, maxLevelField, 99);
+            SetField(selfObject, populationField, 99);
+            SetField(selfObject, slotPopulationField, 99);
+            SetField(selfObject, maxPopulationField, 99);
+            SetField(selfObject, extraPopulationField, 99);
+        }
+
+        if (FeatureState::ArenaPassiveGold &&
+            selfPlayerData &&
+            Originals::MCChessPlayerData_UpdateCoin &&
+            Originals::MCLogicBattleData_ILOGIC_GetPlayerCoin) {
+            int targetGold = std::clamp(FeatureState::ArenaGoldTarget.load(), 0, 999999999);
+            int currentGold =
+                Originals::MCLogicBattleData_ILOGIC_GetPlayerCoin(nullptr, selfAccountId);
+
+            if (currentGold < targetGold) {
+                Originals::MCChessPlayerData_UpdateCoin(
+                    selfPlayerData,
+                    targetGold - currentGold,
+                    105
                 );
             }
         }
@@ -3632,6 +3876,11 @@ void RunShopAutomation(uint64_t selfAccountId) {
             );
         }
 
+        if (FeatureState::ArenaFreeEconomy) {
+            isFreeBuy = true;
+            needFx = false;
+        }
+
         MCLogicHeroShopItemData shopData =
             Originals::MCLogicBattleData_ILOGIC_GetShopItemData(
                 nullptr,
@@ -3756,11 +4005,13 @@ void RunShopAutomation(uint64_t selfAccountId) {
         return;
     }
 
-    int refreshCost = Originals::MCLogicBattleData_ILOGIC_GetRefreshCost ?
+    int refreshCost = FeatureState::ArenaFreeEconomy ? 0 :
+        Originals::MCLogicBattleData_ILOGIC_GetRefreshCost ?
         Originals::MCLogicBattleData_ILOGIC_GetRefreshCost(nullptr, selfAccountId) :
         0;
-    bool isFreeRefresh = Originals::MCLogicBattleData_ILOGIC_IsRefreshFree &&
-        Originals::MCLogicBattleData_ILOGIC_IsRefreshFree(nullptr, selfAccountId);
+    bool isFreeRefresh = FeatureState::ArenaFreeEconomy ||
+        (Originals::MCLogicBattleData_ILOGIC_IsRefreshFree &&
+         Originals::MCLogicBattleData_ILOGIC_IsRefreshFree(nullptr, selfAccountId));
     int coin = getCoin();
     bool canRefresh =
         isFreeRefresh ||
@@ -3771,97 +4022,6 @@ void RunShopAutomation(uint64_t selfAccountId) {
     if (canRefresh) {
         Originals::UIPanelBattleHeroShop_KeyBoardRefreshShop(FeatureState::HeroShopPanel);
         MarkShopRefreshAttempt(now);
-    }
-}
-
-bool HasAnyLocalUiFeatureState() {
-    return FeatureState::CombatHideAllBloodBars ||
-        FeatureState::CombatHideJoystick ||
-        FeatureState::CombatHideSocialDragArea ||
-        FeatureState::CombatBloodBarsHiddenApplied ||
-        FeatureState::CombatJoystickHiddenApplied ||
-        FeatureState::CombatSocialDragAreaHiddenApplied ||
-        FeatureState::AutomationOpenShopDuringPrepare ||
-        FeatureState::AutomationCloseShopDuringFight ||
-        FeatureState::AutomationHideShopEntry ||
-        FeatureState::AutomationKeepChatClosed ||
-        FeatureState::AutomationShopEntryHiddenApplied;
-}
-
-void ApplyLocalUiFeatures(uint64_t selfAccountId) {
-    if (!IsIl2CppRuntimeReady() || !HasAnyLocalUiFeatureState()) {
-        return;
-    }
-
-    void* battleBridge = FeatureState::BattleBridge.load();
-
-    if (!battleBridge) {
-        return;
-    }
-
-    // MCBattleBridge UI calls are local presentation changes; they do not
-    // request battle state changes from the game server.
-    bool hideBloodBars = FeatureState::CombatHideAllBloodBars.load();
-    if (Originals::MCBattleBridge_SetAllBloodVisible &&
-        (hideBloodBars || FeatureState::CombatBloodBarsHiddenApplied.load())) {
-        Originals::MCBattleBridge_SetAllBloodVisible(battleBridge, !hideBloodBars);
-        FeatureState::CombatBloodBarsHiddenApplied = hideBloodBars;
-    }
-
-    bool hideJoystick = FeatureState::CombatHideJoystick.load();
-    if (hideJoystick || FeatureState::CombatJoystickHiddenApplied.load()) {
-        if (Originals::MCBattleBridge_SetJoyStickVisible) {
-            Originals::MCBattleBridge_SetJoyStickVisible(battleBridge, !hideJoystick);
-        }
-
-        if (Originals::MCBattleBridge_SetJoyStickUIShow) {
-            Originals::MCBattleBridge_SetJoyStickUIShow(battleBridge, !hideJoystick);
-        }
-
-        FeatureState::CombatJoystickHiddenApplied = hideJoystick;
-    }
-
-    bool hideSocialDragArea = FeatureState::CombatHideSocialDragArea.load();
-    if (Originals::MCBattleBridge_SetSocialDragAreaVisible &&
-        (hideSocialDragArea || FeatureState::CombatSocialDragAreaHiddenApplied.load())) {
-        Originals::MCBattleBridge_SetSocialDragAreaVisible(
-            battleBridge,
-            !hideSocialDragArea
-        );
-        FeatureState::CombatSocialDragAreaHiddenApplied = hideSocialDragArea;
-    }
-
-    bool hideShopEntry = FeatureState::AutomationHideShopEntry.load();
-    if (Originals::MCBattleBridge_SetShopEnterActive &&
-        (hideShopEntry || FeatureState::AutomationShopEntryHiddenApplied.load())) {
-        Originals::MCBattleBridge_SetShopEnterActive(battleBridge, !hideShopEntry);
-        FeatureState::AutomationShopEntryHiddenApplied = hideShopEntry;
-    }
-
-    if (FeatureState::AutomationKeepChatClosed &&
-        Originals::MCBattleBridge_CloseChatUI) {
-        Originals::MCBattleBridge_CloseChatUI(battleBridge);
-    }
-
-    bool shouldOpenShop = FeatureState::AutomationOpenShopDuringPrepare.load();
-    bool shouldCloseShop = FeatureState::AutomationCloseShopDuringFight.load();
-
-    if ((shouldOpenShop || shouldCloseShop) &&
-        selfAccountId != 0 &&
-        FeatureState::WasInMatch &&
-        Originals::MCBattleBridge_OpenShop &&
-        Originals::MCLogicBattleData_ILOGIC_IsFightSection &&
-        Originals::MCLogicBattleData_ILOGIC_IsFightResultSection) {
-        bool isFightSection =
-            Originals::MCLogicBattleData_ILOGIC_IsFightSection(nullptr);
-        bool isFightResultSection =
-            Originals::MCLogicBattleData_ILOGIC_IsFightResultSection(nullptr);
-
-        if (shouldCloseShop && (isFightSection || isFightResultSection)) {
-            Originals::MCBattleBridge_OpenShop(battleBridge, false);
-        } else if (shouldOpenShop && !isFightSection && !isFightResultSection) {
-            Originals::MCBattleBridge_OpenShop(battleBridge, true);
-        }
     }
 }
 
@@ -3886,8 +4046,8 @@ void TickFeatures() {
         RunShopAutomation(selfAccountId);
     }
 
-    if (IntervalElapsed(FeatureState::LastLocalUiTick, RuntimeConfig::LocalUiTickMs, now)) {
-        ApplyLocalUiFeatures(selfAccountId);
+    if (IntervalElapsed(FeatureState::LastCombatTick, RuntimeConfig::CombatTickMs, now)) {
+        ApplyCombatState(selfAccountId);
     }
 
     if (IntervalElapsed(
@@ -4084,10 +4244,18 @@ void ClampConfigurableState() {
     UiState::ItemSpacingX = std::clamp(UiState::ItemSpacingX.load(), 0.0f, 32.0f);
     UiState::ItemSpacingY = std::clamp(UiState::ItemSpacingY.load(), 0.0f, 32.0f);
     UiState::IndentSpacing = std::clamp(UiState::IndentSpacing.load(), 0.0f, 48.0f);
+    FeatureState::CombatAttackRatioPercent =
+        std::clamp(FeatureState::CombatAttackRatioPercent.load(), 100, 100000);
+    FeatureState::CombatEnemyAttackRatioPercent =
+        std::clamp(FeatureState::CombatEnemyAttackRatioPercent.load(), 0, 100);
+    FeatureState::CombatFightValue =
+        std::clamp(FeatureState::CombatFightValue.load(), 0, 999999999);
     FeatureState::ShopKeepGoldAt = std::clamp(FeatureState::ShopKeepGoldAt.load(), 0, 999999);
     FeatureState::ShopRecommendTargetCount =
         std::clamp(FeatureState::ShopRecommendTargetCount.load(), 1, 99);
     FeatureState::ArenaHeroStar = std::clamp(FeatureState::ArenaHeroStar.load(), 1, 3);
+    FeatureState::ArenaGoldTarget =
+        std::clamp(FeatureState::ArenaGoldTarget.load(), 0, 999999999);
     FeatureState::ArenaPrice = std::clamp(FeatureState::ArenaPrice.load(), 0, 99);
 
     {
@@ -4131,9 +4299,13 @@ void ResetVisualSettings() {
 
 void ResetFeatureSettings() {
     FeatureState::CombatInvisibleScout = false;
-    FeatureState::CombatHideAllBloodBars = false;
-    FeatureState::CombatHideJoystick = false;
-    FeatureState::CombatHideSocialDragArea = false;
+    FeatureState::CombatForceWin = false;
+    FeatureState::CombatPreventHpLoss = false;
+    FeatureState::CombatBoostAttackRatio = false;
+    FeatureState::CombatCrippleEnemies = false;
+    FeatureState::CombatAttackRatioPercent = 5000;
+    FeatureState::CombatEnemyAttackRatioPercent = 1;
+    FeatureState::CombatFightValue = 999999999;
     FeatureState::ShopBuyFreeHero = false;
     FeatureState::ShopBuySelectedHero = false;
     FeatureState::ShopBuyRecommendLineup = false;
@@ -4144,10 +4316,6 @@ void ResetFeatureSettings() {
     FeatureState::ShopKeepGold = false;
     FeatureState::ShopKeepGoldAt = 20;
     FeatureState::ShopRecommendTargetCount = 9;
-    FeatureState::AutomationOpenShopDuringPrepare = false;
-    FeatureState::AutomationCloseShopDuringFight = false;
-    FeatureState::AutomationHideShopEntry = false;
-    FeatureState::AutomationKeepChatClosed = false;
     ClearShopHeroTargets();
     FeatureState::ArenaHeroStar = 1;
     FeatureState::ArenaItemEnhanced = false;
@@ -4158,6 +4326,11 @@ void ResetFeatureSettings() {
     FeatureState::ArenaForceLevel99 = false;
     FeatureState::ArenaOutsideMapPlacement = false;
     FeatureState::ArenaAllEnemyHpOne = false;
+    FeatureState::ArenaPassiveGold = false;
+    FeatureState::ArenaGoldTarget = 999999;
+    FeatureState::ArenaFreeEconomy = false;
+    FeatureState::ArenaUnlimitedHeroPool = false;
+    FeatureState::ArenaNoShopLock = false;
     FeatureState::ArenaPrice = 5;
 }
 
@@ -4354,9 +4527,13 @@ void ApplyConfigValue(const std::string& key, const std::string& value) {
     else if (key == "itemSpacingY") UiState::ItemSpacingY = ParseConfigFloat(value, UiState::ItemSpacingY);
     else if (key == "indentSpacing") UiState::IndentSpacing = ParseConfigFloat(value, UiState::IndentSpacing);
     else if (key == "combatInvisibleScout") FeatureState::CombatInvisibleScout = ParseConfigBool(value, FeatureState::CombatInvisibleScout);
-    else if (key == "combatHideAllBloodBars") FeatureState::CombatHideAllBloodBars = ParseConfigBool(value, FeatureState::CombatHideAllBloodBars);
-    else if (key == "combatHideJoystick") FeatureState::CombatHideJoystick = ParseConfigBool(value, FeatureState::CombatHideJoystick);
-    else if (key == "combatHideSocialDragArea") FeatureState::CombatHideSocialDragArea = ParseConfigBool(value, FeatureState::CombatHideSocialDragArea);
+    else if (key == "combatForceWin") FeatureState::CombatForceWin = ParseConfigBool(value, FeatureState::CombatForceWin);
+    else if (key == "combatPreventHpLoss") FeatureState::CombatPreventHpLoss = ParseConfigBool(value, FeatureState::CombatPreventHpLoss);
+    else if (key == "combatBoostAttackRatio") FeatureState::CombatBoostAttackRatio = ParseConfigBool(value, FeatureState::CombatBoostAttackRatio);
+    else if (key == "combatCrippleEnemies") FeatureState::CombatCrippleEnemies = ParseConfigBool(value, FeatureState::CombatCrippleEnemies);
+    else if (key == "combatAttackRatioPercent") FeatureState::CombatAttackRatioPercent = ParseConfigInt(value, FeatureState::CombatAttackRatioPercent);
+    else if (key == "combatEnemyAttackRatioPercent") FeatureState::CombatEnemyAttackRatioPercent = ParseConfigInt(value, FeatureState::CombatEnemyAttackRatioPercent);
+    else if (key == "combatFightValue") FeatureState::CombatFightValue = ParseConfigInt(value, FeatureState::CombatFightValue);
     else if (key == "shopBuyFreeHero") FeatureState::ShopBuyFreeHero = ParseConfigBool(value, FeatureState::ShopBuyFreeHero);
     else if (key == "shopBuySelectedHero") FeatureState::ShopBuySelectedHero = ParseConfigBool(value, FeatureState::ShopBuySelectedHero);
     else if (key == "shopBuyRecommendLineup") FeatureState::ShopBuyRecommendLineup = ParseConfigBool(value, FeatureState::ShopBuyRecommendLineup);
@@ -4368,10 +4545,6 @@ void ApplyConfigValue(const std::string& key, const std::string& value) {
     else if (key == "shopKeepGoldAt") FeatureState::ShopKeepGoldAt = ParseConfigInt(value, FeatureState::ShopKeepGoldAt);
     else if (key == "shopRecommendTargetCount") FeatureState::ShopRecommendTargetCount = ParseConfigInt(value, FeatureState::ShopRecommendTargetCount);
     else if (key == "shopSelectedHeroes") LoadShopSelectedHeroes(value);
-    else if (key == "automationOpenShopDuringPrepare") FeatureState::AutomationOpenShopDuringPrepare = ParseConfigBool(value, FeatureState::AutomationOpenShopDuringPrepare);
-    else if (key == "automationCloseShopDuringFight") FeatureState::AutomationCloseShopDuringFight = ParseConfigBool(value, FeatureState::AutomationCloseShopDuringFight);
-    else if (key == "automationHideShopEntry") FeatureState::AutomationHideShopEntry = ParseConfigBool(value, FeatureState::AutomationHideShopEntry);
-    else if (key == "automationKeepChatClosed") FeatureState::AutomationKeepChatClosed = ParseConfigBool(value, FeatureState::AutomationKeepChatClosed);
     else if (key == "arenaHeroStar") FeatureState::ArenaHeroStar = ParseConfigInt(value, FeatureState::ArenaHeroStar);
     else if (key == "arenaItemEnhanced") FeatureState::ArenaItemEnhanced = ParseConfigBool(value, FeatureState::ArenaItemEnhanced);
     else if (key == "arenaGogoCardEnabled") FeatureState::ArenaGogoCardEnabled = ParseConfigBool(value, FeatureState::ArenaGogoCardEnabled);
@@ -4381,6 +4554,11 @@ void ApplyConfigValue(const std::string& key, const std::string& value) {
     else if (key == "arenaForceLevel99") FeatureState::ArenaForceLevel99 = ParseConfigBool(value, FeatureState::ArenaForceLevel99);
     else if (key == "arenaOutsideMapPlacement") FeatureState::ArenaOutsideMapPlacement = ParseConfigBool(value, FeatureState::ArenaOutsideMapPlacement);
     else if (key == "arenaAllEnemyHpOne") FeatureState::ArenaAllEnemyHpOne = ParseConfigBool(value, FeatureState::ArenaAllEnemyHpOne);
+    else if (key == "arenaPassiveGold") FeatureState::ArenaPassiveGold = ParseConfigBool(value, FeatureState::ArenaPassiveGold);
+    else if (key == "arenaGoldTarget") FeatureState::ArenaGoldTarget = ParseConfigInt(value, FeatureState::ArenaGoldTarget);
+    else if (key == "arenaFreeEconomy") FeatureState::ArenaFreeEconomy = ParseConfigBool(value, FeatureState::ArenaFreeEconomy);
+    else if (key == "arenaUnlimitedHeroPool") FeatureState::ArenaUnlimitedHeroPool = ParseConfigBool(value, FeatureState::ArenaUnlimitedHeroPool);
+    else if (key == "arenaNoShopLock") FeatureState::ArenaNoShopLock = ParseConfigBool(value, FeatureState::ArenaNoShopLock);
     else if (key == "arenaPrice") FeatureState::ArenaPrice = ParseConfigInt(value, FeatureState::ArenaPrice);
 }
 
@@ -4432,13 +4610,17 @@ bool SaveConfigToFile(const std::string& path) {
     WriteConfigFloat(file, "itemSpacingY", UiState::ItemSpacingY);
     WriteConfigFloat(file, "indentSpacing", UiState::IndentSpacing);
     WriteConfigBool(file, "combatInvisibleScout", FeatureState::CombatInvisibleScout);
-    WriteConfigBool(file, "combatHideAllBloodBars", FeatureState::CombatHideAllBloodBars);
-    WriteConfigBool(file, "combatHideJoystick", FeatureState::CombatHideJoystick);
-    WriteConfigBool(
+    WriteConfigBool(file, "combatForceWin", FeatureState::CombatForceWin);
+    WriteConfigBool(file, "combatPreventHpLoss", FeatureState::CombatPreventHpLoss);
+    WriteConfigBool(file, "combatBoostAttackRatio", FeatureState::CombatBoostAttackRatio);
+    WriteConfigBool(file, "combatCrippleEnemies", FeatureState::CombatCrippleEnemies);
+    WriteConfigInt(file, "combatAttackRatioPercent", FeatureState::CombatAttackRatioPercent);
+    WriteConfigInt(
         file,
-        "combatHideSocialDragArea",
-        FeatureState::CombatHideSocialDragArea
+        "combatEnemyAttackRatioPercent",
+        FeatureState::CombatEnemyAttackRatioPercent
     );
+    WriteConfigInt(file, "combatFightValue", FeatureState::CombatFightValue);
     WriteConfigBool(file, "shopBuyFreeHero", FeatureState::ShopBuyFreeHero);
     WriteConfigBool(file, "shopBuySelectedHero", FeatureState::ShopBuySelectedHero);
     WriteConfigBool(file, "shopBuyRecommendLineup", FeatureState::ShopBuyRecommendLineup);
@@ -4454,18 +4636,6 @@ bool SaveConfigToFile(const std::string& path) {
     WriteConfigInt(file, "shopKeepGoldAt", FeatureState::ShopKeepGoldAt);
     WriteConfigInt(file, "shopRecommendTargetCount", GetRecommendLineupTargetCount());
     WriteConfigString(file, "shopSelectedHeroes", FormatShopSelectedHeroes());
-    WriteConfigBool(
-        file,
-        "automationOpenShopDuringPrepare",
-        FeatureState::AutomationOpenShopDuringPrepare
-    );
-    WriteConfigBool(
-        file,
-        "automationCloseShopDuringFight",
-        FeatureState::AutomationCloseShopDuringFight
-    );
-    WriteConfigBool(file, "automationHideShopEntry", FeatureState::AutomationHideShopEntry);
-    WriteConfigBool(file, "automationKeepChatClosed", FeatureState::AutomationKeepChatClosed);
     WriteConfigInt(file, "arenaHeroStar", FeatureState::ArenaHeroStar);
     WriteConfigBool(file, "arenaItemEnhanced", FeatureState::ArenaItemEnhanced);
     WriteConfigBool(file, "arenaGogoCardEnabled", FeatureState::ArenaGogoCardEnabled);
@@ -4475,6 +4645,11 @@ bool SaveConfigToFile(const std::string& path) {
     WriteConfigBool(file, "arenaForceLevel99", FeatureState::ArenaForceLevel99);
     WriteConfigBool(file, "arenaOutsideMapPlacement", FeatureState::ArenaOutsideMapPlacement);
     WriteConfigBool(file, "arenaAllEnemyHpOne", FeatureState::ArenaAllEnemyHpOne);
+    WriteConfigBool(file, "arenaPassiveGold", FeatureState::ArenaPassiveGold);
+    WriteConfigInt(file, "arenaGoldTarget", FeatureState::ArenaGoldTarget);
+    WriteConfigBool(file, "arenaFreeEconomy", FeatureState::ArenaFreeEconomy);
+    WriteConfigBool(file, "arenaUnlimitedHeroPool", FeatureState::ArenaUnlimitedHeroPool);
+    WriteConfigBool(file, "arenaNoShopLock", FeatureState::ArenaNoShopLock);
     WriteConfigInt(file, "arenaPrice", FeatureState::ArenaPrice);
 
     fclose(file);
@@ -4894,8 +5069,7 @@ bool HasShopSelectBinding();
 bool HasShopAutomationBindings();
 bool HasShopRefreshBindings();
 bool HasShopRecommendLineupBindings();
-bool HasCombatLocalUiBindings();
-bool HasClientUiAutomationBindings();
+bool HasCombatPowerBindings();
 bool HasArenaHeroBindings();
 bool HasArenaItemBindings();
 bool HasArenaGogoCardBindings();
@@ -5072,8 +5246,7 @@ void DrawRuntimeStatus() {
         DrawStatusRow("Shop automation", HasShopAutomationBindings());
         DrawStatusRow("Recommend lineup", HasShopRecommendLineupBindings());
         DrawStatusRow("Shop refresh panel", HasShopRefreshBindings());
-        DrawStatusRow("Combat local UI", HasCombatLocalUiBindings());
-        DrawStatusRow("Client UI automation", HasClientUiAutomationBindings());
+        DrawStatusRow("Combat power", HasCombatPowerBindings());
         DrawStatusRow("Arena heroes", HasArenaHeroBindings());
         DrawStatusRow("Arena items", HasArenaItemBindings());
         DrawStatusRow("Arena GogoCards", HasArenaGogoCardBindings());
@@ -5221,23 +5394,12 @@ bool HasShopRecommendLineupBindings() {
           Originals::MCBattleBridge_IsHeroInRecommendLineup));
 }
 
-bool HasCombatLocalUiBindings() {
+bool HasCombatPowerBindings() {
     return IsIl2CppRuntimeReady() &&
-        FeatureState::BattleBridge &&
-        Originals::MCBattleBridge_SetAllBloodVisible &&
-        Originals::MCBattleBridge_SetJoyStickVisible &&
-        Originals::MCBattleBridge_SetJoyStickUIShow &&
-        Originals::MCBattleBridge_SetSocialDragAreaVisible;
-}
-
-bool HasClientUiAutomationBindings() {
-    return IsIl2CppRuntimeReady() &&
-        FeatureState::BattleBridge &&
-        Originals::MCBattleBridge_OpenShop &&
-        Originals::MCBattleBridge_CloseChatUI &&
-        Originals::MCBattleBridge_SetShopEnterActive &&
-        Originals::MCLogicBattleData_ILOGIC_IsFightSection &&
-        Originals::MCLogicBattleData_ILOGIC_IsFightResultSection;
+        Originals::MCLogicBattleManager_get_m_bDefendFaild &&
+        Originals::MCLogicBattleManager_OnModifyPlayerBlood &&
+        Originals::MCLogicBattleManager_OnFightOver &&
+        Originals::MCLogicBattleData_ILOGIC_GetPlayerData;
 }
 
 bool HasArenaHeroBindings() {
@@ -5259,6 +5421,7 @@ bool HasArenaGogoCardBindings() {
 bool HasArenaGoldBindings() {
     return IsIl2CppRuntimeReady() &&
         Originals::MCLogicBattleData_ILOGIC_GetPlayerData &&
+        Originals::MCLogicBattleData_ILOGIC_GetPlayerCoin &&
         Originals::MCChessPlayerData_UpdateCoin;
 }
 
@@ -5396,8 +5559,6 @@ void DrawInfoTab() {
 }
 
 void DrawCombatTab() {
-    ImGui::SeparatorText("Lineup");
-
     if (!Originals::MCShowSpectatorComp_SetSpectate) {
         DrawWaitingText("Waiting for spectator hook");
     }
@@ -5407,25 +5568,30 @@ void DrawCombatTab() {
         FeatureState::CombatInvisibleScout
     );
 
-    ImGui::SeparatorText("Client UI");
+    ImGui::SeparatorText("Battle Power");
 
-    if (!HasCombatLocalUiBindings()) {
-        DrawWaitingText("Waiting for combat local UI bindings");
+    if (!HasCombatPowerBindings()) {
+        DrawWaitingText("Waiting for combat power bindings");
     }
 
-    void* battleBridge = FeatureState::BattleBridge.load();
-    if (battleBridge && Originals::MCBattleBridge_CheckEnableKeyBoard) {
-        ImGui::Text(
-            "Keyboard enabled: %s",
-            FormatBool(Originals::MCBattleBridge_CheckEnableKeyBoard(battleBridge)).c_str()
-        );
-    } else {
-        ImGui::TextUnformatted("Keyboard enabled: Waiting");
-    }
+    DrawAtomicCheckbox("Force defend win", FeatureState::CombatForceWin);
+    DrawAtomicCheckbox("Prevent self HP loss", FeatureState::CombatPreventHpLoss);
+    DrawAtomicCheckbox("Boost self attack ratio", FeatureState::CombatBoostAttackRatio);
+    ImGui::SetNextItemWidth(150.0f);
+    DrawAtomicInputInt("Self attack ratio %", FeatureState::CombatAttackRatioPercent);
+    FeatureState::CombatAttackRatioPercent =
+        std::clamp(FeatureState::CombatAttackRatioPercent.load(), 100, 100000);
+    ImGui::SetNextItemWidth(150.0f);
+    DrawAtomicInputInt("Self fight value", FeatureState::CombatFightValue);
+    FeatureState::CombatFightValue =
+        std::clamp(FeatureState::CombatFightValue.load(), 0, 999999999);
 
-    DrawAtomicCheckbox("Hide all blood bars", FeatureState::CombatHideAllBloodBars);
-    DrawAtomicCheckbox("Hide joystick", FeatureState::CombatHideJoystick);
-    DrawAtomicCheckbox("Hide social drag area", FeatureState::CombatHideSocialDragArea);
+    ImGui::Separator();
+    DrawAtomicCheckbox("Cripple enemy boards", FeatureState::CombatCrippleEnemies);
+    ImGui::SetNextItemWidth(150.0f);
+    DrawAtomicInputInt("Enemy attack ratio %", FeatureState::CombatEnemyAttackRatioPercent);
+    FeatureState::CombatEnemyAttackRatioPercent =
+        std::clamp(FeatureState::CombatEnemyAttackRatioPercent.load(), 0, 100);
 }
 
 void DrawAppearanceTab() {
@@ -7596,29 +7762,6 @@ void DrawShopTab() {
             FeatureState::ShopKeepGoldAt =
                 std::clamp(FeatureState::ShopKeepGoldAt.load(), 0, 999999);
 
-            ImGui::Separator();
-            ImGui::SeparatorText("Client UI");
-
-            if (!HasClientUiAutomationBindings()) {
-                DrawWaitingText("Waiting for client UI automation bindings");
-            }
-
-            DrawAtomicCheckbox(
-                "Open shop during prepare",
-                FeatureState::AutomationOpenShopDuringPrepare
-            );
-            DrawAtomicCheckbox(
-                "Close shop during fight/result",
-                FeatureState::AutomationCloseShopDuringFight
-            );
-            DrawAtomicCheckbox(
-                "Hide shop entry button",
-                FeatureState::AutomationHideShopEntry
-            );
-            DrawAtomicCheckbox(
-                "Keep chat closed",
-                FeatureState::AutomationKeepChatClosed
-            );
             ImGui::EndTabItem();
         }
 
@@ -7935,9 +8078,17 @@ void DrawArenaTab() {
             }
 
             DrawAtomicCheckbox("Force all synergies active", FeatureState::ArenaForceActiveSynergy);
-            DrawAtomicCheckbox("Force player level 99", FeatureState::ArenaForceLevel99);
+            DrawAtomicCheckbox("Force level and population 99", FeatureState::ArenaForceLevel99);
             DrawAtomicCheckbox("Allow outside-map placement", FeatureState::ArenaOutsideMapPlacement);
             DrawAtomicCheckbox("Set all enemy HP to 1", FeatureState::ArenaAllEnemyHpOne);
+            DrawAtomicCheckbox("Maintain target gold", FeatureState::ArenaPassiveGold);
+            ImGui::SetNextItemWidth(150.0f);
+            DrawAtomicInputInt("Target gold", FeatureState::ArenaGoldTarget);
+            FeatureState::ArenaGoldTarget =
+                std::clamp(FeatureState::ArenaGoldTarget.load(), 0, 999999999);
+            DrawAtomicCheckbox("Free shop and upgrades", FeatureState::ArenaFreeEconomy);
+            DrawAtomicCheckbox("Unlimited hero pool", FeatureState::ArenaUnlimitedHeroPool);
+            DrawAtomicCheckbox("Disable shop lock", FeatureState::ArenaNoShopLock);
             ImGui::Separator();
             ImGui::SetNextItemWidth(120.0f);
             DrawAtomicInputInt("Hero cost filter", FeatureState::ArenaPrice);
@@ -8180,6 +8331,160 @@ namespace Hooks {
 
         if (Originals::MCShowSpectatorComp_SetSpectate) {
             Originals::MCShowSpectatorComp_SetSpectate(instance, accountId);
+        }
+    }
+
+    bool MCLogicBattleData_ILOGIC_IsCurrFreeBuy(
+        void* instance,
+        uint64_t accountId,
+        int slot,
+        bool* needFx
+    ) {
+        if (FeatureState::ArenaFreeEconomy && IsSelfAccount(accountId)) {
+            if (needFx) {
+                *needFx = false;
+            }
+            return true;
+        }
+
+        return Originals::MCLogicBattleData_ILOGIC_IsCurrFreeBuy ?
+            Originals::MCLogicBattleData_ILOGIC_IsCurrFreeBuy(instance, accountId, slot, needFx) :
+            false;
+    }
+
+    int MCLogicBattleData_ILOGIC_GetRefreshCost(void* instance, uint64_t accountId) {
+        if (FeatureState::ArenaFreeEconomy && IsSelfAccount(accountId)) {
+            return 0;
+        }
+
+        return Originals::MCLogicBattleData_ILOGIC_GetRefreshCost ?
+            Originals::MCLogicBattleData_ILOGIC_GetRefreshCost(instance, accountId) :
+            0;
+    }
+
+    bool MCLogicBattleData_ILOGIC_IsRefreshFree(void* instance, uint64_t accountId) {
+        if (FeatureState::ArenaFreeEconomy && IsSelfAccount(accountId)) {
+            return true;
+        }
+
+        return Originals::MCLogicBattleData_ILOGIC_IsRefreshFree ?
+            Originals::MCLogicBattleData_ILOGIC_IsRefreshFree(instance, accountId) :
+            false;
+    }
+
+    int MCLogicBattleData_ILogic_HeroCountInPool(void* instance, int heroId) {
+        if (FeatureState::ArenaUnlimitedHeroPool) {
+            return 99;
+        }
+
+        return Originals::MCLogicBattleData_ILogic_HeroCountInPool ?
+            Originals::MCLogicBattleData_ILogic_HeroCountInPool(instance, heroId) :
+            0;
+    }
+
+    bool MCLogicBattleData_ILOGIC_GetBattleResultHistory(
+        void* instance,
+        uint64_t accountId,
+        int round
+    ) {
+        if (FeatureState::CombatForceWin && IsSelfAccount(accountId)) {
+            return true;
+        }
+
+        return Originals::MCLogicBattleData_ILOGIC_GetBattleResultHistory ?
+            Originals::MCLogicBattleData_ILOGIC_GetBattleResultHistory(
+                instance,
+                accountId,
+                round
+            ) :
+            false;
+    }
+
+    bool MCLogicBattleData_ILOGIC_CanUpgrade(
+        void* instance,
+        uint64_t accountId,
+        int coin
+    ) {
+        if (FeatureState::ArenaFreeEconomy && IsSelfAccount(accountId)) {
+            return true;
+        }
+
+        return Originals::MCLogicBattleData_ILOGIC_CanUpgrade ?
+            Originals::MCLogicBattleData_ILOGIC_CanUpgrade(instance, accountId, coin) :
+            false;
+    }
+
+    bool MCLogicBattleData_ILOGIC_GetShopIsForbid(void* instance, uint64_t accountId) {
+        if ((FeatureState::ArenaNoShopLock || FeatureState::ArenaFreeEconomy) &&
+            IsSelfAccount(accountId)) {
+            return false;
+        }
+
+        return Originals::MCLogicBattleData_ILOGIC_GetShopIsForbid ?
+            Originals::MCLogicBattleData_ILOGIC_GetShopIsForbid(instance, accountId) :
+            false;
+    }
+
+    int MCLogicBattleData_ILOGIC_GetUpgradeCost(void* instance, uint64_t accountId) {
+        if (FeatureState::ArenaFreeEconomy && IsSelfAccount(accountId)) {
+            return 0;
+        }
+
+        return Originals::MCLogicBattleData_ILOGIC_GetUpgradeCost ?
+            Originals::MCLogicBattleData_ILOGIC_GetUpgradeCost(instance, accountId) :
+            0;
+    }
+
+    bool MCLogicBattleManager_get_m_bDefendFaild(void* instance) {
+        if (FeatureState::CombatForceWin && IsSelfBattleManager(instance)) {
+            return false;
+        }
+
+        return Originals::MCLogicBattleManager_get_m_bDefendFaild ?
+            Originals::MCLogicBattleManager_get_m_bDefendFaild(instance) :
+            false;
+    }
+
+    void MCLogicBattleManager_OnModifyPlayerBlood(
+        void* instance,
+        int reduceHp,
+        bool isFromCurse,
+        int effectId
+    ) {
+        if ((FeatureState::CombatPreventHpLoss || FeatureState::CombatForceWin) &&
+            reduceHp > 0 &&
+            IsSelfBattleManager(instance)) {
+            return;
+        }
+
+        if (Originals::MCLogicBattleManager_OnModifyPlayerBlood) {
+            Originals::MCLogicBattleManager_OnModifyPlayerBlood(
+                instance,
+                reduceHp,
+                isFromCurse,
+                effectId
+            );
+        }
+    }
+
+    void MCLogicBattleManager_OnFightOver(
+        void* instance,
+        bool failed,
+        bool includeInvader,
+        bool doubleFailed
+    ) {
+        if (FeatureState::CombatForceWin && IsSelfBattleManager(instance)) {
+            failed = false;
+            doubleFailed = false;
+        }
+
+        if (Originals::MCLogicBattleManager_OnFightOver) {
+            Originals::MCLogicBattleManager_OnFightOver(
+                instance,
+                failed,
+                includeInvader,
+                doubleFailed
+            );
         }
     }
 

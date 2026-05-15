@@ -63,7 +63,7 @@ Target default yang didukung:
 
 ### Info
 
-- Tabel runtime status untuk binding battle data, GGC, shop, Recommendation Lineup, local UI, arena, test, spectator, synergy, dan placement.
+- Tabel runtime status untuk binding battle data, GGC, shop, Recommendation Lineup, Combat power, arena, test, spectator, synergy, dan placement.
 - Tabel player dan next-enemy yang diurutkan dengan player lokal di posisi pertama.
 - Readout kualitas GGC untuk round 7 dan round 13.
 - Indikator status overlay untuk binding yang terlambat atau belum tersedia.
@@ -71,8 +71,9 @@ Target default yang didukung:
 ### Combat
 
 - Toggle Invisible Scout.
-- Toggle local UI untuk semua blood bar, visibilitas joystick, dan visibilitas social drag area.
-- Readout kesiapan keyboard dari battle bridge.
+- Force defend win, prevent self HP loss, dan combat history yang tetap menguntungkan.
+- Booster attack ratio dan fight value untuk player lokal.
+- Cripple enemy board dengan attack ratio rendah dan tekanan HP 1.
 
 ### Appearance
 
@@ -96,7 +97,6 @@ Target default yang didukung:
 - Auto-buy target hero yang dipilih.
 - Auto-buy hero dari Recommendation Lineup yang aktif.
 - Auto-refresh shop dengan stop condition untuk hero gratis, target yang dipilih, atau hero Recommendation Lineup.
-- Automasi UI client-side untuk membuka shop saat prepare, menutup shop saat fight/result, menyembunyikan tombol masuk shop, dan menjaga chat tetap tertutup.
 - Gold reserve threshold untuk automasi yang lebih aman.
 - Tabel target hero dengan jumlah target yang dapat dikonfigurasi dan tanpa field search yang bergantung pada keyboard.
 - Jumlah target Recommendation Lineup untuk automation shop tingkat lanjut.
@@ -108,10 +108,11 @@ Target default yang didukung:
 - Grant equipment, termasuk enhanced equipment.
 - Force GogoCard yang dipilih.
 - Force active synergies.
-- Helper level 99.
+- Helper level dan population 99.
 - Helper outside-map placement.
 - Helper enemy HP 1.
-- Helper gold grant.
+- Helper gold manual dan pasif.
+- Helper free shop/upgrade economy, unlimited hero pool, dan bypass shop lock.
 
 ### Test
 

@@ -70,9 +70,12 @@ git lfs pull
 Current user-facing overlay areas are Info, Combat, Appearance, Settings, Shop,
 Arena, and Test. Shop currently includes free-hero buying, manual target buying,
 Recommendation Lineup buying, auto-refresh pause conditions, keep-gold reserve,
-target counts, and client-side shop UI automation. Combat also includes local UI
-visibility toggles backed by `MCBattleBridge`. Appearance includes ImGui Dark,
-Catppuccin Mocha, and additional palettes inspired by Dear ImGui issue #707.
+and target counts. Combat includes Invisible Scout, force-win, HP-loss
+prevention, attack-ratio boosting, fight-value boosting, and enemy-board
+crippling. Arena includes hero/item/card granting, active synergy forcing,
+level/population forcing, enemy HP pressure, passive gold, free economy,
+unlimited hero pool, and shop-lock bypass helpers. Appearance includes ImGui
+Dark, Catppuccin Mocha, and additional palettes inspired by Dear ImGui issue #707.
 Test diagnostics are split into tabbed sections for prediction, bindings, round
 state, player data, battle managers, battle bridge, shop UI, behavior API, and
 all-manager views. New user-facing controls should report delayed runtime

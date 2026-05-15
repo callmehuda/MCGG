@@ -63,7 +63,7 @@ The default supported target is:
 
 ### Info
 
-- Runtime status table for battle data, GGC, shop, Recommendation Lineup, local UI, arena, test, spectator, synergy, and placement bindings.
+- Runtime status table for battle data, GGC, shop, Recommendation Lineup, Combat power, arena, test, spectator, synergy, and placement bindings.
 - Player and next-enemy table sorted with the local player first.
 - GGC quality readout for round 7 and round 13.
 - Overlay status indicators for delayed or unavailable bindings.
@@ -71,8 +71,9 @@ The default supported target is:
 ### Combat
 
 - Invisible Scout toggle.
-- Local UI toggles for all blood bars, joystick visibility, and social drag area visibility.
-- Keyboard readiness readout from the battle bridge.
+- Force defend win, prevent self HP loss, and keep combat history favorable.
+- Self attack-ratio and fight-value boosters.
+- Enemy board crippling through low attack ratio and one-HP pressure.
 
 ### Appearance
 
@@ -95,7 +96,6 @@ The default supported target is:
 - Auto-buy selected hero targets.
 - Auto-buy heroes from the active Recommendation Lineup.
 - Auto-refresh shop with stop conditions for free heroes, selected targets, or Recommendation Lineup heroes.
-- Client-side UI automation to open shop during prepare, close shop during fight/result, hide the shop entry button, and keep chat closed.
 - Gold reserve threshold for safer automation.
 - Hero target table with configurable target counts and no keyboard-dependent search field.
 - Recommendation Lineup target count for advanced shop automation.
@@ -107,10 +107,11 @@ The default supported target is:
 - Grant equipment, including enhanced equipment.
 - Force selected GogoCards.
 - Force active synergies.
-- Level 99 helper.
+- Level and population 99 helper.
 - Outside-map placement helper.
 - Enemy HP 1 helper.
-- Gold grant helper.
+- Manual and passive gold helpers.
+- Free shop/upgrade economy, unlimited hero pool, and shop-lock bypass helpers.
 
 ### Test
 
