@@ -75,11 +75,12 @@ git lfs pull
 Current user-facing overlay areas are Info, Combat, Appearance, Settings, Shop,
 Arena, and Test. Shop currently includes free-hero buying, manual target buying,
 Recommendation Lineup buying, auto-refresh pause conditions, keep-gold reserve,
-and target counts. Combat includes Invisible Scout, force-win, HP-loss
+and target counts. Combat includes Invisible Scout. Arena includes
+hero/item/card granting, Battle Power controls for force-win, HP-loss
 prevention, attack-ratio boosting, fight-value boosting, and enemy-board
-crippling. Arena includes hero/item/card granting, active synergy forcing,
-level/population forcing, enemy HP pressure, passive gold, free economy,
-unlimited hero pool, shop-lock bypass helpers, Skip Round, and SpeedHack.
+crippling, active synergy forcing, level/population forcing, enemy HP pressure,
+passive gold, free economy, unlimited hero pool, shop-lock bypass helpers, Skip
+Round, and SpeedHack.
 Appearance includes ImGui
 Dark, Catppuccin Mocha, and additional palettes inspired by Dear ImGui issue #707.
 Test diagnostics are split into tabbed sections for prediction, bindings, round

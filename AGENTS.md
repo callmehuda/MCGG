@@ -134,11 +134,12 @@ Arena, and Test. If a feature binding is missing at runtime, the overlay should
 show a `Waiting for ...` state rather than failing silently. Shop currently
 includes free-hero buying, selected target buying, Recommendation Lineup buying,
 auto-refresh pause conditions, keep-gold reserve, and target counts. Combat
-includes Invisible Scout, force-win, HP-loss prevention, attack-ratio boosting,
-fight-value boosting, and enemy-board crippling. Arena includes hero/item/card
-granting, active synergy forcing, level/population forcing, enemy HP pressure,
-passive gold, free economy, unlimited hero pool, shop-lock bypass helpers, Skip
-Round, and SpeedHack. Use the Runtime Status and Test tabs when checking binding
+includes Invisible Scout. Arena includes hero/item/card granting, Battle Power
+controls for force-win, HP-loss prevention, attack-ratio boosting, fight-value
+boosting, and enemy-board crippling, active synergy forcing, level/population
+forcing, enemy HP pressure, passive gold, free economy, unlimited hero pool,
+shop-lock bypass helpers, Skip Round, and SpeedHack. Use the Runtime Status and
+Test tabs when checking binding
 readiness, managed references, round state, round-manager state, timeScale
 binding readiness, player economy/rank/shop state, battle manager fields, battle
 bridge state, shop panel state, behavior API state, Recommendation Lineup state,

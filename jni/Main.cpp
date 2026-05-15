@@ -5377,7 +5377,7 @@ void DrawRuntimeStatus() {
         DrawStatusRow("Shop automation", HasShopAutomationBindings());
         DrawStatusRow("Recommend lineup", HasShopRecommendLineupBindings());
         DrawStatusRow("Shop refresh panel", HasShopRefreshBindings());
-        DrawStatusRow("Combat power", HasCombatPowerBindings());
+        DrawStatusRow("Battle power", HasCombatPowerBindings());
         DrawStatusRow("Arena heroes", HasArenaHeroBindings());
         DrawStatusRow("Arena items", HasArenaItemBindings());
         DrawStatusRow("Arena GogoCards", HasArenaGogoCardBindings());
@@ -5713,11 +5713,13 @@ void DrawCombatTab() {
         "Invisible Scout - hide spectate switching",
         FeatureState::CombatInvisibleScout
     );
+}
 
+void DrawArenaBattlePowerControls() {
     ImGui::SeparatorText("Battle Power");
 
     if (!HasCombatPowerBindings()) {
-        DrawWaitingText("Waiting for combat power bindings");
+        DrawWaitingText("Waiting for battle power bindings");
     }
 
     DrawAtomicCheckbox("Force defend win", FeatureState::CombatForceWin);
@@ -5814,7 +5816,7 @@ void DrawSettingsTab() {
             }
 
             ImGui::Spacing();
-            ImGui::TextUnformatted("Saved state includes visual settings, window settings, Combat, Shop, and Arena state.");
+            ImGui::TextUnformatted("Saved state includes visual settings, window settings, and Combat, Shop, and Arena controls.");
 
             ImGui::EndTabItem();
         }
@@ -8265,6 +8267,11 @@ void DrawArenaTab() {
                 ApplyArenaSpeedHack(0);
             }
 
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Battle Power")) {
+            DrawArenaBattlePowerControls();
             ImGui::EndTabItem();
         }
 

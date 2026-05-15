@@ -64,7 +64,7 @@ The default supported target is:
 ### Info
 
 - Runtime status table for battle data, GGC, shop, Recommendation Lineup,
-  Combat power, arena, round skip, speedhack, test, spectator, synergy, and
+  Battle Power, arena, round skip, speedhack, test, spectator, synergy, and
   placement bindings.
 - Player and next-enemy table sorted with the local player first.
 - GGC quality readout for round 7 and round 13.
@@ -73,9 +73,6 @@ The default supported target is:
 ### Combat
 
 - Invisible Scout toggle.
-- Force defend win, prevent self HP loss, and keep combat history favorable.
-- Self attack-ratio and fight-value boosters.
-- Enemy board crippling through low attack ratio and one-HP pressure.
 
 ### Appearance
 
@@ -89,7 +86,7 @@ The default supported target is:
 
 - Menu size, optional fixed position, mobile-friendly tab navigation, and window interaction controls.
 - Font scale, opacity, rounding, border, padding, spacing, scrollbar, and indentation controls.
-- Save and load for visual settings plus Combat, Shop, and Arena state.
+- Save and load for visual settings plus Combat, Shop, and Arena controls.
 - Default config path under the running game package, resolved as `/data/data/<game-package>/files/mcgg_config.ini`.
 
 ### Shop
@@ -109,6 +106,8 @@ The default supported target is:
 - Grant equipment, including enhanced equipment.
 - Force selected GogoCards.
 - Force active synergies.
+- Battle Power subtab for force defend win, HP-loss prevention, self
+  attack-ratio/fight-value boosting, and enemy-board crippling.
 - Level and population 99 helper.
 - Outside-map placement helper.
 - Enemy HP 1 helper.

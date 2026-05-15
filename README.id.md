@@ -64,7 +64,7 @@ Target default yang didukung:
 ### Info
 
 - Tabel runtime status untuk binding battle data, GGC, shop, Recommendation
-  Lineup, Combat power, arena, round skip, speedhack, test, spectator, synergy,
+  Lineup, Battle Power, arena, round skip, speedhack, test, spectator, synergy,
   dan placement.
 - Tabel player dan next-enemy yang diurutkan dengan player lokal di posisi pertama.
 - Readout kualitas GGC untuk round 7 dan round 13.
@@ -73,9 +73,6 @@ Target default yang didukung:
 ### Combat
 
 - Toggle Invisible Scout.
-- Force defend win, prevent self HP loss, dan combat history yang tetap menguntungkan.
-- Booster attack ratio dan fight value untuk player lokal.
-- Cripple enemy board dengan attack ratio rendah dan tekanan HP 1.
 
 ### Appearance
 
@@ -90,7 +87,7 @@ Target default yang didukung:
 - Kontrol ukuran menu, posisi tetap opsional, navigasi tab yang lebih ramah
   perangkat mobile, dan interaksi window.
 - Kontrol font scale, opacity, rounding, border, padding, spacing, scrollbar, dan indentation.
-- Save dan load untuk visual settings serta state Combat, Shop, dan Arena.
+- Save dan load untuk visual settings serta kontrol Combat, Shop, dan Arena.
 - Path config default berada di package game yang sedang berjalan, di-resolve sebagai `/data/data/<game-package>/files/mcgg_config.ini`.
 
 ### Shop
@@ -110,6 +107,8 @@ Target default yang didukung:
 - Grant equipment, termasuk enhanced equipment.
 - Force GogoCard yang dipilih.
 - Force active synergies.
+- Subtab Battle Power untuk force defend win, pencegahan HP-loss, booster
+  attack-ratio/fight-value player lokal, dan cripple enemy board.
 - Helper level dan population 99.
 - Helper outside-map placement.
 - Helper enemy HP 1.

@@ -21,21 +21,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### High-Level Architecture
 - **Core Logic**: `jni/Main.cpp` handles the entire mod lifecycle: process verification → setup thread → dependency resolution (`liblogic.so`) → IL2CPP API attachment → retryable game method and field resolution → function hooking (via Dobby) → managed reference refresh → feature ticks → appearance/config setup → ImGui overlay rendering.
 - **Feature Binding**: `ResolveFeatureBindings()` resolves game methods and hooks. Missing methods and fields are retried periodically because Unity metadata and battle objects may not be ready during first setup.
-- **Hooking Strategy**: Uses Dobby to hook `eglSwapBuffers` for frame-by-frame UI injection, `UnityEngine.Input.GetTouch` for touch-to-mouse forwarding, and selected game methods for Combat and Arena behavior.
+- **Hooking Strategy**: Uses Dobby to hook `eglSwapBuffers` for frame-by-frame UI injection, `UnityEngine.Input.GetTouch` for touch-to-mouse forwarding, and selected game methods for Combat visibility and Arena behavior.
 - **Runtime Ticks**: Shop automation and Arena effects run on separate 100 ms ticks for stability and responsiveness. Opponent prediction history refreshes on a separate throttled tick so per-player enemy history is collected outside the Test tab. Shop automation also uses bounded cooldowns for buy, repeat-buy, refresh, target-worth, and Recommendation Lineup checks.
 - **Runtime Caches**: Managed references are cached through atomic pointers. Hero/equipment/GogoCard table data is collected locally and published under `RuntimeMutex::FeatureMutex` when entering a new match.
-- **Diagnostics**: Runtime Status and Test tabs expose binding readiness, Recommendation Lineup readiness, managed reference refresh, Combat power readiness, round state, Arena round-manager readiness, Unity timeScale readiness, player economy/rank/shop state, battle manager fields, battle bridge state, shop panel state, behavior API state, all manager entries, and opponent prediction signals. In the prediction table, `Will fight` is local-player opponent probability; `Current enemy` is the observed opponent for that row; `Recent` comes from the per-player opponent history.
-- **Configuration**: Settings saves and loads visual settings plus Combat, Shop, and Arena state from `/data/data/<game-package>/files/mcgg_config.ini`.
+- **Diagnostics**: Runtime Status and Test tabs expose binding readiness, Recommendation Lineup readiness, managed reference refresh, Battle Power readiness, round state, Arena round-manager readiness, Unity timeScale readiness, player economy/rank/shop state, battle manager fields, battle bridge state, shop panel state, behavior API state, all manager entries, and opponent prediction signals. In the prediction table, `Will fight` is local-player opponent probability; `Current enemy` is the observed opponent for that row; `Recent` comes from the per-player opponent history.
+- **Configuration**: Settings saves and loads visual settings plus Combat, Shop, and Arena controls from `/data/data/<game-package>/files/mcgg_config.ini`.
 - **Memory Mapping**: `jni/structures/Structures.hpp` defines the layout of Unity/Mono types to allow native interaction with managed objects.
 - **Reference**: `dump/dump.cs` serves as the source of truth for the target game's internal C# structure.
 
 ### Current Feature Areas
 - **Info**: runtime status, player/enemy table, and GGC round 7/13 quality display.
-- **Combat**: Invisible Scout plus force-win, HP-loss prevention, attack-ratio boosting, fight-value boosting, and enemy-board crippling.
+- **Combat**: Invisible Scout.
 - **Appearance**: ImGui Dark, Catppuccin Mocha, and Dear ImGui issue #707-inspired theme selection plus Default/Noto Sans CJK font selection.
 - **Settings**: menu size, fixed position, mobile-friendly TabBar helpers, font scale, style tuning, and save/load configuration.
 - **Shop**: auto-buy free heroes, auto-buy selected targets, auto-buy Recommendation Lineup heroes, auto-refresh, pause-refresh conditions, keep-gold threshold, manual target counts, and Recommendation Lineup target counts.
-- **Arena**: hero spawn, equipment grant, GogoCard forcing, active synergy forcing, level/population 99, outside-map placement, enemy HP 1, passive gold, free economy, unlimited hero pool, shop-lock bypass helpers, Skip Round, and SpeedHack.
+- **Arena**: hero spawn, equipment grant, GogoCard forcing, Battle Power controls, active synergy forcing, level/population 99, outside-map placement, enemy HP 1, passive gold, free economy, unlimited hero pool, shop-lock bypass helpers, Skip Round, and SpeedHack.
 - **Test**: manual binding retry, account inspection, fight prediction, binding, round, player, manager, bridge, shop UI, behavior API, and all-manager diagnostics. Only the exact local current opponent should be locked to `100%` in `Will fight`; every player's enemy history and dump-backed invader order should remain available for weighted predictions.
 
 ### Project Constraints
