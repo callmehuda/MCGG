@@ -150,6 +150,7 @@ std::unordered_map<std::string, std::chrono::steady_clock::time_point> FieldMiss
 namespace RuntimeConfig {
     constexpr int BindingRetryMs = 2000;
     constexpr int ReferenceRefreshMs = 100;
+    constexpr int MatchStateCheckMs = 500;
     constexpr int TableRetryMs = 2000;
     constexpr int ArenaTickMs = 100;
     constexpr int ShopTickMs = 100;
@@ -185,6 +186,9 @@ namespace RuntimeState {
 }
 
 void TickOpponentPredictionHistory(uint64_t selfAccountId);
+void RefreshGgcInfo(bool force);
+void RefreshInfoPlayerRows(bool force);
+void RefreshNextEnemyHudText(uint64_t selfAccountId);
 
 // Feature toggles, cached managed references, and throttled runtime state.
 namespace FeatureState {
@@ -231,6 +235,22 @@ namespace FeatureState {
     std::atomic<int> AutoPlayInterestReserveGold{20};
     std::atomic<int> AutoPlaySpendBudget{0};
     std::atomic<bool> AutoPlayHoldInterest{false};
+    std::atomic<bool> AutoPlaySnapshotReady{false};
+    std::atomic<uint64_t> AutoPlaySnapshotAccountId{0};
+    std::atomic<int> AutoPlaySnapshotRound{0};
+    std::atomic<int> AutoPlaySnapshotPhase{-1};
+    std::atomic<int> AutoPlaySnapshotHp{-1};
+    std::atomic<int> AutoPlaySnapshotCoin{-1};
+    std::atomic<int> AutoPlaySnapshotLevel{-1};
+    std::atomic<int> AutoPlaySnapshotCurrentPopulation{-1};
+    std::atomic<int> AutoPlaySnapshotTotalPopulation{-1};
+    std::atomic<int> AutoPlaySnapshotLineupWorth{-1};
+    std::atomic<int> AutoPlaySnapshotFightValue{-1};
+    std::atomic<int> AutoPlaySnapshotRecommendHeroId{0};
+    std::atomic<int> AutoPlaySnapshotStarUpHeroId{0};
+    std::atomic<int> AutoPlaySnapshotCurrentOpponentFightValue{-1};
+    std::atomic<bool> AutoPlaySnapshotFightSection{false};
+    std::atomic<bool> AutoPlaySnapshotMonsterRound{false};
 
     std::atomic<bool> CombatInvisibleScout{false};
     std::atomic<bool> CombatForceWin{false};
@@ -272,6 +292,7 @@ namespace FeatureState {
     std::atomic<int> ArenaSkipTargetRound{1};
     std::atomic<uint32_t> ArenaLastSkipSourceRound{0};
     std::atomic<int> ArenaLastSkipTargetRound{0};
+    std::atomic<uint32_t> CachedGameRound{0};
     std::atomic<bool> ArenaSpeedHack{false};
     std::atomic<float> ArenaTimeScale{2.0f};
 
@@ -294,6 +315,7 @@ namespace FeatureState {
     std::chrono::steady_clock::time_point LastCombatTick{};
     std::chrono::steady_clock::time_point LastAutoPlayTick{};
     std::chrono::steady_clock::time_point LastOpponentPredictionTick{};
+    std::chrono::steady_clock::time_point LastMatchStateCheck{};
     std::chrono::steady_clock::time_point LastTableLoadAttempt{};
     std::chrono::steady_clock::time_point LastShopAction{};
     std::chrono::steady_clock::time_point LastShopBuyAttempt{};
@@ -349,6 +371,17 @@ namespace UiState {
     std::atomic<float> ItemSpacingY{4.0f};
     std::atomic<float> IndentSpacing{21.0f};
 }
+
+enum MainTabIndex {
+    MainTabInfo = 0,
+    MainTabCombat = 1,
+    MainTabAutoPlay = 2,
+    MainTabShop = 3,
+    MainTabArena = 4,
+    MainTabAppearance = 5,
+    MainTabSettings = 6,
+    MainTabTest = 7
+};
 
 namespace AppearanceState {
     ImFont* DefaultFont = nullptr;
@@ -3221,6 +3254,7 @@ void ClearTableDataCacheUnlocked() {
     FeatureState::LastArenaSkipAttempt = {};
     FeatureState::ArenaLastSkipSourceRound = 0;
     FeatureState::ArenaLastSkipTargetRound = 0;
+    FeatureState::CachedGameRound = 0;
     FeatureState::CachedShopHasWorthwhileTarget = false;
     FeatureState::CachedRecommendLineupHeroId = 0;
     FeatureState::LastShopBuyAccountId = 0;
@@ -3264,6 +3298,13 @@ bool IsBattleActive(uint64_t selfAccountId) {
 
 void RefreshTableDataForMatch(uint64_t selfAccountId) {
     if (!IsIl2CppRuntimeReady()) {
+        return;
+    }
+
+    if (!IntervalElapsed(
+            FeatureState::LastMatchStateCheck,
+            RuntimeConfig::MatchStateCheckMs
+        )) {
         return;
     }
 
@@ -4370,6 +4411,181 @@ struct AutoPlayGoldPlan {
     bool forceLevel = false;
 };
 
+void PublishAutoPlaySnapshotTelemetry(const AutoPlaySnapshot& snapshot, bool ready) {
+    FeatureState::AutoPlaySnapshotReady = ready;
+    FeatureState::AutoPlaySnapshotAccountId = ready ? snapshot.accountId : 0;
+    FeatureState::AutoPlaySnapshotRound = ready ? snapshot.round : 0;
+    FeatureState::AutoPlaySnapshotPhase = ready ? snapshot.phase : -1;
+    FeatureState::AutoPlaySnapshotHp = ready ? snapshot.hp : -1;
+    FeatureState::AutoPlaySnapshotCoin = ready ? snapshot.coin : -1;
+    FeatureState::AutoPlaySnapshotLevel = ready ? snapshot.level : -1;
+    FeatureState::AutoPlaySnapshotCurrentPopulation =
+        ready ? snapshot.currentPopulation : -1;
+    FeatureState::AutoPlaySnapshotTotalPopulation =
+        ready ? snapshot.totalPopulation : -1;
+    FeatureState::AutoPlaySnapshotLineupWorth = ready ? snapshot.lineupWorth : -1;
+    FeatureState::AutoPlaySnapshotFightValue = ready ? snapshot.fightValue : -1;
+    FeatureState::AutoPlaySnapshotRecommendHeroId =
+        ready ? snapshot.recommendHeroId : 0;
+    FeatureState::AutoPlaySnapshotStarUpHeroId =
+        ready ? snapshot.starUpHeroId : 0;
+    FeatureState::AutoPlaySnapshotCurrentOpponentFightValue =
+        ready ? snapshot.currentOpponentFightValue : -1;
+    FeatureState::AutoPlaySnapshotFightSection = ready && snapshot.fightSection;
+    FeatureState::AutoPlaySnapshotMonsterRound = ready && snapshot.monsterRound;
+
+    if (!ready) {
+        FeatureState::AutoPlayOpponentCount = 0;
+        FeatureState::AutoPlayCurrentOpponentId = 0;
+        FeatureState::AutoPlayStrongestOpponentFightValue = 0;
+        FeatureState::AutoPlayContestedTargets = 0;
+    }
+}
+
+AutoPlaySnapshot GetCachedAutoPlaySnapshot() {
+    AutoPlaySnapshot snapshot{};
+    if (!FeatureState::AutoPlaySnapshotReady.load()) {
+        return snapshot;
+    }
+
+    snapshot.accountId = FeatureState::AutoPlaySnapshotAccountId.load();
+    snapshot.round = FeatureState::AutoPlaySnapshotRound.load();
+    snapshot.phase = FeatureState::AutoPlaySnapshotPhase.load();
+    snapshot.hp = FeatureState::AutoPlaySnapshotHp.load();
+    snapshot.coin = FeatureState::AutoPlaySnapshotCoin.load();
+    snapshot.level = FeatureState::AutoPlaySnapshotLevel.load();
+    snapshot.currentPopulation = FeatureState::AutoPlaySnapshotCurrentPopulation.load();
+    snapshot.totalPopulation = FeatureState::AutoPlaySnapshotTotalPopulation.load();
+    snapshot.recommendHeroId = FeatureState::AutoPlaySnapshotRecommendHeroId.load();
+    snapshot.starUpHeroId = FeatureState::AutoPlaySnapshotStarUpHeroId.load();
+    snapshot.lineupWorth = FeatureState::AutoPlaySnapshotLineupWorth.load();
+    snapshot.fightValue = FeatureState::AutoPlaySnapshotFightValue.load();
+    snapshot.opponentCount = FeatureState::AutoPlayOpponentCount.load();
+    snapshot.currentOpponentFightValue =
+        FeatureState::AutoPlaySnapshotCurrentOpponentFightValue.load();
+    snapshot.strongestOpponentFightValue =
+        FeatureState::AutoPlayStrongestOpponentFightValue.load();
+    snapshot.contestedTargetOwners = FeatureState::AutoPlayContestedTargets.load();
+    snapshot.currentOpponentId = FeatureState::AutoPlayCurrentOpponentId.load();
+    snapshot.fightSection = FeatureState::AutoPlaySnapshotFightSection.load();
+    snapshot.monsterRound = FeatureState::AutoPlaySnapshotMonsterRound.load();
+    return snapshot;
+}
+
+AutoPlayGoldPlan GetCachedAutoPlayGoldPlan() {
+    AutoPlayGoldPlan plan{};
+    plan.interestTier = FeatureState::AutoPlayInterestTier.load();
+    plan.nextInterestGold = FeatureState::AutoPlayInterestNextGold.load();
+    plan.reserveGold = FeatureState::AutoPlayInterestReserveGold.load();
+    plan.spendBudget = FeatureState::AutoPlaySpendBudget.load();
+    plan.holdForInterest = FeatureState::AutoPlayHoldInterest.load();
+    return plan;
+}
+
+struct AutoPlayPolicyBackup {
+    bool captured = false;
+    bool shopBuyFreeHero = false;
+    bool shopBuySelectedHero = false;
+    bool shopBuyRecommendLineup = false;
+    bool shopRefresh = false;
+    bool shopStopRefreshAtFreeHero = false;
+    bool shopStopRefreshAtSelectedHero = false;
+    bool shopStopRefreshAtRecommendLineup = false;
+    bool shopKeepGold = false;
+    int shopKeepGoldAt = 20;
+    int shopRecommendTargetCount = 9;
+    bool arenaForceActiveSynergy = false;
+    bool arenaNoShopLock = false;
+    bool arenaUnlimitedHeroPool = false;
+    bool arenaPassiveGold = false;
+    int arenaGoldTarget = 999999;
+    bool arenaFreeEconomy = false;
+    bool arenaForceLevel99 = false;
+    bool arenaAllEnemyHpOne = false;
+    bool combatPreventHpLoss = false;
+    bool combatBoostAttackRatio = false;
+    int combatAttackRatioPercent = 5000;
+    int combatFightValue = 999999999;
+    bool combatForceWin = false;
+    bool combatCrippleEnemies = false;
+    int combatEnemyAttackRatioPercent = 1;
+};
+
+namespace RuntimePolicy {
+    AutoPlayPolicyBackup AutoPlayBackup;
+}
+
+void CaptureAutoPlayPolicyBackup() {
+    if (RuntimePolicy::AutoPlayBackup.captured) {
+        return;
+    }
+
+    AutoPlayPolicyBackup backup{};
+    backup.captured = true;
+    backup.shopBuyFreeHero = FeatureState::ShopBuyFreeHero.load();
+    backup.shopBuySelectedHero = FeatureState::ShopBuySelectedHero.load();
+    backup.shopBuyRecommendLineup = FeatureState::ShopBuyRecommendLineup.load();
+    backup.shopRefresh = FeatureState::ShopRefresh.load();
+    backup.shopStopRefreshAtFreeHero = FeatureState::ShopStopRefreshAtFreeHero.load();
+    backup.shopStopRefreshAtSelectedHero = FeatureState::ShopStopRefreshAtSelectedHero.load();
+    backup.shopStopRefreshAtRecommendLineup =
+        FeatureState::ShopStopRefreshAtRecommendLineup.load();
+    backup.shopKeepGold = FeatureState::ShopKeepGold.load();
+    backup.shopKeepGoldAt = FeatureState::ShopKeepGoldAt.load();
+    backup.shopRecommendTargetCount = FeatureState::ShopRecommendTargetCount.load();
+    backup.arenaForceActiveSynergy = FeatureState::ArenaForceActiveSynergy.load();
+    backup.arenaNoShopLock = FeatureState::ArenaNoShopLock.load();
+    backup.arenaUnlimitedHeroPool = FeatureState::ArenaUnlimitedHeroPool.load();
+    backup.arenaPassiveGold = FeatureState::ArenaPassiveGold.load();
+    backup.arenaGoldTarget = FeatureState::ArenaGoldTarget.load();
+    backup.arenaFreeEconomy = FeatureState::ArenaFreeEconomy.load();
+    backup.arenaForceLevel99 = FeatureState::ArenaForceLevel99.load();
+    backup.arenaAllEnemyHpOne = FeatureState::ArenaAllEnemyHpOne.load();
+    backup.combatPreventHpLoss = FeatureState::CombatPreventHpLoss.load();
+    backup.combatBoostAttackRatio = FeatureState::CombatBoostAttackRatio.load();
+    backup.combatAttackRatioPercent = FeatureState::CombatAttackRatioPercent.load();
+    backup.combatFightValue = FeatureState::CombatFightValue.load();
+    backup.combatForceWin = FeatureState::CombatForceWin.load();
+    backup.combatCrippleEnemies = FeatureState::CombatCrippleEnemies.load();
+    backup.combatEnemyAttackRatioPercent = FeatureState::CombatEnemyAttackRatioPercent.load();
+    RuntimePolicy::AutoPlayBackup = backup;
+}
+
+void RestoreAutoPlayPolicyBackup() {
+    if (!RuntimePolicy::AutoPlayBackup.captured) {
+        return;
+    }
+
+    const AutoPlayPolicyBackup backup = RuntimePolicy::AutoPlayBackup;
+    FeatureState::ShopBuyFreeHero = backup.shopBuyFreeHero;
+    FeatureState::ShopBuySelectedHero = backup.shopBuySelectedHero;
+    FeatureState::ShopBuyRecommendLineup = backup.shopBuyRecommendLineup;
+    FeatureState::ShopRefresh = backup.shopRefresh;
+    FeatureState::ShopStopRefreshAtFreeHero = backup.shopStopRefreshAtFreeHero;
+    FeatureState::ShopStopRefreshAtSelectedHero = backup.shopStopRefreshAtSelectedHero;
+    FeatureState::ShopStopRefreshAtRecommendLineup =
+        backup.shopStopRefreshAtRecommendLineup;
+    FeatureState::ShopKeepGold = backup.shopKeepGold;
+    FeatureState::ShopKeepGoldAt = backup.shopKeepGoldAt;
+    FeatureState::ShopRecommendTargetCount = backup.shopRecommendTargetCount;
+    FeatureState::ArenaForceActiveSynergy = backup.arenaForceActiveSynergy;
+    FeatureState::ArenaNoShopLock = backup.arenaNoShopLock;
+    FeatureState::ArenaUnlimitedHeroPool = backup.arenaUnlimitedHeroPool;
+    FeatureState::ArenaPassiveGold = backup.arenaPassiveGold;
+    FeatureState::ArenaGoldTarget = backup.arenaGoldTarget;
+    FeatureState::ArenaFreeEconomy = backup.arenaFreeEconomy;
+    FeatureState::ArenaForceLevel99 = backup.arenaForceLevel99;
+    FeatureState::ArenaAllEnemyHpOne = backup.arenaAllEnemyHpOne;
+    FeatureState::CombatPreventHpLoss = backup.combatPreventHpLoss;
+    FeatureState::CombatBoostAttackRatio = backup.combatBoostAttackRatio;
+    FeatureState::CombatAttackRatioPercent = backup.combatAttackRatioPercent;
+    FeatureState::CombatFightValue = backup.combatFightValue;
+    FeatureState::CombatForceWin = backup.combatForceWin;
+    FeatureState::CombatCrippleEnemies = backup.combatCrippleEnemies;
+    FeatureState::CombatEnemyAttackRatioPercent = backup.combatEnemyAttackRatioPercent;
+    RuntimePolicy::AutoPlayBackup = AutoPlayPolicyBackup{};
+}
+
 struct AutoPlayBoardUnit {
     void* instance = nullptr;
     uint32_t guid = 0;
@@ -5338,6 +5554,7 @@ AutoPlaySnapshot ReadAutoPlaySnapshot(uint64_t selfAccountId) {
     snapshot.accountId = selfAccountId;
 
     if (!IsIl2CppRuntimeReady() || selfAccountId == 0) {
+        PublishAutoPlaySnapshotTelemetry(snapshot, false);
         return snapshot;
     }
 
@@ -5496,6 +5713,7 @@ AutoPlaySnapshot ReadAutoPlaySnapshot(uint64_t selfAccountId) {
     FeatureState::AutoPlayStrongestOpponentFightValue =
         std::max(snapshot.strongestOpponentFightValue, 0);
     FeatureState::AutoPlayContestedTargets = snapshot.contestedTargetOwners;
+    PublishAutoPlaySnapshotTelemetry(snapshot, snapshot.round > 0);
 
     return snapshot;
 }
@@ -5763,6 +5981,8 @@ void ApplyAutoPlayPolicy(
     int strategy,
     const AutoPlayGoldPlan& goldPlan
 ) {
+    CaptureAutoPlayPolicyBackup();
+
     int reserve = goldPlan.reserveGold;
     int targetGold = goldPlan.passiveTargetGold;
     int recommendationTarget = goldPlan.recommendationTarget;
@@ -5832,6 +6052,7 @@ void StopBuiltInAutoPlayAI(uint64_t selfAccountId) {
 
 void StopAutoPlayRuntime(uint64_t selfAccountId) {
     StopBuiltInAutoPlayAI(selfAccountId);
+    RestoreAutoPlayPolicyBackup();
     FeatureState::AutoPlayWasRunning = false;
 }
 
@@ -6247,6 +6468,38 @@ void TickFeatures() {
     RefreshTableDataForMatch(selfAccountId);
     EnsureTableDataLoaded();
     auto now = std::chrono::steady_clock::now();
+    int activeMainTab =
+        std::clamp(UiState::MainTabIndex.load(), 0, static_cast<int>(MainTabTest));
+
+    if (selfAccountId == 0) {
+        PublishAutoPlaySnapshotTelemetry(AutoPlaySnapshot{}, false);
+    }
+
+    if (activeMainTab == MainTabInfo) {
+        RefreshGgcInfo(false);
+        RefreshInfoPlayerRows(false);
+    }
+
+    if (activeMainTab == MainTabShop ||
+        FeatureState::ShopBuyRecommendLineup.load() ||
+        FeatureState::ShopStopRefreshAtRecommendLineup.load() ||
+        (FeatureState::AutoPlayEnabled.load() && FeatureState::AutoPlayUseShop.load())) {
+        GetRecommendLineupHeroId(now);
+    }
+
+    if (Originals::MCLogicBattleData_ILOGIC_GetGameRound &&
+        (activeMainTab == MainTabArena ||
+         FeatureState::ArenaSkipRound.load() ||
+         FeatureState::AutoPlayEnabled.load())) {
+        FeatureState::CachedGameRound =
+            Originals::MCLogicBattleData_ILOGIC_GetGameRound(nullptr);
+    } else if (selfAccountId == 0) {
+        FeatureState::CachedGameRound = 0;
+    }
+
+    if (UiState::ShowNextEnemyHud.load()) {
+        RefreshNextEnemyHudText(selfAccountId);
+    }
 
     if (IntervalElapsed(FeatureState::LastAutoPlayTick, RuntimeConfig::AutoPlayTickMs, now)) {
         RunAutoPlay(selfAccountId, now);
@@ -6570,6 +6823,22 @@ void ResetFeatureSettings() {
     FeatureState::AutoPlayInterestReserveGold = 20;
     FeatureState::AutoPlaySpendBudget = 0;
     FeatureState::AutoPlayHoldInterest = false;
+    FeatureState::AutoPlaySnapshotReady = false;
+    FeatureState::AutoPlaySnapshotAccountId = 0;
+    FeatureState::AutoPlaySnapshotRound = 0;
+    FeatureState::AutoPlaySnapshotPhase = -1;
+    FeatureState::AutoPlaySnapshotHp = -1;
+    FeatureState::AutoPlaySnapshotCoin = -1;
+    FeatureState::AutoPlaySnapshotLevel = -1;
+    FeatureState::AutoPlaySnapshotCurrentPopulation = -1;
+    FeatureState::AutoPlaySnapshotTotalPopulation = -1;
+    FeatureState::AutoPlaySnapshotLineupWorth = -1;
+    FeatureState::AutoPlaySnapshotFightValue = -1;
+    FeatureState::AutoPlaySnapshotRecommendHeroId = 0;
+    FeatureState::AutoPlaySnapshotStarUpHeroId = 0;
+    FeatureState::AutoPlaySnapshotCurrentOpponentFightValue = -1;
+    FeatureState::AutoPlaySnapshotFightSection = false;
+    FeatureState::AutoPlaySnapshotMonsterRound = false;
     FeatureState::CombatInvisibleScout = false;
     FeatureState::CombatForceWin = false;
     FeatureState::CombatPreventHpLoss = false;
@@ -6608,6 +6877,7 @@ void ResetFeatureSettings() {
     FeatureState::ArenaSkipTargetRound = 1;
     FeatureState::ArenaLastSkipSourceRound = 0;
     FeatureState::ArenaLastSkipTargetRound = 0;
+    FeatureState::CachedGameRound = 0;
     FeatureState::ArenaSpeedHack = false;
     FeatureState::ArenaTimeScale = 2.0f;
     ApplyArenaSpeedHack(0);
@@ -7411,6 +7681,10 @@ namespace UiCache {
     std::vector<PlayerInfoRow> InfoPlayerRows;
     bool InfoPlayersReady = false;
     std::chrono::steady_clock::time_point LastInfoPlayerRefresh{};
+    bool GgcInfoReady = false;
+    int GgcRound7Quality = -1;
+    int GgcRound13Quality = -1;
+    std::chrono::steady_clock::time_point LastGgcInfoRefresh{};
     std::string NextEnemyHudText;
     std::chrono::steady_clock::time_point LastNextEnemyHudRefresh{};
     ImVec2 MenuWindowPos{};
@@ -7428,6 +7702,47 @@ std::string NormalizeDisplayName(const std::string& value) {
         }
     );
     return output;
+}
+
+void RefreshGgcInfo(bool force = false) {
+    if (!IsIl2CppRuntimeReady() ||
+        !Originals::MCLogicBattleData_ILOGIC_GetCrystalQualityByRound) {
+        UiCache::GgcInfoReady = false;
+        UiCache::GgcRound7Quality = -1;
+        UiCache::GgcRound13Quality = -1;
+        return;
+    }
+
+    if (!force &&
+        !IntervalElapsed(UiCache::LastGgcInfoRefresh, 500)) {
+        return;
+    }
+
+    uint64_t selfAccountId = FeatureState::LastSelfAccountId.load();
+    if (selfAccountId == 0) {
+        selfAccountId = GetSelfAccountId();
+    }
+
+    if (selfAccountId == 0) {
+        UiCache::GgcInfoReady = false;
+        UiCache::GgcRound7Quality = -1;
+        UiCache::GgcRound13Quality = -1;
+        return;
+    }
+
+    UiCache::GgcRound7Quality =
+        Originals::MCLogicBattleData_ILOGIC_GetCrystalQualityByRound(
+            nullptr,
+            selfAccountId,
+            7
+        );
+    UiCache::GgcRound13Quality =
+        Originals::MCLogicBattleData_ILOGIC_GetCrystalQualityByRound(
+            nullptr,
+            selfAccountId,
+            13
+        );
+    UiCache::GgcInfoReady = true;
 }
 
 void RefreshInfoPlayerRows(bool force = false) {
@@ -7531,7 +7846,7 @@ void DrawRuntimeStatus() {
     }
 
     char selfIdText[32];
-    uint64_t selfAccountId = IsIl2CppRuntimeReady() ? GetSelfAccountId() : 0;
+    uint64_t selfAccountId = FeatureState::LastSelfAccountId.load();
     snprintf(selfIdText, sizeof(selfIdText), "%llu", (unsigned long long)selfAccountId);
 
     char tableText[96];
@@ -7732,7 +8047,7 @@ bool HasCombatPowerBindings() {
 bool HasArenaHeroBindings() {
     return IsIl2CppRuntimeReady() &&
         Originals::MCLogicBattleManager_BuyNormalHero &&
-        (Originals::MCComp_GetGamer || GetSelfLogicBattleManager());
+        (Originals::MCComp_GetGamer || FeatureState::LastSelfAccountId.load() != 0);
 }
 
 bool HasArenaItemBindings() {
@@ -7801,48 +8116,27 @@ bool HasAutoPlayBindings() {
 void DrawGgcInfo() {
     ImGui::SeparatorText("GGC");
 
-    if (!IsIl2CppRuntimeReady()) {
+    if (!UiCache::GgcInfoReady) {
         ImGui::TextUnformatted("Waiting for GGC data");
         return;
     }
-
-    uint64_t selfAccountId = GetSelfAccountId();
-
-    if (!Originals::MCLogicBattleData_ILOGIC_GetCrystalQualityByRound ||
-        selfAccountId == 0) {
-        ImGui::TextUnformatted("Waiting for GGC data");
-        return;
-    }
-
-    int round7Quality =
-        Originals::MCLogicBattleData_ILOGIC_GetCrystalQualityByRound(
-            nullptr,
-            selfAccountId,
-            7
-        );
-    int round13Quality =
-        Originals::MCLogicBattleData_ILOGIC_GetCrystalQualityByRound(
-            nullptr,
-            selfAccountId,
-            13
-        );
 
     ImGui::TextUnformatted("Round 7");
     ImGui::SameLine(120.0f);
     ImGui::TextColored(
-        GgcQualityColor(round7Quality),
+        GgcQualityColor(UiCache::GgcRound7Quality),
         "%s (%d)",
-        GgcQualityName(round7Quality),
-        round7Quality
+        GgcQualityName(UiCache::GgcRound7Quality),
+        UiCache::GgcRound7Quality
     );
 
     ImGui::TextUnformatted("Round 13");
     ImGui::SameLine(120.0f);
     ImGui::TextColored(
-        GgcQualityColor(round13Quality),
+        GgcQualityColor(UiCache::GgcRound13Quality),
         "%s (%d)",
-        GgcQualityName(round13Quality),
-        round13Quality
+        GgcQualityName(UiCache::GgcRound13Quality),
+        UiCache::GgcRound13Quality
     );
 }
 
@@ -7860,8 +8154,6 @@ void DrawInfoPlayersTable() {
         DrawWaitingText("Waiting for battle data");
         return;
     }
-
-    RefreshInfoPlayerRows();
 
     if (!UiCache::InfoPlayersReady) {
         DrawWaitingText("Waiting for player list");
@@ -7984,15 +8276,11 @@ void DrawAutoPlayTab() {
     ImGui::EndDisabled();
 
     ImGui::SeparatorText("Runtime");
-    uint64_t selfAccountId = IsIl2CppRuntimeReady() ? GetSelfAccountId() : 0;
-    AutoPlaySnapshot snapshot = ReadAutoPlaySnapshot(selfAccountId);
+    bool telemetryReady = FeatureState::AutoPlaySnapshotReady.load();
+    AutoPlaySnapshot snapshot = GetCachedAutoPlaySnapshot();
     int pressureValue = std::clamp(FeatureState::AutoPlayPressure.load(), 0, 100);
     float pressure = static_cast<float>(pressureValue) / 100.0f;
-    AutoPlayGoldPlan goldPlan = BuildAutoPlayGoldPlan(
-        snapshot,
-        FeatureState::AutoPlayStrategy.load(),
-        pressureValue
-    );
+    AutoPlayGoldPlan goldPlan = GetCachedAutoPlayGoldPlan();
 
     ImGui::Text("Strategy: %s", AutoPlayStrategyName(FeatureState::AutoPlayStrategy.load()));
     ImGui::Text(
@@ -8012,62 +8300,73 @@ void DrawAutoPlayTab() {
         ImGui::TableSetupColumn("Signal");
         ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthFixed, 150.0f);
         ImGui::TableHeadersRow();
-        DrawValueRow("Round", snapshot.round > 0 ? FormatInt(snapshot.round) : "Waiting");
-        DrawValueRow("Phase", snapshot.phase >= 0 ? FormatInt(snapshot.phase) : "Waiting");
-        DrawValueRow("HP", snapshot.hp >= 0 ? FormatInt(snapshot.hp) : "Waiting");
-        DrawValueRow("Gold", snapshot.coin >= 0 ? FormatInt(snapshot.coin) : "Waiting");
+        DrawValueRow("Round", telemetryReady && snapshot.round > 0 ? FormatInt(snapshot.round) : "Waiting");
+        DrawValueRow("Phase", telemetryReady && snapshot.phase >= 0 ? FormatInt(snapshot.phase) : "Waiting");
+        DrawValueRow("HP", telemetryReady && snapshot.hp >= 0 ? FormatInt(snapshot.hp) : "Waiting");
+        DrawValueRow("Gold", telemetryReady && snapshot.coin >= 0 ? FormatInt(snapshot.coin) : "Waiting");
         DrawValueRow(
             "Interest tier",
-            snapshot.coin >= 0 ? FormatInt(goldPlan.interestTier) + "/5" : "Waiting"
+            telemetryReady && snapshot.coin >= 0 ? FormatInt(goldPlan.interestTier) + "/5" : "Waiting"
         );
         DrawValueRow(
             "Next interest",
-            snapshot.coin >= 0 ? FormatInt(goldPlan.nextInterestGold) : "Waiting"
+            telemetryReady && snapshot.coin >= 0 ? FormatInt(goldPlan.nextInterestGold) : "Waiting"
         );
         DrawValueRow(
             "Gold reserve",
-            snapshot.coin >= 0 ? FormatInt(goldPlan.reserveGold) : "Waiting"
+            telemetryReady && snapshot.coin >= 0 ? FormatInt(goldPlan.reserveGold) : "Waiting"
         );
         DrawValueRow(
             "Spend budget",
-            snapshot.coin >= 0 ? FormatInt(goldPlan.spendBudget) : "Waiting"
+            telemetryReady && snapshot.coin >= 0 ? FormatInt(goldPlan.spendBudget) : "Waiting"
         );
         DrawValueRow(
             "Banking interest",
-            snapshot.coin >= 0 ? FormatBool(goldPlan.holdForInterest) : "Waiting"
+            telemetryReady && snapshot.coin >= 0 ? FormatBool(goldPlan.holdForInterest) : "Waiting"
         );
-        DrawValueRow("Level", snapshot.level >= 0 ? FormatInt(snapshot.level) : "Waiting");
+        DrawValueRow("Level", telemetryReady && snapshot.level >= 0 ? FormatInt(snapshot.level) : "Waiting");
         DrawValueRow(
             "Population",
-            snapshot.currentPopulation >= 0 && snapshot.totalPopulation >= 0 ?
+            telemetryReady && snapshot.currentPopulation >= 0 && snapshot.totalPopulation >= 0 ?
                 FormatInt(snapshot.currentPopulation) + "/" + FormatInt(snapshot.totalPopulation) :
                 "Waiting"
         );
         DrawValueRow(
             "Lineup worth",
-            snapshot.lineupWorth >= 0 ? FormatInt(snapshot.lineupWorth) : "Waiting"
+            telemetryReady && snapshot.lineupWorth >= 0 ? FormatInt(snapshot.lineupWorth) : "Waiting"
         );
         DrawValueRow(
             "Fight value",
-            snapshot.fightValue >= 0 ? FormatInt(snapshot.fightValue) : "Waiting"
+            telemetryReady && snapshot.fightValue >= 0 ? FormatInt(snapshot.fightValue) : "Waiting"
         );
-        DrawValueRow("Recommendation", FormatHeroLabel(snapshot.recommendHeroId));
-        DrawValueRow("Star-up", FormatHeroLabel(snapshot.starUpHeroId));
-        DrawValueRow("Current opponent", FormatUInt64(snapshot.currentOpponentId));
+        DrawValueRow("Recommendation", telemetryReady ? FormatHeroLabel(snapshot.recommendHeroId) : "Waiting");
+        DrawValueRow("Star-up", telemetryReady ? FormatHeroLabel(snapshot.starUpHeroId) : "Waiting");
+        DrawValueRow(
+            "Current opponent",
+            telemetryReady && snapshot.currentOpponentId != 0 ?
+                FormatUInt64(snapshot.currentOpponentId) :
+                "Waiting"
+        );
         DrawValueRow(
             "Opponent fight value",
-            snapshot.currentOpponentFightValue >= 0 ?
+            telemetryReady && snapshot.currentOpponentFightValue >= 0 ?
                 FormatInt(snapshot.currentOpponentFightValue) :
                 "Waiting"
         );
         DrawValueRow(
             "Strongest opponent",
-            snapshot.strongestOpponentFightValue >= 0 ?
+            telemetryReady && snapshot.strongestOpponentFightValue >= 0 ?
                 FormatInt(snapshot.strongestOpponentFightValue) :
                 "Waiting"
         );
-        DrawValueRow("Opponent count", FormatInt(FeatureState::AutoPlayOpponentCount.load()));
-        DrawValueRow("Contested targets", FormatInt(FeatureState::AutoPlayContestedTargets.load()));
+        DrawValueRow(
+            "Opponent count",
+            telemetryReady ? FormatInt(FeatureState::AutoPlayOpponentCount.load()) : "Waiting"
+        );
+        DrawValueRow(
+            "Contested targets",
+            telemetryReady ? FormatInt(FeatureState::AutoPlayContestedTargets.load()) : "Waiting"
+        );
         DrawValueRow("Focus synergy", FormatInt(FeatureState::AutoPlayFocusGroup.load()));
         DrawValueRow("Target hero", FormatHeroLabel(FeatureState::AutoPlayTargetHeroId.load()));
         DrawValueRow("Best GogoCard", FormatInt(FeatureState::AutoPlayBestCardId.load()));
@@ -10022,12 +10321,12 @@ std::string BuildNextEnemyHudText(uint64_t selfAccountId) {
     return "Next enemy: " + enemyName + " (" + FormatInt(best->percent) + "%)";
 }
 
-void RefreshNextEnemyHudText() {
+void RefreshNextEnemyHudText(uint64_t selfAccountId) {
     if (!IntervalElapsed(UiCache::LastNextEnemyHudRefresh, 500)) {
         return;
     }
 
-    UiCache::NextEnemyHudText = BuildNextEnemyHudText(GetSelfAccountId());
+    UiCache::NextEnemyHudText = BuildNextEnemyHudText(selfAccountId);
 }
 
 void DrawNextEnemyHud() {
@@ -10035,7 +10334,6 @@ void DrawNextEnemyHud() {
         return;
     }
 
-    RefreshNextEnemyHudText();
     if (UiCache::NextEnemyHudText.empty()) {
         return;
     }
@@ -10373,8 +10671,7 @@ void DrawShopTab() {
             FeatureState::ShopRecommendTargetCount = GetRecommendLineupTargetCount();
 
             if (HasShopRecommendLineupBindings()) {
-                int recommendHeroId =
-                    GetRecommendLineupHeroId(std::chrono::steady_clock::now());
+                int recommendHeroId = FeatureState::CachedRecommendLineupHeroId.load();
                 ImGui::Text(
                     "Current recommendation: %s",
                     FormatHeroLabel(recommendHeroId).c_str()
@@ -10718,9 +11015,7 @@ void DrawArenaTab() {
                 DrawWaitingText("Waiting for timeScale binding");
             }
 
-            uint32_t currentRound = Originals::MCLogicBattleData_ILOGIC_GetGameRound ?
-                Originals::MCLogicBattleData_ILOGIC_GetGameRound(nullptr) :
-                0;
+            uint32_t currentRound = FeatureState::CachedGameRound.load();
 
             ImGui::Text(
                 "Current round: %s",
