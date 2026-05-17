@@ -26,6 +26,7 @@ Repository ini membangun shared library `arm64-v8a` untuk lingkungan Android Uni
 - [Konfigurasi Build](#konfigurasi-build)
 - [Packaging Rilis CI](#packaging-rilis-ci)
 - [Alur Runtime](#alur-runtime)
+- [Catatan Audit Runtime](#catatan-audit-runtime)
 - [Catatan Development](#catatan-development)
 - [Troubleshooting](#troubleshooting)
 - [Batasan yang Diketahui](#batasan-yang-diketahui)
@@ -214,6 +215,19 @@ plan, menilai opsi strategy/formation/shop/card/auction dari data lokal, hanya
 mem-publish counter ringkas dan selected target di bawah `FeatureMutex`, dan
 menghindari lock proyek saat memanggil API IL2CPP managed.
 
+Cadence runtime saat ini sengaja dipisah berdasarkan tanggung jawab:
+
+- Retry binding: 2000 ms.
+- Refresh managed reference: 100 ms.
+- Check state match: 500 ms.
+- Retry reload tabel: 2000 ms.
+- Tick fitur Arena: 100 ms.
+- Tick automation Shop: 100 ms.
+- Tick Combat power: 250 ms.
+- Tick Auto-Play: 250 ms.
+- Tick riwayat prediksi opponent: 500 ms.
+- Refresh teks HUD next-enemy: 500 ms saat HUD aktif.
+
 Miss metadata field juga dicoba ulang dengan backoff singkat. Ini menjaga
 metadata Unity yang terlambat tetap retryable tanpa membiarkan lookup field yang
 hilang melakukan scan ulang pada setiap tick fitur.
@@ -381,29 +395,69 @@ dengan notes hasil generate terbaru sebelum asset diunggah ulang memakai
 
 Pada saat load dan selama frame presentation, `jni/Main.cpp` menjalankan urutan berikut:
 
-1. Mengonfirmasi bahwa process saat ini adalah process target Unity yang diharapkan.
-2. Memulai setup thread.
-3. Menunggu `liblogic.so`.
-4. Me-resolve export API IL2CPP.
-5. Melampirkan native thread ke IL2CPP domain.
-6. Melakukan hook `eglSwapBuffers`.
-7. Membuat context ImGui dan me-resolve path config dari nama package game.
-8. Memuat konfigurasi proyek yang tersimpan jika file config tersedia.
-9. Memuat font appearance serta menerapkan theme dan style settings yang dipilih.
-10. Merender overlay ImGui selama frame presentation.
-11. Melakukan hook `UnityEngine.Input.GetTouch`.
-12. Meneruskan input touch Unity ke input mouse ImGui.
-13. Me-resolve method dan field fitur melalui `ResolveFeatureBindings()`.
-14. Mencoba ulang binding method dan field yang belum tersedia secara periodik.
-15. Me-refresh managed reference seperti battle bridge dan shop panel state
-    lalu mem-publish-nya melalui shared state atomic.
-16. Me-refresh state match dan me-reload cache tabel hero, equipment, dan
-    GogoCard melalui snapshot lokal sebelum publikasi terkunci.
-17. Menjalankan shop automation yang di-throttle dan arena effects pada tick
-    terpisah 100 ms, menggunakan snapshot selected-target yang bounded untuk
-    keputusan shop dan cooldown bounded untuk round skipping.
+1. Constructor mengonfirmasi command line process berisi `:UnityKillsMe`.
+2. Setup thread detached dimulai setelah process gate.
+3. Setup thread me-resolve dan melakukan hook `eglSwapBuffers` terlebih dahulu,
+   sehingga rendering menjadi frame loop jangka panjang.
+4. Setup thread menunggu `liblogic.so`, me-resolve export API IL2CPP Unity
+   `2019.4.33f1` dari deklarasi API bundled, lalu attach ke IL2CPP domain.
+5. Setup thread me-resolve dan melakukan hook `UnityEngine.Input.GetTouch` saat
+   metadata method tersedia.
+6. `RuntimeState::Il2CppReady` diset dan retry feature binding diminta.
+7. Frame hook valid pertama membuat context ImGui, mematikan persistence `.ini`
+   ImGui, me-resolve path config dari nama package game, memuat konfigurasi
+   proyek jika tersedia, memuat font, dan menerapkan theme serta style settings.
+8. Setiap hooked frame attach render thread ke IL2CPP bila memungkinkan sebelum
+   pekerjaan fitur managed berjalan.
+9. `TickFeatures()` mencoba ulang binding yang belum tersedia, me-refresh battle
+   bridge dan shop panel reference, me-refresh state match, dan mencoba ulang
+   loading table cache.
+10. Diagnostik Info, Shop, Arena, Auto-Play, HUD Settings, dan Test hanya
+    me-refresh data runtime yang dibutuhkan.
+11. Auto-Play, Arena, Shop, Combat, dan riwayat opponent berjalan pada tick
+    bounded masing-masing, bukan pada setiap render pass.
+12. Input touch Unity diteruskan ke input mouse ImGui melalui path hook
+    `GetTouch`.
 
-Urutan ini disengaja. Rendering dan input diinisialisasi terpisah dari feature binding agar overlay dapat melaporkan readiness runtime secara parsial sementara object IL2CPP yang terlambat tetap dicoba resolve.
+Urutan ini disengaja. Render hook bisa aktif sebelum IL2CPP siap, sehingga logic
+fitur managed harus tetap berada di balik readiness check. Rendering, input, dan
+feature binding diinisialisasi terpisah agar overlay dapat melaporkan readiness
+runtime secara parsial sementara object IL2CPP yang terlambat tetap dicoba
+resolve.
+
+## Catatan Audit Runtime
+
+Review terbaru terhadap `jni/Main.cpp`, `jni/structures/Structures.hpp`,
+`jni/Android.mk`, `.github/workflows/build.yml`, dan `dump/dump.cs` menyorot
+area yang rawan bug berikut:
+
+- Render hook dipasang sebelum `liblogic.so` dan IL2CPP siap. Kode frame-time
+  harus tahan terhadap runtime managed yang belum siap dan tidak boleh memanggil
+  API IL2CPP kecuali `AttachRenderIl2CppThread()` berhasil.
+- Lookup method sengaja hanya memakai hasil method yang sukses sebagai cache
+  reusable. Scan method kosong tetap retryable. Lookup field hanya meng-cache
+  miss di balik backoff retry binding. Jangan mengubahnya menjadi failure
+  permanen.
+- Matching method memakai class name, method name, jumlah parameter, dan
+  containment nama parameter yang case-insensitive. Binding baru yang sensitif
+  terhadap overload harus dicek terhadap dump, bukan hanya compile sukses.
+- Publikasi table cache bersifat all-or-nothing untuk data hero, equipment, dan
+  GogoCard. Jika salah satu tabel belum tersedia setelah update game, UI
+  terkait harus tetap menampilkan `Waiting for ...`, bukan menganggap tabel game
+  kosong.
+- Automation Shop bergantung pada operability UI live, bukan hanya method battle
+  data. Aksi buy dan refresh harus tetap membutuhkan shop panel yang tidak
+  delay, tidak spectate, dan diterima oleh `CanOperate(Boolean)`.
+- Auto-Play sementara memiliki assist Shop, Arena, dan Combat melalui policy
+  backup yang di-capture. Edit user pada toggle assist saat Auto-Play aktif
+  dapat kembali ke nilai sebelum Auto-Play saat Auto-Play berhenti.
+- Prediksi opponent menggabungkan pair data exact, state invasion manager,
+  urutan invader berbasis dump, fallback round-robin, dan riwayat pertemuan
+  terbaru. Hanya current opponent lokal yang exact yang boleh ditampilkan
+  sebagai `100%`.
+- SpeedHack mengubah time scale Unity global. Fitur ini harus tetap reset ke
+  `1.0x` saat dinonaktifkan, saat state battle aktif hilang, atau saat feature
+  state di-reset.
 
 ## Catatan Development
 
@@ -411,6 +465,10 @@ Urutan ini disengaja. Rendering dan input diinisialisasi terpisah dari feature b
 - Validasi class name, method name, jumlah parameter, return type, dan field layout terhadap local reference artifacts sebelum menambahkan IL2CPP call.
 - Pertahankan runtime code fitur di `jni/Main.cpp` kecuali refactor memang diminta secara eksplisit.
 - Gunakan section lokal yang jelas dan komentar singkat di sekitar IL2CPP call yang berisiko.
+- Pertahankan urutan boot saat ini: process gate, setup thread, hook
+  `eglSwapBuffers` lebih awal, tunggu `liblogic.so`, resolve export IL2CPP,
+  attach setup thread, hook `GetTouch`, lalu inisialisasi overlay di render
+  thread.
 - Gunakan tab Runtime Status dan Test saat memvalidasi binding baru atau menelusuri runtime state yang terlambat tersedia.
 - Untuk perubahan Arena Skip Round, verifikasi
   `MCLogicBattleData.get_logicRoundMgr`, `LogicRoundMgr.SetRound(UInt32)`, dan
@@ -429,7 +487,9 @@ Urutan ini disengaja. Rendering dan input diinisialisasi terpisah dari feature b
   mempertahankan navigasi utama berbasis TabBar.
 - Pertahankan persistence Settings tetap memakai file config milik proyek, bukan mengaktifkan persistence `.ini` ImGui.
 - Pertahankan retryable binding behavior. Jangan menyimpan method atau field unresolved secara permanen sebagai missing.
-- Pertahankan tick terpisah 100 ms untuk shop automation dan arena effects, kecuali perubahan timing memang bagian dari task.
+- Pertahankan tick terpisah 100 ms untuk shop automation dan arena effects,
+  tick 250 ms untuk Combat dan Auto-Play, serta cadence 500 ms untuk riwayat
+  opponent/HUD kecuali perubahan timing memang bagian dari task.
 - Pertahankan throttle shop automation untuk buy, repeat-buy, refresh, target-worth, dan pengecekan Recommendation Lineup.
 - Lindungi akses langsung ke `FeatureState::Heroes`, `FeatureState::Equips`,
   `FeatureState::Cards`, dan `FeatureState::ShopSelectedHeroes` dengan
@@ -556,6 +616,11 @@ Periksa log GitHub Actions untuk:
 - Kompatibilitas Unity dipatok ke `2019.4.33f1`.
 - Runtime binding dapat berubah ketika target application update.
 - Ketersediaan fitur bergantung pada runtime state dan managed object yang sedang loaded.
+- Render hook dapat aktif sebelum metadata managed siap, sehingga frame awal
+  dapat menampilkan readiness overlay yang masih parsial.
+- Resolution method IL2CPP dipandu dump tetapi saat runtime tetap berbasis nama
+  dan bentuk parameter; method game yang overload atau rename membutuhkan
+  validasi manual terhadap `dump/dump.cs`.
 - Automation Recommendation Lineup bergantung pada data lineup match aktif yang diekspos runtime.
 - Prediksi opponent bersifat probabilistik saat data current-pair belum tersedia;
   data live `m_CurPairDict` tetap menjadi prioritas saat runtime mengeksposnya.

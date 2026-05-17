@@ -42,6 +42,12 @@ git lfs pull
 - Keep Unity compatibility aligned with `2019.4.33f1`.
 - Keep native language mode aligned with `c++26` unless the build configuration
   intentionally changes.
+- Preserve the current startup order: process gate, setup thread, early
+  `eglSwapBuffers` hook, `liblogic.so` wait, IL2CPP export resolution, setup
+  thread attach, `UnityEngine.Input.GetTouch` hook, then lazy render-thread
+  ImGui initialization.
+- The render hook can run before IL2CPP is ready. Frame-time managed work must
+  stay behind readiness checks and successful render-thread IL2CPP attachment.
 - Use the Runtime Status and Test tabs to validate binding readiness, managed
   references, round state, player economy/rank/shop state, battle manager
   fields, battle bridge state, shop panel state, behavior API state, Auto-Play
@@ -160,6 +166,34 @@ Follow the existing C++ style in `jni/Main.cpp`:
   key-value Settings file format.
 - Keep retryable IL2CPP field misses throttled instead of permanently failed or
   repeatedly rescanned from hot feature paths.
+- Keep runtime cadence split by responsibility: 100 ms for Shop and Arena,
+  250 ms for Combat and Auto-Play, and 500 ms for opponent prediction history
+  and the next-enemy HUD refresh.
+
+## Runtime Audit Checklist
+
+Use this checklist when looking for hidden bugs or logic flaws:
+
+- Confirm every new IL2CPP method pointer, hook signature, value type, and field
+  read against `dump/dump.cs`, especially overloaded methods where runtime
+  resolution only checks method name, parameter count, and parameter-name shape.
+- Keep early-frame paths safe when `eglSwapBuffers` is hooked but IL2CPP is not
+  ready or the render thread has not attached.
+- Keep method misses retryable and field misses backed off rather than
+  permanently cached as unavailable.
+- Treat table caches as all-or-nothing for heroes, equipment, and GogoCards.
+  UI and automation should show `Waiting for ...` while any required table is
+  unavailable.
+- Keep shop buy and refresh actions gated on the live shop panel being
+  non-delayed, non-spectate, and accepted by `CanOperate(Boolean)`.
+- Preserve Auto-Play policy backup and restore behavior for Shop, Arena, and
+  Combat assist toggles.
+- Keep opponent prediction exactness narrow: only the local player's exact
+  current opponent should be forced to `100%`.
+- Reset Unity time scale to `1.0x` on every SpeedHack disable, inactive-battle,
+  and feature-reset path.
+- For repository-wide documentation refreshes, update top-level Markdown only
+  and leave `goal.md` plus submodule Markdown untouched.
 
 ## Build Verification
 
@@ -176,7 +210,8 @@ libs/arm64-v8a/libmain.so
 ```
 
 Documentation-only changes do not require a native build, but mention that in
-the pull request.
+the pull request. Inspect the Markdown diff and run `git diff --check` before
+submitting documentation-only repository refreshes.
 
 ## Release Workflow
 

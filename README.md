@@ -26,6 +26,7 @@ This repository builds an `arm64-v8a` shared library for a Unity `2019.4.33f1` I
 - [Build Configuration](#build-configuration)
 - [CI Release Packaging](#ci-release-packaging)
 - [Runtime Flow](#runtime-flow)
+- [Runtime Audit Notes](#runtime-audit-notes)
 - [Development Notes](#development-notes)
 - [Troubleshooting](#troubleshooting)
 - [Known Limitations](#known-limitations)
@@ -211,6 +212,19 @@ strategy/formation/shop/card/auction options from local data, publishes only
 compact counters and selected targets under `FeatureMutex`, and avoids holding
 project locks while calling managed IL2CPP APIs.
 
+The current runtime cadence is intentionally split by responsibility:
+
+- Binding retry: 2000 ms.
+- Managed reference refresh: 100 ms.
+- Match state check: 500 ms.
+- Table reload retry: 2000 ms.
+- Arena feature tick: 100 ms.
+- Shop automation tick: 100 ms.
+- Combat power tick: 250 ms.
+- Auto-Play tick: 250 ms.
+- Opponent prediction history tick: 500 ms.
+- Next-enemy HUD text refresh: 500 ms while the HUD is enabled.
+
 Field metadata misses are also retried with a short backoff. This keeps late
 Unity metadata retryable without letting missing field lookups rescan every
 feature tick.
@@ -376,29 +390,66 @@ notes before the asset is uploaded with `--clobber`.
 
 At load time and during frame presentation, `jni/Main.cpp` performs the following sequence:
 
-1. Confirms the current process is the expected Unity target process.
-2. Starts a setup thread.
-3. Waits for `liblogic.so`.
-4. Resolves IL2CPP API exports.
-5. Attaches the native thread to the IL2CPP domain.
-6. Hooks `eglSwapBuffers`.
-7. Creates the ImGui context and resolves the config path from the game package name.
-8. Loads saved project configuration when the config file exists.
-9. Loads appearance fonts and applies the selected theme and style settings.
-10. Renders the ImGui overlay during frame presentation.
-11. Hooks `UnityEngine.Input.GetTouch`.
-12. Forwards Unity touch input into ImGui mouse input.
-13. Resolves feature methods and fields through `ResolveFeatureBindings()`.
-14. Retries missing method and field bindings periodically.
-15. Refreshes managed references such as battle bridge and shop panel state and
-    publishes them through atomic shared state.
-16. Refreshes match state and reloads hero, equipment, and GogoCard table
-    caches through local snapshots before locked publication.
-17. Runs throttled shop automation and arena effects on separate 100 ms ticks,
-    using bounded selected-target snapshots for shop decisions and bounded
-    cooldowns for round skipping.
+1. The constructor confirms the process command line contains `:UnityKillsMe`.
+2. A detached setup thread starts after the process gate.
+3. The setup thread resolves and hooks `eglSwapBuffers` first, so rendering can
+   become the long-lived frame loop.
+4. The setup thread waits for `liblogic.so`, resolves Unity `2019.4.33f1`
+   IL2CPP API exports from the bundled API declarations, and attaches to the
+   IL2CPP domain.
+5. The setup thread resolves and hooks `UnityEngine.Input.GetTouch` when the
+   method metadata is available.
+6. `RuntimeState::Il2CppReady` is set and a feature binding retry is requested.
+7. The first valid hooked frame creates the ImGui context, disables ImGui
+   `.ini` persistence, resolves the config path from the game package name,
+   loads saved project configuration when present, loads fonts, and applies the
+   selected theme and style settings.
+8. Each hooked frame attaches the render thread to IL2CPP when possible before
+   managed feature work runs.
+9. `TickFeatures()` retries missing bindings, refreshes battle bridge and shop
+   panel references, refreshes match state, and retries table cache loading.
+10. Active Info, Shop, Arena, Auto-Play, Settings HUD, and Test diagnostics
+    refresh only the runtime data they need.
+11. Auto-Play, Arena, Shop, Combat, and opponent-history work run on their own
+    bounded ticks rather than in every render pass.
+12. Unity touch input is forwarded into ImGui mouse input through the hooked
+    `GetTouch` path.
 
-This order is intentional. Rendering and input are initialized separately from feature binding so the overlay can report partial runtime readiness while delayed IL2CPP objects continue to resolve.
+This order is intentional. The render hook can exist before IL2CPP is ready, so
+managed feature logic must stay behind readiness checks. Rendering, input, and
+feature binding are initialized separately so the overlay can report partial
+runtime readiness while delayed IL2CPP objects continue to resolve.
+
+## Runtime Audit Notes
+
+Recent code review of `jni/Main.cpp`, `jni/structures/Structures.hpp`,
+`jni/Android.mk`, `.github/workflows/build.yml`, and `dump/dump.cs` highlights
+the following bug-prone areas:
+
+- The render hook is installed before `liblogic.so` and IL2CPP are ready.
+  Frame-time code must tolerate a non-ready managed runtime and should not call
+  IL2CPP APIs unless `AttachRenderIl2CppThread()` succeeded.
+- Method lookup deliberately caches only successful method vectors as reusable
+  results. Empty method scans remain retryable. Field lookup caches misses only
+  behind the binding retry backoff. Do not turn these into permanent failures.
+- Method matching uses class name, method name, parameter count, and
+  case-insensitive parameter-name containment. Any new overload-sensitive
+  binding needs a dump-backed signature check, not just a successful compile.
+- Table cache publication is all-or-nothing for hero, equipment, and GogoCard
+  data. If one table is unavailable after a game update, dependent UI should
+  keep showing `Waiting for ...` rather than assuming an empty game table.
+- Shop automation depends on live UI operability, not only battle-data methods.
+  Buy and refresh actions should continue to require a non-delayed,
+  non-spectate shop panel accepted by `CanOperate(Boolean)`.
+- Auto-Play temporarily owns selected Shop, Arena, and Combat assists through a
+  captured policy backup. User edits to those assist toggles while Auto-Play is
+  active can be restored to the pre-Auto-Play backup when Auto-Play stops.
+- Opponent prediction combines exact pair data, invasion manager state,
+  dump-backed invader order, round-robin fallback, and recent meeting history.
+  Only the exact local current opponent should be shown as `100%`.
+- SpeedHack changes global Unity time scale. It must continue to reset to
+  `1.0x` when disabled, when the active battle state is gone, or when feature
+  state is reset.
 
 ## Development Notes
 
@@ -406,6 +457,9 @@ This order is intentional. Rendering and input are initialized separately from f
 - Validate class names, method names, parameter counts, return types, and field layouts against local reference artifacts before adding IL2CPP calls.
 - Keep feature runtime code in `jni/Main.cpp` unless a refactor is explicitly requested.
 - Use clear local sections and concise comments around risky IL2CPP calls.
+- Preserve the current boot order: process gate, setup thread, early
+  `eglSwapBuffers` hook, `liblogic.so` wait, IL2CPP export resolution, setup
+  thread attach, `GetTouch` hook, then render-thread overlay initialization.
 - Use the Runtime Status and Test tabs when validating new bindings or investigating delayed runtime state.
 - For Arena Skip Round changes, verify `MCLogicBattleData.get_logicRoundMgr`,
   `LogicRoundMgr.SetRound(UInt32)`, and `LogicRoundMgr.NextRound(Boolean)`
@@ -422,7 +476,9 @@ This order is intentional. Rendering and input are initialized separately from f
   primary TabBar navigation.
 - Keep Settings persistence scoped to project-owned config files rather than enabling ImGui `.ini` persistence.
 - Preserve retryable binding behavior. Do not permanently cache unresolved methods or fields as missing.
-- Preserve separate 100 ms ticks for shop automation and arena effects unless timing changes are part of the task.
+- Preserve separate 100 ms ticks for shop automation and arena effects, the
+  250 ms ticks for Combat and Auto-Play, and the 500 ms opponent-history/HUD
+  refresh cadence unless timing changes are part of the task.
 - Preserve shop automation throttles for buy, repeat-buy, refresh, target-worth, and Recommendation Lineup checks.
 - Guard direct access to `FeatureState::Heroes`, `FeatureState::Equips`,
   `FeatureState::Cards`, and `FeatureState::ShopSelectedHeroes` with
@@ -545,6 +601,11 @@ Check the GitHub Actions log for:
 - Unity compatibility is pinned to `2019.4.33f1`.
 - Runtime bindings may change when the target application updates.
 - Feature availability depends on current runtime state and loaded managed objects.
+- The render hook can be active before managed metadata is ready, so early
+  frames may show partial overlay readiness.
+- IL2CPP method resolution is dump-guided but still name and parameter-shape
+  based at runtime; overloaded or renamed game methods require manual
+  validation against `dump/dump.cs`.
 - Recommendation Lineup automation depends on the active match lineup data exposed by the runtime.
 - Opponent prediction is probabilistic when current-pair data is unavailable;
   live `m_CurPairDict` data still takes precedence when the runtime exposes it.

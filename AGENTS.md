@@ -14,6 +14,12 @@ logic. It also owns the Info, Combat, Auto-Play, Shop, Arena, Appearance,
 Settings, and Test overlay tabs. Keep feature work in this file unless the user
 explicitly requests a multi-file refactor.
 
+The current boot order is process gate, detached setup thread, early
+`eglSwapBuffers` hook, `liblogic.so` wait, IL2CPP export resolution, setup
+thread attach, `UnityEngine.Input.GetTouch` hook, and lazy render-thread ImGui
+initialization. The render hook can exist before IL2CPP is ready, so any
+frame-time managed work must stay behind readiness and thread-attach checks.
+
 `dump/dump.cs` is the IL2CPP signature reference. Use it before changing native
 method pointers, hook signatures, value-type layouts, or field offsets.
 Vendored or external components live under `jni/dobby/`, `jni/imgui/`,
@@ -67,9 +73,11 @@ control flow.
 Do not convert retryable lookups into one-shot failures. Method and field
 resolution can happen before the target metadata is ready, so missing entries
 must be allowed to resolve later. Field misses may be cached only with a short
-retry backoff so hot feature paths do not rescan metadata every frame. Preserve
-the separate 100 ms shop and arena feature ticks unless the task explicitly
-changes timing.
+retry backoff so hot feature paths do not rescan metadata every frame. Method
+resolution is name, parameter-count, and parameter-name-shape based; verify
+overload-sensitive changes against `dump/dump.cs`. Preserve the separate 100 ms
+shop and arena ticks, 250 ms Combat and Auto-Play ticks, and 500 ms opponent
+history/HUD cadence unless the task explicitly changes timing.
 
 Shared state is split across `RuntimeMutex::CacheMutex`,
 `RuntimeMutex::FeatureMutex`, and `RuntimeMutex::UiMutex`. Primitive feature
@@ -103,6 +111,11 @@ keep shop, auction, passive-gold, free-economy, and level-up decisions aligned
 with the shared gold plan, keep built-in AI startup stateful instead of replaying
 `StartAI` on every cooldown, keep SpeedHack as an explicit Arena-only control,
 and do not hold `FeatureMutex` while calling managed IL2CPP APIs.
+
+Auto-Play temporarily owns selected Shop, Arena, and Combat assists through its
+policy backup while enabled. If a change touches those assist toggles, preserve
+the capture/restore behavior and make it clear in user-facing docs when manual
+edits made during Auto-Play can be restored to the pre-Auto-Play values.
 
 ## Testing Guidelines
 
@@ -150,6 +163,11 @@ For native or mixed changes, also run:
 ```sh
 git diff --check
 ```
+
+For repository-wide documentation refreshes, update only top-level Markdown
+files unless explicitly asked to edit submodules. Leave `goal.md`, generated
+outputs, and vendored Markdown under `jni/Il2CppVersions/`, `jni/imgui/`, and
+`jni/xDL/` untouched.
 
 ## Commit & Pull Request Guidelines
 
@@ -207,3 +225,8 @@ foreground text above the lower screen edge. Keep it lightweight and throttle
 prediction refreshes instead of rebuilding predictions every render frame.
 Settings config should default to the running game package directory as
 `/data/data/<game-package>/files/mcgg_config.ini`.
+
+Known audit hotspots are early-render readiness, dump-backed signature drift,
+table cache all-or-nothing publication, shop panel operability before buy or
+refresh, Auto-Play policy ownership of assist toggles, exact-opponent-only
+`100%` prediction rows, and Unity timeScale reset paths.
