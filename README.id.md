@@ -116,9 +116,6 @@ behavior kecuali sudah didukung oleh `dump/dump.cs` dan verifikasi runtime live.
 
 ### Info
 
-- Tabel runtime status untuk binding battle data, GGC, shop, Recommendation
-  Lineup, Battle Power, arena, round skip, speedhack, test, spectator, synergy,
-  dan placement.
 - Tabel player dan next-enemy yang diurutkan dengan player lokal di posisi pertama.
 - Readout kualitas GGC untuk round 7 dan round 13.
 - Indikator status overlay untuk binding yang terlambat atau belum tersedia.
@@ -219,6 +216,9 @@ behavior kecuali sudah didukung oleh `dump/dump.cs` dan verifikasi runtime live.
 
 ### Test
 
+- Section Runtime Status untuk binding battle data, GGC, shop, Recommendation
+  Lineup, Battle Power, arena, round skip, speedhack, test, spectator, synergy,
+  dan placement.
 - Kontrol manual untuk retry binding dan refresh managed reference.
 - Inspeksi account berdasarkan self, opponent, atau account ID eksplisit.
 - Tabel prediksi fight dengan sinyal direct, manager-derived, invasion-pair,
@@ -605,7 +605,8 @@ area yang rawan bug berikut:
   thread.
 - Jaga pekerjaan constructor tetap non-blocking: process gate, jalankan setup
   thread, lalu return.
-- Gunakan tab Runtime Status dan Test saat memvalidasi binding baru atau menelusuri runtime state yang terlambat tersedia.
+- Gunakan tab Test, termasuk section Runtime Status di dalamnya, saat
+  memvalidasi binding baru atau menelusuri runtime state yang terlambat tersedia.
 - Untuk perubahan Arena Skip Round, verifikasi
   `MCLogicBattleData.get_logicRoundMgr`, `LogicRoundMgr.SetRound(UInt32)`, dan
   `LogicRoundMgr.NextRound(Boolean)` terhadap `dump/dump.cs`; bagian yang belum
@@ -718,7 +719,9 @@ Saat menambahkan atau memperbarui binding, verifikasi:
 
 ### Shop automation tidak membeli atau refresh
 
-Shop automation sengaja menunggu saat binding, managed reference, data coin, target count, atau data Recommendation Lineup yang dibutuhkan belum siap. Cek tab Runtime Status dan Shop untuk pesan `Waiting for ...`.
+Shop automation sengaja menunggu saat binding, managed reference, data coin,
+target count, atau data Recommendation Lineup yang dibutuhkan belum siap. Cek
+section Runtime Status di tab Test dan tab Shop untuk pesan `Waiting for ...`.
 
 Saat menelusuri masalah penggunaan terus-menerus, verifikasi:
 

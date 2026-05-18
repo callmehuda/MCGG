@@ -8715,8 +8715,6 @@ void DrawInfoTab() {
         ImGui::Spacing();
     }
 
-    DrawRuntimeStatus();
-    ImGui::Spacing();
     DrawGgcInfo();
     ImGui::Spacing();
     DrawInfoPlayersTable();
@@ -11247,6 +11245,9 @@ void DrawTestAllManagersTable() {
 
 // Draws the test tab overlay section without changing game state.
 void DrawTestTab() {
+    DrawRuntimeStatus();
+    ImGui::Spacing();
+
     if (!IsIl2CppRuntimeReady()) {
         DrawWaitingText("Waiting for IL2CPP runtime");
         return;

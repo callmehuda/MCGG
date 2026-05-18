@@ -33,7 +33,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   hot paths. Raw IL2CPP get/set fallbacks remain for unresolved offsets, static
   fields stay on static IL2CPP APIs, and managed-object pointer writes should
   preserve IL2CPP write barriers.
-- **Diagnostics**: Runtime Status and Test tabs expose binding readiness, Auto-Play readiness, Recommendation Lineup readiness, managed reference refresh, Battle Power readiness, round state, Arena round-manager readiness, Unity timeScale readiness, player economy/rank/shop state, grouped shop diagnostic reader readiness, battle manager fields, battle bridge state, shop panel state, behavior API state, all manager entries, and opponent prediction signals. Shop diagnostics become ready when any core shop diagnostic reader resolves, while individual rows keep their own `Waiting` states. In the prediction table, `Will fight` is local-player opponent probability; `Current enemy` is the observed opponent for that row; `Recent` comes from the per-player opponent history.
+- **Diagnostics**: The Test tab houses Runtime Status plus binding readiness, Auto-Play readiness, Recommendation Lineup readiness, managed reference refresh, Battle Power readiness, round state, Arena round-manager readiness, Unity timeScale readiness, player economy/rank/shop state, grouped shop diagnostic reader readiness, battle manager fields, battle bridge state, shop panel state, behavior API state, all manager entries, and opponent prediction signals. Shop diagnostics become ready when any core shop diagnostic reader resolves, while individual rows keep their own `Waiting` states. In the prediction table, `Will fight` is local-player opponent probability; `Current enemy` is the observed opponent for that row; `Recent` comes from the per-player opponent history.
 - **Configuration**: Settings saves and loads visual, window, HUD, Auto-Play, Combat, Shop, and Arena controls from `/data/data/<game-package>/files/mcgg_config.ini`.
 - **CI Releases**: `.github/workflows/build.yml` creates UTC date-based release tags, packages `libs/` with `BUILD_INFO.txt`, and generates release notes from commit subjects and body text in the push range or release-tag fallback.
 - **Memory Mapping**: `jni/structures/Structures.hpp` defines the layout of Unity/Mono types to allow native interaction with managed objects. Function-level comments document the shared layout helpers so offset and value-type reviews do not rely on names alone.
@@ -70,7 +70,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   managed reads, and `Waiting for ...` states.
 
 ### Current Feature Areas
-- **Info**: runtime status, player/enemy table, and GGC round 7/13 quality display.
+- **Info**: player/enemy table and GGC round 7/13 quality display.
 - **Combat**: Invisible Scout.
 - **Auto-Play**: binary-side adaptive strategy controller. It reads round,
   phase, HP, gold, level, population, lineup worth, fight value,
@@ -89,7 +89,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Settings**: menu size, fixed position, mobile-friendly TabBar helpers, next-enemy HUD text, font scale, style tuning, and save/load configuration, including Auto-Play state.
 - **Shop**: auto-buy free heroes, auto-buy selected targets, auto-buy Recommendation Lineup heroes, auto-refresh, pause-refresh conditions, keep-gold threshold, manual target counts, Recommendation Lineup target counts, and shop-panel operability gates before buy/refresh UI actions.
 - **Arena**: hero spawn, equipment grant, GogoCard forcing, Battle Power controls, active synergy forcing, level/population 99, outside-map placement, enemy HP 1, passive gold, free economy, unlimited hero pool, shop-lock bypass helpers, fight/result-aware Skip Round, and SpeedHack with reset-to-normal handling.
-- **Test**: manual binding retry, account inspection, fight prediction, binding, round, player, manager, bridge, shop UI, behavior API, and all-manager diagnostics. Only the exact local current opponent should be locked to `100%` in `Will fight`; every player's enemy history and dump-backed invader order should remain available for weighted predictions.
+- **Test**: Runtime Status, manual binding retry, account inspection, fight prediction, binding, round, player, manager, bridge, shop UI, behavior API, and all-manager diagnostics. Only the exact local current opponent should be locked to `100%` in `Will fight`; every player's enemy history and dump-backed invader order should remain available for weighted predictions.
 
 ### Project Constraints
 - **Target ABI**: `arm64-v8a`

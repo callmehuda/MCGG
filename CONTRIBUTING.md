@@ -78,11 +78,12 @@ git lfs pull
   already busy, defer noncritical ticks to the next frame instead of stacking
   every automation path into one render pass. Heavy Auto-Play fallback opponent
   scans should also yield to the budget and retry on a later tick.
-- Use the Runtime Status and Test tabs to validate binding readiness, managed
-  references, round state, player economy/rank/shop state, battle manager
-  fields, battle bridge state, shop panel state, shop diagnostic reader
-  readiness, behavior API state, Auto-Play state, auction state, GogoCard state,
-  board formation state, and opponent prediction behavior after feature changes.
+- Use the Test tab, including its Runtime Status section, to validate binding
+  readiness, managed references, round state, player economy/rank/shop state,
+  battle manager fields, battle bridge state, shop panel state, shop diagnostic
+  reader readiness, behavior API state, Auto-Play state, auction state, GogoCard
+  state, board formation state, and opponent prediction behavior after feature
+  changes.
 - In the Test prediction table, `Will fight` is the local player's opponent
   probability. Only the exact local current opponent should be forced to
   `100%`; other rows should stay weighted even when their `Current enemy`

@@ -115,9 +115,6 @@ they are backed by `dump/dump.cs` and live runtime verification.
 
 ### Info
 
-- Runtime status table for battle data, GGC, shop, Recommendation Lineup,
-  Battle Power, arena, round skip, speedhack, test, spectator, synergy, and
-  placement bindings.
 - Player and next-enemy table sorted with the local player first.
 - GGC quality readout for round 7 and round 13.
 - Overlay status indicators for delayed or unavailable bindings.
@@ -214,6 +211,9 @@ they are backed by `dump/dump.cs` and live runtime verification.
 
 ### Test
 
+- Runtime Status section for battle data, GGC, shop, Recommendation Lineup,
+  Battle Power, arena, round skip, speedhack, test, spectator, synergy, and
+  placement bindings.
 - Manual binding retry and managed reference refresh controls.
 - Account inspection by self, opponent, or explicit account ID.
 - Fight prediction table with direct, manager-derived, invasion-pair,
@@ -593,7 +593,8 @@ the following bug-prone areas:
   `eglSwapBuffers` hook, `liblogic.so` wait, IL2CPP export resolution, setup
   thread attach, `GetTouch` hook, then render-thread overlay initialization.
 - Keep constructor work non-blocking: process gate, launch setup thread, return.
-- Use the Runtime Status and Test tabs when validating new bindings or investigating delayed runtime state.
+- Use the Test tab, including its Runtime Status section, when validating new
+  bindings or investigating delayed runtime state.
 - For Arena Skip Round changes, verify `MCLogicBattleData.get_logicRoundMgr`,
   `LogicRoundMgr.SetRound(UInt32)`, and `LogicRoundMgr.NextRound(Boolean)`
   against `dump/dump.cs`; keep missing pieces visible as `Waiting for ...`.
@@ -700,7 +701,10 @@ When adding or updating a binding, verify:
 
 ### Shop automation does not buy or refresh
 
-Shop automation intentionally waits when required bindings, managed references, coin data, target counts, or Recommendation Lineup data are not ready. Check the Runtime Status and Shop tabs for `Waiting for ...` messages.
+Shop automation intentionally waits when required bindings, managed references,
+coin data, target counts, or Recommendation Lineup data are not ready. Check the
+Test tab's Runtime Status section and the Shop tab for `Waiting for ...`
+messages.
 
 When investigating continuous-use issues, verify:
 

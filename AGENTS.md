@@ -281,13 +281,13 @@ Invisible Scout. Arena includes hero/item/card granting, Battle Power controls
 for force-win, HP-loss prevention, attack-ratio boosting, fight-value boosting,
 and enemy-board crippling, active synergy forcing, level/population forcing,
 enemy HP pressure, passive gold, free economy, unlimited hero pool, shop-lock
-bypass helpers, Skip Round, and SpeedHack. Use the Runtime Status and Test tabs
-when checking binding
-readiness, managed references, round state, round-manager state, timeScale
-binding readiness, player economy/rank/shop state, battle manager fields, battle
-bridge state, shop panel state, shop diagnostic reader readiness, behavior API
-state, Recommendation Lineup state, Auto-Play state, auction state, GogoCard
-state, board formation state, or opponent prediction logic. Test
+bypass helpers, Skip Round, and SpeedHack. Use the Test tab's Runtime Status
+section and diagnostics when checking binding readiness, managed references,
+round state, round-manager state, timeScale binding readiness, player
+economy/rank/shop state, battle manager fields, battle bridge state, shop panel
+state, shop diagnostic reader readiness, behavior API state, Recommendation
+Lineup state, Auto-Play state, auction state, GogoCard state, board formation
+state, or opponent prediction logic. Test
 diagnostics should stay read-only unless the task explicitly requests an action.
 Shop diagnostics are considered available when at least one core shop diagnostic
 reader has resolved; individual Test rows should keep showing `Waiting` for
