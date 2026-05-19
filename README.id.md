@@ -211,6 +211,8 @@ behavior kecuali sudah didukung oleh `dump/dump.cs` dan verifikasi runtime live.
 - Helper level dan population 99.
 - Helper outside-map placement.
 - Helper enemy HP 1.
+- Helper Force Complete Achievements Task yang mem-patch pengecekan reach/result
+  achievement dan counter round achievement saat aktif.
 - Helper gold manual dan pasif.
 - Helper free shop/upgrade economy, unlimited hero pool, dan bypass shop lock.
 - Kontrol Skip Round untuk memindahkan round manager lokal ke target round yang
@@ -222,8 +224,8 @@ behavior kecuali sudah didukung oleh `dump/dump.cs` dan verifikasi runtime live.
 ### Test
 
 - Section Runtime Status untuk binding battle data, GGC, shop, Recommendation
-  Lineup, update check, Battle Power, arena, round skip, speedhack, test,
-  spectator, synergy, dan placement.
+  Lineup, update check, Battle Power, arena, achievement, round skip, speedhack,
+  test, spectator, synergy, dan placement.
 - Kontrol manual untuk retry binding dan refresh managed reference.
 - Inspeksi account berdasarkan self, opponent, atau account ID eksplisit.
 - Tabel prediksi fight dengan sinyal direct, manager-derived, invasion-pair,
@@ -672,6 +674,14 @@ area yang rawan bug berikut:
 - SpeedHack mengubah time scale Unity global. Fitur ini harus tetap reset ke
   `1.0x` saat dinonaktifkan, saat state battle aktif hilang, atau saat feature
   state di-reset.
+- Force Complete Achievements Task bergantung pada
+  `MCLogicAchievementRecordComp.AchievementDataBase.GetResult`,
+  `canRecordAchievementData`, `JudgeFinalRelation`,
+  `JudgeReachCondition(List<MCLogicPlayer>)`,
+  `MCLogicAchievementRecordComp.AchievementRoundData.GetResult`,
+  `AchievementRoundData.RefreshData`, dan field counter round
+  `m_roundAchievementCount`/`m_roundSuccessCount`. Verifikasi semuanya terhadap
+  `dump/dump.cs` sebelum mengubah hook achievement atau write counter.
 - Update checker hanya informatif. Pertahankan prosesnya asynchronous, simpan
   metadata rilis di cache dengan `RuntimeMutex::UpdateMutex`, throttle retry,
   dan jangan menambahkan download otomatis, deployment, forced update, bypass,

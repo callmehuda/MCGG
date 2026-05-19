@@ -206,6 +206,8 @@ they are backed by `dump/dump.cs` and live runtime verification.
 - Level and population 99 helper.
 - Outside-map placement helper.
 - Enemy HP 1 helper.
+- Force Complete Achievements Task helper that patches achievement reach/result
+  checks and round achievement counters while enabled.
 - Manual and passive gold helpers.
 - Free shop/upgrade economy, unlimited hero pool, and shop-lock bypass helpers.
 - Skip Round controls that move the local round manager to a selected target
@@ -217,8 +219,8 @@ they are backed by `dump/dump.cs` and live runtime verification.
 ### Test
 
 - Runtime Status section for battle data, GGC, shop, Recommendation Lineup,
-  update checks, Battle Power, arena, round skip, speedhack, test, spectator,
-  synergy, and placement bindings.
+  update checks, Battle Power, arena, achievements, round skip, speedhack, test,
+  spectator, synergy, and placement bindings.
 - Manual binding retry and managed reference refresh controls.
 - Account inspection by self, opponent, or explicit account ID.
 - Fight prediction table with direct, manager-derived, invasion-pair,
@@ -663,6 +665,14 @@ the following bug-prone areas:
 - SpeedHack changes global Unity time scale. It must continue to reset to
   `1.0x` when disabled, when the active battle state is gone, or when feature
   state is reset.
+- Force Complete Achievements Task depends on
+  `MCLogicAchievementRecordComp.AchievementDataBase.GetResult`,
+  `canRecordAchievementData`, `JudgeFinalRelation`,
+  `JudgeReachCondition(List<MCLogicPlayer>)`,
+  `MCLogicAchievementRecordComp.AchievementRoundData.GetResult`,
+  `AchievementRoundData.RefreshData`, and the round counter fields
+  `m_roundAchievementCount`/`m_roundSuccessCount`. Verify these against
+  `dump/dump.cs` before changing achievement hooks or counter writes.
 - The update checker is informational only. Keep it asynchronous, keep release
   metadata cached behind `RuntimeMutex::UpdateMutex`, keep retries throttled,
   and do not add automatic download, deployment, forced update, bypass, or

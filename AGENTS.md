@@ -276,6 +276,16 @@ When changing Arena SpeedHack, verify `UnityEngine.Time.set_timeScale(Single)`
 against `dump/dump.cs` and reset the time scale when disabling the feature or
 resetting feature state.
 
+When changing Arena Force Complete Achievements Task, verify
+`MCLogicAchievementRecordComp.AchievementDataBase.GetResult`,
+`canRecordAchievementData`, `JudgeFinalRelation`,
+`JudgeReachCondition(List<MCLogicPlayer>)`,
+`MCLogicAchievementRecordComp.AchievementRoundData.GetResult`,
+`AchievementRoundData.RefreshData`, and
+`m_roundAchievementCount`/`m_roundSuccessCount` against `dump/dump.cs`. Keep
+the overlay in a `Waiting for ...` state while achievement bindings are
+unavailable.
+
 When changing GGC Info, verify
 `MCLogicBattleData.ILOGIC_GetCrystalQualityByRound(UInt64, Int32)` against
 `dump/dump.cs`, keep the round scan bounded, and keep the readout on its
@@ -335,10 +345,12 @@ auto-refresh pause conditions, keep-gold reserve, and target counts. Combat incl
 Invisible Scout. Arena includes hero/item/card granting, Battle Power controls
 for force-win, HP-loss prevention, attack-ratio boosting, fight-value boosting,
 and enemy-board crippling, active synergy forcing, level/population forcing,
-enemy HP pressure, passive gold, free economy, unlimited hero pool, shop-lock
-bypass helpers, Skip Round, and SpeedHack. Use the Test tab's Runtime Status
+enemy HP pressure, achievement task forcing, passive gold, free economy,
+unlimited hero pool, shop-lock bypass helpers, Skip Round, and SpeedHack. Use
+the Test tab's Runtime Status
 section and diagnostics when checking binding readiness, managed references,
-round state, round-manager state, timeScale binding readiness, player
+round state, round-manager state, timeScale binding readiness, achievement
+binding readiness, player
 economy/rank/shop state, battle manager fields, battle bridge state, shop panel
 state, shop diagnostic reader readiness, behavior API state, Recommendation
 Lineup state, Auto-Play state, auction state, GogoCard state, board formation

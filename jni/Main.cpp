@@ -365,6 +365,7 @@ namespace FeatureState {
     std::atomic<bool> ArenaForceLevel99{false};
     std::atomic<bool> ArenaOutsideMapPlacement{false};
     std::atomic<bool> ArenaAllEnemyHpOne{false};
+    std::atomic<bool> ArenaForceCompleteAchievements{false};
     std::atomic<bool> ArenaPassiveGold{false};
     std::atomic<int> ArenaGoldTarget{999999};
     std::atomic<bool> ArenaFreeEconomy{false};
@@ -783,6 +784,19 @@ namespace Originals {
         int curActiveCount,
         void* curBondDict
     );
+    bool (*MCLogicAchievementRecordComp_AchievementDataBase_GetResult)(void* instance);
+    bool (*MCLogicAchievementRecordComp_AchievementDataBase_canRecordAchievementData)(
+        void* instance
+    );
+    bool (*MCLogicAchievementRecordComp_AchievementDataBase_JudgeFinalRelation)(
+        void* instance
+    );
+    bool (*MCLogicAchievementRecordComp_AchievementDataBase_JudgeReachCondition)(
+        void* instance,
+        void* players
+    );
+    bool (*MCLogicAchievementRecordComp_AchievementRoundData_GetResult)(void* instance);
+    void (*MCLogicAchievementRecordComp_AchievementRoundData_RefreshData)(void* instance);
     AstarInt2 (*ShowBattleTouchMgr_ClampGridPos)(void* instance, AstarInt2 gridPos);
     bool (*AStarTileMap_ValidPos)(int x, int y);
     bool (*MCLogicEntityMap_CanWalkable)(void* instance, int x, int y);
@@ -1879,6 +1893,19 @@ namespace Hooks {
         int curActiveCount,
         void* curBondDict
     );
+    bool MCLogicAchievementRecordComp_AchievementDataBase_GetResult(void* instance);
+    bool MCLogicAchievementRecordComp_AchievementDataBase_canRecordAchievementData(
+        void* instance
+    );
+    bool MCLogicAchievementRecordComp_AchievementDataBase_JudgeFinalRelation(
+        void* instance
+    );
+    bool MCLogicAchievementRecordComp_AchievementDataBase_JudgeReachCondition(
+        void* instance,
+        void* players
+    );
+    bool MCLogicAchievementRecordComp_AchievementRoundData_GetResult(void* instance);
+    void MCLogicAchievementRecordComp_AchievementRoundData_RefreshData(void* instance);
     AstarInt2 ShowBattleTouchMgr_ClampGridPos(void* instance, AstarInt2 gridPos);
     bool AStarTileMap_ValidPos(int x, int y);
     bool MCLogicEntityMap_CanWalkable(void* instance, int x, int y);
@@ -2750,6 +2777,54 @@ void ResolveFeatureBindings() {
         {"Int32", "Int32", "Int32", "Dictionary"}
     );
     HookResolvedMethod(
+        Originals::MCLogicAchievementRecordComp_AchievementDataBase_GetResult,
+        (void*)Hooks::MCLogicAchievementRecordComp_AchievementDataBase_GetResult,
+        "Battle",
+        "MCLogicAchievementRecordComp.AchievementDataBase",
+        "GetResult",
+        {}
+    );
+    HookResolvedMethod(
+        Originals::MCLogicAchievementRecordComp_AchievementDataBase_canRecordAchievementData,
+        (void*)Hooks::MCLogicAchievementRecordComp_AchievementDataBase_canRecordAchievementData,
+        "Battle",
+        "MCLogicAchievementRecordComp.AchievementDataBase",
+        "canRecordAchievementData",
+        {}
+    );
+    HookResolvedMethod(
+        Originals::MCLogicAchievementRecordComp_AchievementDataBase_JudgeFinalRelation,
+        (void*)Hooks::MCLogicAchievementRecordComp_AchievementDataBase_JudgeFinalRelation,
+        "Battle",
+        "MCLogicAchievementRecordComp.AchievementDataBase",
+        "JudgeFinalRelation",
+        {}
+    );
+    HookResolvedMethod(
+        Originals::MCLogicAchievementRecordComp_AchievementDataBase_JudgeReachCondition,
+        (void*)Hooks::MCLogicAchievementRecordComp_AchievementDataBase_JudgeReachCondition,
+        "Battle",
+        "MCLogicAchievementRecordComp.AchievementDataBase",
+        "JudgeReachCondition",
+        {"List"}
+    );
+    HookResolvedMethod(
+        Originals::MCLogicAchievementRecordComp_AchievementRoundData_GetResult,
+        (void*)Hooks::MCLogicAchievementRecordComp_AchievementRoundData_GetResult,
+        "Battle",
+        "MCLogicAchievementRecordComp.AchievementRoundData",
+        "GetResult",
+        {}
+    );
+    HookResolvedMethod(
+        Originals::MCLogicAchievementRecordComp_AchievementRoundData_RefreshData,
+        (void*)Hooks::MCLogicAchievementRecordComp_AchievementRoundData_RefreshData,
+        "Battle",
+        "MCLogicAchievementRecordComp.AchievementRoundData",
+        "RefreshData",
+        {}
+    );
+    HookResolvedMethod(
         Originals::ShowBattleTouchMgr_ClampGridPos,
         (void*)Hooks::ShowBattleTouchMgr_ClampGridPos,
         "",
@@ -2905,6 +2980,70 @@ bool IsSelfBattleManager(void* battleManager) {
     }
 
     return IsSelfAccount(Originals::MCLogicBattleManager_get_m_uAccountId(battleManager));
+}
+
+// Checks whether achievement forcing should satisfy managed achievement gates.
+bool ShouldForceCompleteAchievements() {
+    return FeatureState::ArenaForceCompleteAchievements.load() &&
+        IsIl2CppRuntimeReady() &&
+        GetSelfAccountId() != 0;
+}
+
+// Checks whether a managed object is the round achievement data subtype.
+bool IsAchievementRoundDataObject(void* instance) {
+    if (!instance || !il2cpp_object_get_class || !il2cpp_class_get_name) {
+        return false;
+    }
+
+    Il2CppClass* klass =
+        il2cpp_object_get_class(reinterpret_cast<Il2CppObject*>(instance));
+    const char* className = klass ? il2cpp_class_get_name(klass) : nullptr;
+    return className && strcmp(className, "AchievementRoundData") == 0;
+}
+
+// Marks round achievement counters complete without touching unrelated data objects.
+void ForceAchievementRoundDataComplete(void* instance) {
+    if (!IsAchievementRoundDataObject(instance)) {
+        return;
+    }
+
+    static FieldInfo* roundAchievementCountField = nullptr;
+    static FieldInfo* roundSuccessCountField = nullptr;
+
+    if (!roundAchievementCountField) {
+        roundAchievementCountField = GetFieldInfoFromName(
+            "Battle",
+            "MCLogicAchievementRecordComp.AchievementRoundData",
+            "m_roundAchievementCount"
+        );
+    }
+
+    if (!roundSuccessCountField) {
+        roundSuccessCountField = GetFieldInfoFromName(
+            "Battle",
+            "MCLogicAchievementRecordComp.AchievementRoundData",
+            "m_roundSuccessCount"
+        );
+    }
+
+    int targetCount = std::max(
+        GetField<int>(
+            reinterpret_cast<Il2CppObject*>(instance),
+            roundAchievementCountField
+        ),
+        1
+    );
+
+    SetField<int>(
+        reinterpret_cast<Il2CppObject*>(instance),
+        roundAchievementCountField,
+        targetCount
+    );
+    SetField<int>(
+        reinterpret_cast<Il2CppObject*>(instance),
+        roundSuccessCountField,
+        targetCount
+    );
 }
 
 // Parses account id or default from user or config text with a safe fallback.
@@ -8113,6 +8252,7 @@ void ResetFeatureSettings() {
     FeatureState::ArenaForceLevel99 = false;
     FeatureState::ArenaOutsideMapPlacement = false;
     FeatureState::ArenaAllEnemyHpOne = false;
+    FeatureState::ArenaForceCompleteAchievements = false;
     FeatureState::ArenaPassiveGold = false;
     FeatureState::ArenaGoldTarget = 999999;
     FeatureState::ArenaFreeEconomy = false;
@@ -8379,6 +8519,7 @@ void ApplyConfigValue(const std::string& key, const std::string& value) {
     else if (key == "arenaForceLevel99") FeatureState::ArenaForceLevel99 = ParseConfigBool(value, FeatureState::ArenaForceLevel99);
     else if (key == "arenaOutsideMapPlacement") FeatureState::ArenaOutsideMapPlacement = ParseConfigBool(value, FeatureState::ArenaOutsideMapPlacement);
     else if (key == "arenaAllEnemyHpOne") FeatureState::ArenaAllEnemyHpOne = ParseConfigBool(value, FeatureState::ArenaAllEnemyHpOne);
+    else if (key == "arenaForceCompleteAchievements") FeatureState::ArenaForceCompleteAchievements = ParseConfigBool(value, FeatureState::ArenaForceCompleteAchievements);
     else if (key == "arenaPassiveGold") FeatureState::ArenaPassiveGold = ParseConfigBool(value, FeatureState::ArenaPassiveGold);
     else if (key == "arenaGoldTarget") FeatureState::ArenaGoldTarget = ParseConfigInt(value, FeatureState::ArenaGoldTarget);
     else if (key == "arenaFreeEconomy") FeatureState::ArenaFreeEconomy = ParseConfigBool(value, FeatureState::ArenaFreeEconomy);
@@ -8491,6 +8632,11 @@ bool SaveConfigToFile(const std::string& path) {
     WriteConfigBool(file, "arenaForceLevel99", FeatureState::ArenaForceLevel99);
     WriteConfigBool(file, "arenaOutsideMapPlacement", FeatureState::ArenaOutsideMapPlacement);
     WriteConfigBool(file, "arenaAllEnemyHpOne", FeatureState::ArenaAllEnemyHpOne);
+    WriteConfigBool(
+        file,
+        "arenaForceCompleteAchievements",
+        FeatureState::ArenaForceCompleteAchievements
+    );
     WriteConfigBool(file, "arenaPassiveGold", FeatureState::ArenaPassiveGold);
     WriteConfigInt(file, "arenaGoldTarget", FeatureState::ArenaGoldTarget);
     WriteConfigBool(file, "arenaFreeEconomy", FeatureState::ArenaFreeEconomy);
@@ -8941,6 +9087,7 @@ bool HasArenaGogoCardBindings();
 bool HasArenaGoldBindings();
 bool HasArenaRoundSkipBindings();
 bool HasArenaSpeedHackBindings();
+bool HasArenaAchievementBindings();
 bool HasBattleTestBindings();
 bool HasAutoPlayBindings();
 std::string GetBattlePlayerName(uint64_t accountId);
@@ -9188,6 +9335,7 @@ void DrawRuntimeStatus() {
         DrawStatusRow("Arena gold", HasArenaGoldBindings());
         DrawStatusRow("Arena round skip", HasArenaRoundSkipBindings());
         DrawStatusRow("Arena speedhack", HasArenaSpeedHackBindings());
+        DrawStatusRow("Arena achievements", HasArenaAchievementBindings());
         DrawStatusRow("Auto-play controller", HasAutoPlayBindings());
         DrawStatusRow("Battle tests", HasBattleTestBindings());
         DrawStatusRow("Spectator hook", Originals::MCShowSpectatorComp_SetSpectate);
@@ -9404,6 +9552,17 @@ bool HasArenaRoundSkipBindings() {
 bool HasArenaSpeedHackBindings() {
     return IsIl2CppRuntimeReady() &&
         Originals::UnityEngine_Time_set_timeScale;
+}
+
+// Checks the arena achievement force-complete bindings condition before work proceeds.
+bool HasArenaAchievementBindings() {
+    return IsIl2CppRuntimeReady() &&
+        Originals::MCLogicAchievementRecordComp_AchievementDataBase_GetResult &&
+        Originals::MCLogicAchievementRecordComp_AchievementDataBase_canRecordAchievementData &&
+        Originals::MCLogicAchievementRecordComp_AchievementDataBase_JudgeFinalRelation &&
+        Originals::MCLogicAchievementRecordComp_AchievementDataBase_JudgeReachCondition &&
+        Originals::MCLogicAchievementRecordComp_AchievementRoundData_GetResult &&
+        Originals::MCLogicAchievementRecordComp_AchievementRoundData_RefreshData;
 }
 
 // Checks the battle test bindings condition before work proceeds.
@@ -12839,10 +12998,18 @@ void DrawArenaTab() {
                 DrawWaitingText("Waiting for player data bindings");
             }
 
+            if (!HasArenaAchievementBindings()) {
+                DrawWaitingText("Waiting for achievement bindings");
+            }
+
             DrawAtomicCheckbox("Force all synergies active", FeatureState::ArenaForceActiveSynergy);
             DrawAtomicCheckbox("Force level and population 99", FeatureState::ArenaForceLevel99);
             DrawAtomicCheckbox("Allow outside-map placement", FeatureState::ArenaOutsideMapPlacement);
             DrawAtomicCheckbox("Set all enemy HP to 1", FeatureState::ArenaAllEnemyHpOne);
+            DrawAtomicCheckbox(
+                "Force Complete Achievements Task",
+                FeatureState::ArenaForceCompleteAchievements
+            );
             DrawAtomicCheckbox("Maintain target gold", FeatureState::ArenaPassiveGold);
             ImGui::SetNextItemWidth(150.0f);
             DrawAtomicInputInt("Target gold", FeatureState::ArenaGoldTarget);
@@ -13311,6 +13478,89 @@ namespace Hooks {
                 curBondDict
             ) :
             false;
+    }
+
+    // Forces generic achievement result checks to succeed when the Arena assist is enabled.
+    bool MCLogicAchievementRecordComp_AchievementDataBase_GetResult(void* instance) {
+        if (ShouldForceCompleteAchievements()) {
+            ForceAchievementRoundDataComplete(instance);
+            return true;
+        }
+
+        return Originals::MCLogicAchievementRecordComp_AchievementDataBase_GetResult ?
+            Originals::MCLogicAchievementRecordComp_AchievementDataBase_GetResult(instance) :
+            false;
+    }
+
+    // Allows achievement data to record progress when the Arena assist is enabled.
+    bool MCLogicAchievementRecordComp_AchievementDataBase_canRecordAchievementData(
+        void* instance
+    ) {
+        if (ShouldForceCompleteAchievements()) {
+            return true;
+        }
+
+        return Originals::MCLogicAchievementRecordComp_AchievementDataBase_canRecordAchievementData ?
+            Originals::MCLogicAchievementRecordComp_AchievementDataBase_canRecordAchievementData(
+                instance
+            ) :
+            false;
+    }
+
+    // Forces final relation checks for achievement tasks when the Arena assist is enabled.
+    bool MCLogicAchievementRecordComp_AchievementDataBase_JudgeFinalRelation(
+        void* instance
+    ) {
+        if (ShouldForceCompleteAchievements()) {
+            return true;
+        }
+
+        return Originals::MCLogicAchievementRecordComp_AchievementDataBase_JudgeFinalRelation ?
+            Originals::MCLogicAchievementRecordComp_AchievementDataBase_JudgeFinalRelation(
+                instance
+            ) :
+            false;
+    }
+
+    // Forces achievement reach-condition checks when the Arena assist is enabled.
+    bool MCLogicAchievementRecordComp_AchievementDataBase_JudgeReachCondition(
+        void* instance,
+        void* players
+    ) {
+        if (ShouldForceCompleteAchievements()) {
+            ForceAchievementRoundDataComplete(instance);
+            return true;
+        }
+
+        return Originals::MCLogicAchievementRecordComp_AchievementDataBase_JudgeReachCondition ?
+            Originals::MCLogicAchievementRecordComp_AchievementDataBase_JudgeReachCondition(
+                instance,
+                players
+            ) :
+            false;
+    }
+
+    // Forces round achievement counters and result checks to completed when enabled.
+    bool MCLogicAchievementRecordComp_AchievementRoundData_GetResult(void* instance) {
+        if (ShouldForceCompleteAchievements()) {
+            ForceAchievementRoundDataComplete(instance);
+            return true;
+        }
+
+        return Originals::MCLogicAchievementRecordComp_AchievementRoundData_GetResult ?
+            Originals::MCLogicAchievementRecordComp_AchievementRoundData_GetResult(instance) :
+            false;
+    }
+
+    // Re-applies completed round counters after the game refreshes achievement data.
+    void MCLogicAchievementRecordComp_AchievementRoundData_RefreshData(void* instance) {
+        if (Originals::MCLogicAchievementRecordComp_AchievementRoundData_RefreshData) {
+            Originals::MCLogicAchievementRecordComp_AchievementRoundData_RefreshData(instance);
+        }
+
+        if (ShouldForceCompleteAchievements()) {
+            ForceAchievementRoundDataComplete(instance);
+        }
     }
 
     // Hook wrapper for show battle touch mgr clamp grid pos, applying feature overrides only when enabled.

@@ -165,6 +165,14 @@ bash jni/build-curl-android.sh
 - Arena SpeedHack depends on `UnityEngine.Time.set_timeScale(Single)`. Reset
   the time scale when disabling the feature, leaving active battle state, or
   resetting feature state.
+- Arena achievement forcing depends on
+  `MCLogicAchievementRecordComp.AchievementDataBase.GetResult`,
+  `canRecordAchievementData`, `JudgeFinalRelation`,
+  `JudgeReachCondition(List<MCLogicPlayer>)`,
+  `MCLogicAchievementRecordComp.AchievementRoundData.GetResult`,
+  `AchievementRoundData.RefreshData`, and
+  `m_roundAchievementCount`/`m_roundSuccessCount`. Verify these against
+  `dump/dump.cs` before changing achievement hooks or counter writes.
 - GGC Info depends on
   `MCLogicBattleData.ILOGIC_GetCrystalQualityByRound(UInt64, Int32)`. Verify it
   against `dump/dump.cs`, keep the round scan bounded, and keep the readout on
@@ -201,8 +209,8 @@ reserve, and target counts. Combat includes Invisible Scout. Arena includes
 hero/item/card granting, Battle Power controls for force-win, HP-loss
 prevention, attack-ratio boosting, fight-value boosting, and enemy-board
 crippling, active synergy forcing, level/population forcing, enemy HP pressure,
-passive gold, free economy, unlimited hero pool, shop-lock bypass helpers, Skip
-Round, and SpeedHack.
+achievement task forcing, passive gold, free economy, unlimited hero pool,
+shop-lock bypass helpers, Skip Round, and SpeedHack.
 Appearance includes ImGui
 Dark, Catppuccin Mocha, and additional palettes inspired by Dear ImGui issue #707.
 Settings includes the optional next-enemy HUD and GitHub release update status
