@@ -34,7 +34,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Feature Binding**: `ResolveFeatureBindings()` resolves game methods and hooks. Missing methods and fields are retried periodically because Unity metadata and battle objects may not be ready during first setup. Empty method scans and field misses use short retry backoffs so hot feature paths do not rescan missing metadata every frame. Binding resolution is single-flight so the setup thread and render thread do not scan IL2CPP metadata at the same time.
 - **Hooking Strategy**: Uses Dobby to hook `eglSwapBuffers` for frame-by-frame UI injection, `UnityEngine.Input.GetTouch` for touch-to-mouse forwarding, and selected game methods for Combat visibility and Arena behavior.
 - **Runtime Ticks**: Arena effects and Shop automation run on separate 100 ms ticks. Combat power and Auto-Play run on separate 250 ms ticks. GGC Info, opponent prediction history, and next-enemy HUD text refresh on 500 ms cadences. Frame-time feature work has a small render budget plus a per-frame managed-work unit budget so lower-priority ticks, hot loops, and Test diagnostics defer instead of stacking heavy IL2CPP/Unity/game calls into one render pass. Auto-Play builds a shared gold-interest plan and uses bounded cooldowns for opt-in safe-phase built-in AI startup, long-gated AI refresh, built-in deployment, separate smart formation moves, level-up actions, and auction bidding. Shop automation uses bounded cooldowns for buy, repeat-buy, refresh, target-worth, and Recommendation Lineup checks, and waits for the shop panel to be operable before UI actions.
-- **Runtime Caches**: Managed references are cached through atomic pointers. Commander-filtered hero/equipment/GogoCard table data and Recommendation Lineup hero IDs are collected locally and published under `RuntimeMutex::FeatureMutex` when entering a new match. GitHub release metadata is cached in memory under `RuntimeMutex::UpdateMutex` for the session.
+- **Runtime Caches**: Managed references are cached through atomic pointers. Hero table rows filtered for commanders and known placeholder names, equipment table data, GogoCard table data, and Recommendation Lineup hero IDs are collected locally and published under `RuntimeMutex::FeatureMutex` when entering a new match. GitHub release metadata is cached in memory under `RuntimeMutex::UpdateMutex` for the session.
 - **Pinned Managed References**: Persistent managed-object caches are published
   only after `il2cpp_gchandle_new(obj, true)` succeeds. The pinned handle set is
   match-scoped: refreshed objects add handles without freeing old ones, and all
@@ -162,7 +162,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Regular instance field helper work should keep offset-based direct access
   limited to validated field offsets and retain IL2CPP fallback behavior for
   unresolved metadata or barrier-sensitive writes.
-- Table cache loading publishes only after commander-filtered hero rows, equipment, and GogoCard data are all present. Dependent UI should keep `Waiting for ...` states while any table is missing.
+- Table cache loading publishes only after hero rows are filtered for
+  commanders and known placeholder names, and equipment and GogoCard data are
+  all present. Dependent UI should keep `Waiting for ...` states while any table
+  is missing.
 - Table cache loading should be deferred until a table-backed tab or active
   automation needs it, and long Shop/Arena table views should render visible
   rows with `ImGuiListClipper` rather than walking every row each frame.

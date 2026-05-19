@@ -333,6 +333,8 @@ Use this checklist when looking for hidden bugs or logic flaws:
 - Treat table caches as all-or-nothing for heroes, equipment, and GogoCards.
   UI and automation should show `Waiting for ...` while any required table is
   unavailable.
+- Keep hero table publication filtered to valid IDs, non-commanders, and known
+  non-hero placeholder names.
 - Keep shop buy and refresh actions gated on the live shop panel being
   non-delayed, non-spectate, and accepted by `CanOperate(Boolean)`.
 - Keep shop diagnostics tied to grouped reader readiness instead of a single

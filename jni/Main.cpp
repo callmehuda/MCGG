@@ -3377,22 +3377,12 @@ bool IsForbidHeroName(const std::string& name) {
 bool IsPlayableHeroTableEntry(
     int heroId,
     const std::string& heroName,
-    int quality,
-    int occupation,
-    int heroType,
-    int groupCount,
     bool isCommander
 ) {
     return heroId > 0 &&
         heroId <= 10000000 &&
         !isCommander &&
-        !IsForbidHeroName(heroName) &&
-        quality >= 1 &&
-        quality <= 5 &&
-        occupation > 0 &&
-        heroType >= 1 &&
-        heroType <= 6 &&
-        groupCount > 0;
+        !IsForbidHeroName(heroName);
 }
 
 // Returns the cached or live self account id value used by runtime features.
@@ -4646,10 +4636,6 @@ void EnsureTableDataLoaded() {
                 if (!IsPlayableHeroTableEntry(
                         heroId,
                         heroName,
-                        quality,
-                        occupation,
-                        heroType,
-                        static_cast<int>(groups.size()),
                         isCommander
                     )) {
                     continue;

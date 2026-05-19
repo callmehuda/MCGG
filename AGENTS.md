@@ -400,8 +400,8 @@ Settings config should default to the running game package directory as
 
 Known audit hotspots are early-render readiness, dump-backed signature drift,
 match-scoped pinned managed-object handles, table cache all-or-nothing
-publication with commander-filtered hero rows, shop panel operability before buy
-or refresh, grouped shop
+publication with hero rows filtered for valid IDs, commanders, and placeholder
+names, shop panel operability before buy or refresh, grouped shop
 diagnostic readiness, Auto-Play policy ownership of assist toggles, opt-in
 safe-phase built-in AI startup, separate Auto-Play deploy/formation cooldowns,
 render-frame budget deferral between Auto-Play action groups, method-miss

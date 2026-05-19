@@ -774,6 +774,8 @@ area yang rawan bug berikut:
 - Pertahankan throttle shop automation untuk buy, repeat-buy, refresh, target-worth, dan pengecekan Recommendation Lineup.
 - Jaga loading table cache tetap demand-driven dan clip tabel data panjang agar
   UI tabel tidak memproses setiap row pada setiap frame.
+- Jaga row tabel hero tetap difilter dari ID invalid, commander, dan nama
+  placeholder yang dikenal sebelum publish cache tabel.
 - Lindungi akses langsung ke `FeatureState::Heroes`, `FeatureState::Equips`,
   `FeatureState::Cards`, `FeatureState::ShopSelectedHeroes`, target count
   Recommendation Lineup, dan cache hero Recommendation Lineup dengan
@@ -951,7 +953,8 @@ Periksa log GitHub Actions untuk:
   validasi manual terhadap `dump/dump.cs`.
 - Automation Recommendation Lineup bergantung pada data lineup match aktif yang
   diekspos runtime; daftar lengkap hero rekomendasi membutuhkan binding
-  membership rekomendasi dan tabel hero yang sudah loaded dengan filter commander.
+  membership rekomendasi dan tabel hero yang sudah loaded dengan filter
+  commander serta nama placeholder yang dikenal.
 - Prediksi opponent bersifat probabilistik saat data current-pair belum tersedia;
   data live `m_CurPairDict` tetap menjadi prioritas saat runtime mengeksposnya,
   dan sinyal pola siklus tujuh round membutuhkan cukup observasi current-cycle

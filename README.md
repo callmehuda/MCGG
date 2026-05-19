@@ -761,6 +761,8 @@ the following bug-prone areas:
 - Preserve shop automation throttles for buy, repeat-buy, refresh, target-worth, and Recommendation Lineup checks.
 - Keep table cache loading demand-driven and clip long data tables so table UI
   does not walk every row every frame.
+- Keep hero table rows filtered for invalid IDs, commanders, and known
+  placeholder names before publishing table caches.
 - Guard direct access to `FeatureState::Heroes`, `FeatureState::Equips`,
   `FeatureState::Cards`, `FeatureState::ShopSelectedHeroes`, recommendation
   lineup target counts, and cached recommendation lineup hero IDs with
@@ -936,7 +938,8 @@ Check the GitHub Actions log for:
   validation against `dump/dump.cs`.
 - Recommendation Lineup automation depends on the active match lineup data
   exposed by the runtime; listing every recommended hero requires the
-  recommendation-membership binding and a loaded, commander-filtered hero table.
+  recommendation-membership binding and a loaded hero table filtered for
+  commanders and known placeholder names.
 - Opponent prediction is probabilistic when current-pair data is unavailable;
   live `m_CurPairDict` data still takes precedence when the runtime exposes it,
   and the seven-round cycle-pattern signal needs enough completed current-cycle
