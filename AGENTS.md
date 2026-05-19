@@ -160,15 +160,22 @@ non-pointer writes. Keep IL2CPP raw get/set fallbacks available, leave static
 fields on the IL2CPP static APIs, and avoid bypassing IL2CPP write barriers for
 managed-object pointer writes.
 
+Persistent managed-object references must be pinned with
+`il2cpp_gchandle_new(obj, true)` before they are published into cached runtime
+state. Keep the handle registry match-scoped: if a cached object changes during
+the match, pin the new object but keep the old handle alive, then release all
+accumulated handles only after the match has ended.
+
 Shared state is split across `RuntimeMutex::CacheMutex`,
-`RuntimeMutex::FeatureMutex`, `RuntimeMutex::UpdateMutex`, and
-`RuntimeMutex::UiMutex`. Primitive feature flags, counters, and managed
-reference pointers use `std::atomic`. Guard direct access to complex feature
-collections such as `FeatureState::Heroes`, `FeatureState::Equips`,
-`FeatureState::Cards`, and `FeatureState::ShopSelectedHeroes` with
-`FeatureMutex` or the existing snapshot/access helpers. Guard cached GitHub
-release metadata with `UpdateMutex`. Do not hold `FeatureMutex` while calling
-managed IL2CPP APIs; gather local data first and publish results under the lock.
+`RuntimeMutex::ManagedHandleMutex`, `RuntimeMutex::FeatureMutex`,
+`RuntimeMutex::UpdateMutex`, and `RuntimeMutex::UiMutex`. Primitive feature
+flags, counters, managed reference pointers, and published GC handle IDs use
+`std::atomic`. Guard direct access to complex feature collections such as
+`FeatureState::Heroes`, `FeatureState::Equips`, `FeatureState::Cards`, and
+`FeatureState::ShopSelectedHeroes` with `FeatureMutex` or the existing
+snapshot/access helpers. Guard cached GitHub release metadata with
+`UpdateMutex`. Do not hold `FeatureMutex` while calling managed IL2CPP APIs;
+gather local data first and publish results under the lock.
 
 The update checker is informational only. It embeds local build metadata through
 `MCGG_BUILD_REPOSITORY`, `MCGG_BUILD_VERSION`, `MCGG_BUILD_COMMIT`, and
@@ -362,11 +369,12 @@ Settings config should default to the running game package directory as
 `/data/data/<game-package>/files/mcgg_config.ini`.
 
 Known audit hotspots are early-render readiness, dump-backed signature drift,
-table cache all-or-nothing publication, shop panel operability before buy or
-refresh, grouped shop diagnostic readiness, Auto-Play policy ownership of assist
-toggles, opt-in safe-phase built-in AI startup, separate Auto-Play
-deploy/formation cooldowns, render-frame budget deferral between Auto-Play
-action groups, method-miss backoff, guarded binding resolution, update-check
-thread/cache/backoff behavior, clipped long tables, exact-opponent-only `100%`
-prediction rows, completed-history seven-round prediction patterns, bounded GGC
-round scans, and Unity timeScale reset paths.
+match-scoped pinned managed-object handles, table cache all-or-nothing
+publication, shop panel operability before buy or refresh, grouped shop
+diagnostic readiness, Auto-Play policy ownership of assist toggles, opt-in
+safe-phase built-in AI startup, separate Auto-Play deploy/formation cooldowns,
+render-frame budget deferral between Auto-Play action groups, method-miss
+backoff, guarded binding resolution, update-check thread/cache/backoff behavior,
+clipped long tables, exact-opponent-only `100%` prediction rows,
+completed-history seven-round prediction patterns, bounded GGC round scans, and
+Unity timeScale reset paths.

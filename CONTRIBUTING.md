@@ -99,6 +99,10 @@ bash jni/build-curl-android.sh
   already busy, defer noncritical ticks to the next frame instead of stacking
   every automation path into one render pass. Heavy Auto-Play fallback opponent
   scans should also yield to the budget and retry on a later tick.
+- Persistent managed-object references must be pinned before publication with
+  `il2cpp_gchandle_new(obj, true)`. Keep those handles match-scoped, retain
+  replaced objects until the active match has ended, and release all accumulated
+  handles only from the match-ended cleanup path.
 - Use the Test tab, including its Runtime Status section, to validate binding
   readiness, update-check status, managed references, round state, player
   economy/rank/shop state, battle manager fields, battle bridge state, shop
@@ -213,6 +217,9 @@ individual row should still show `Waiting` while its specific reader is missing.
 ## Threading and Shared State
 
 - `RuntimeMutex::CacheMutex` guards IL2CPP method and field caches.
+- `RuntimeMutex::ManagedHandleMutex` guards pinned managed-object handle
+  ownership for cached references such as the battle bridge, shop panel, shop
+  item list, and `LoadRes`.
 - `RuntimeMutex::FeatureMutex` guards complex feature collections such as
   `FeatureState::Heroes`, `FeatureState::Equips`, `FeatureState::Cards`, and
   `FeatureState::ShopSelectedHeroes`.
@@ -224,6 +231,9 @@ individual row should still show `Waiting` while its specific reader is missing.
   `GetSelectedShopHeroTargetsSnapshot()` instead of ad hoc unlocked map reads.
 - Do not hold `RuntimeMutex::FeatureMutex` while calling managed IL2CPP APIs.
   Gather local data first, then publish the result under the lock.
+- Do not clear or replace pinned GC handles during a live match. Cache refreshes
+  may publish a newer pinned object, but the old handle remains owned until the
+  match-ended cleanup releases the complete handle set.
 - `RuntimeMutex::UiMutex` guards UI/config strings and config save/load status.
   Primitive feature flags, counters, and managed reference pointers are
   `std::atomic`; follow the existing `.load()` and assignment patterns.

@@ -272,7 +272,12 @@ At a high level, the project contains:
   public release metadata and keeps changelog data cached in memory for the
   session.
 - Atomic primitive runtime state with dedicated mutex domains for IL2CPP
-  caches, feature collections, and UI/config strings.
+  caches, pinned managed-object handles, feature collections, and UI/config
+  strings.
+- Pinned `il2cpp_gchandle_new(obj, true)` ownership for persistent managed
+  object references such as `MCBattleBridge`, the hero shop panel, the shop item
+  list, and `LoadRes`, with all match handles released together only after the
+  active match ends.
 - Offset-backed typed helpers for regular instance field reads and non-pointer
   writes, with raw IL2CPP fallbacks and static fields kept on static IL2CPP
   accessors.
@@ -287,13 +292,14 @@ At a high level, the project contains:
 The project keeps most feature logic in `jni/Main.cpp` to make native entry points, runtime state, and retry behavior easy to inspect. Broader refactors should preserve the existing binding lifecycle unless the refactor explicitly changes that design.
 
 Current shared state is split by ownership. `RuntimeMutex::CacheMutex` protects
-method and field caches, `RuntimeMutex::FeatureMutex` protects complex feature
-collections such as table caches and selected shop targets, and
+method and field caches, `RuntimeMutex::ManagedHandleMutex` protects the pinned
+managed-object handle registry, `RuntimeMutex::FeatureMutex` protects complex
+feature collections such as table caches and selected shop targets, and
 `RuntimeMutex::UiMutex` protects UI/config strings. Primitive runtime flags,
-managed reference pointers, and feature counters are stored as `std::atomic`
-values. Code that reads complex collections should use the existing snapshot or
-access helpers and should not hold `FeatureMutex` while calling managed IL2CPP
-APIs.
+managed reference pointers, their published GC handle IDs, and feature counters
+are stored as `std::atomic` values. Code that reads complex collections should
+use the existing snapshot or access helpers and should not hold `FeatureMutex`
+while calling managed IL2CPP APIs.
 
 Auto-Play uses the same bounded tick model as the other runtime features. It
 gathers local snapshots first, builds one gold-interest plan, scores
@@ -588,7 +594,8 @@ At load time and during frame presentation, `jni/Main.cpp` performs the followin
 8. Each hooked frame attaches the render thread to IL2CPP when possible before
    managed feature work runs.
 9. `TickFeatures()` retries missing bindings, refreshes battle bridge and shop
-   panel references, refreshes match state, and retries table cache loading.
+   panel references through pinned GC handles while a match is active, refreshes
+   match state, and retries table cache loading.
 10. Active Info, Shop, Arena, Auto-Play, Settings HUD, and Test diagnostics
     refresh only the runtime data they need.
 11. Auto-Play, Arena, Shop, Combat, and opponent-history work run on their own
@@ -598,6 +605,9 @@ At load time and during frame presentation, `jni/Main.cpp` performs the followin
     running all pending managed work at once.
 12. Unity touch input is forwarded into ImGui mouse input through the hooked
     `GetTouch` path.
+13. When the match state transitions to ended, all pinned managed-object handles
+    accumulated for the match are freed together and cached managed reference
+    pointers are cleared.
 
 This order is intentional. The render hook can exist before IL2CPP is ready, so
 managed feature logic must stay behind readiness checks. Rendering, input, and
@@ -618,6 +628,11 @@ the following bug-prone areas:
 - Render-frame work is budgeted. Binding retries, table loads, prediction HUD
   refreshes, and heavier Auto-Play board/opponent scans may defer later
   automation ticks to the next frame, but those ticks remain retryable.
+- Persistent managed-object references are published only after they are pinned
+  with `il2cpp_gchandle_new(obj, true)`. The handle registry is match-scoped:
+  handles stay alive through object refreshes and are released only when the
+  active match has ended, so transient reference changes do not leave cached raw
+  objects vulnerable to GC movement or collection.
 - Auto-Play action groups after planning are also budget-gated. Card scoring,
   auction bids, built-in AI, smart formation, and level-up work should not all
   stack into one render pass when the frame budget is already spent.

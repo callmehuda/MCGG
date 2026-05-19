@@ -251,6 +251,7 @@ namespace RuntimeConfig {
 namespace RuntimeMutex {
     std::mutex CacheMutex;
     std::mutex FeatureMutex;
+    std::mutex ManagedHandleMutex;
     std::mutex UpdateMutex;
     std::recursive_mutex UiMutex;
 }
@@ -270,6 +271,7 @@ bool RefreshCachedOpponentPredictionRows(
 void RefreshGgcInfo(bool force);
 void RefreshInfoPlayerRows(bool force);
 void RefreshNextEnemyHudText(uint64_t selfAccountId);
+bool IsBattleActive(uint64_t selfAccountId);
 
 // Feature toggles, cached managed references, and throttled runtime state.
 namespace FeatureState {
@@ -381,6 +383,12 @@ namespace FeatureState {
     std::atomic<void*> HeroShopPanel{nullptr};
     std::atomic<void*> HeroShopItemList{nullptr};
     std::atomic<void*> LoadResInstance{nullptr};
+    std::atomic<uint32_t> BattleBridgeHandle{0};
+    std::atomic<uint32_t> HeroShopPanelHandle{0};
+    std::atomic<uint32_t> HeroShopItemListHandle{0};
+    std::atomic<uint32_t> LoadResInstanceHandle{0};
+    std::unordered_map<void*, uint32_t> ManagedObjectHandles;
+    std::vector<uint32_t> MatchManagedHandles;
 
     std::atomic<bool> TableDataLoaded{false};
     std::atomic<bool> WasInMatch{false};
@@ -1564,6 +1572,84 @@ bool IsIl2CppRuntimeReady() {
     }
 
     return il2cpp_domain_get() != nullptr;
+}
+
+// Checks whether pinned managed-object handles can be created and released safely.
+bool HasIl2CppGcHandleApi() {
+    return IsIl2CppRuntimeReady() &&
+        il2cpp_gchandle_new &&
+        il2cpp_gchandle_free &&
+        il2cpp_gchandle_get_target;
+}
+
+// Pins a managed object for the active match and keeps the handle until match end.
+uint32_t PinManagedObjectForMatch(void* object) {
+    if (!object || !HasIl2CppGcHandleApi()) {
+        return 0;
+    }
+
+    std::lock_guard<std::mutex> lock(RuntimeMutex::ManagedHandleMutex);
+    auto found = FeatureState::ManagedObjectHandles.find(object);
+    if (found != FeatureState::ManagedObjectHandles.end()) {
+        return found->second;
+    }
+
+    uint32_t handle =
+        il2cpp_gchandle_new(reinterpret_cast<Il2CppObject*>(object), true);
+    if (handle == 0) {
+        return 0;
+    }
+
+    FeatureState::ManagedObjectHandles[object] = handle;
+    FeatureState::MatchManagedHandles.push_back(handle);
+    return handle;
+}
+
+// Publishes a managed object cache only after the object has a pinned handle.
+void PublishPinnedManagedReference(
+    std::atomic<void*>& objectSlot,
+    std::atomic<uint32_t>& handleSlot,
+    void* object
+) {
+    uint32_t handle = PinManagedObjectForMatch(object);
+    if (handle == 0) {
+        objectSlot = nullptr;
+        handleSlot = 0;
+        return;
+    }
+
+    objectSlot = object;
+    handleSlot = handle;
+}
+
+// Releases every pinned managed-object handle when the match has ended.
+void ClearManagedObjectHandlesAfterMatch() {
+    std::vector<uint32_t> handles;
+
+    FeatureState::BattleBridge = nullptr;
+    FeatureState::HeroShopPanel = nullptr;
+    FeatureState::HeroShopItemList = nullptr;
+    FeatureState::LoadResInstance = nullptr;
+    FeatureState::BattleBridgeHandle = 0;
+    FeatureState::HeroShopPanelHandle = 0;
+    FeatureState::HeroShopItemListHandle = 0;
+    FeatureState::LoadResInstanceHandle = 0;
+
+    {
+        std::lock_guard<std::mutex> lock(RuntimeMutex::ManagedHandleMutex);
+        handles.swap(FeatureState::MatchManagedHandles);
+        FeatureState::ManagedObjectHandles.clear();
+    }
+
+    if (!il2cpp_gchandle_free) {
+        return;
+    }
+
+    for (uint32_t handle : handles) {
+        if (handle != 0) {
+            il2cpp_gchandle_free(handle);
+        }
+    }
 }
 
 // Checks whether a managed array pointer and length are safe for bounded native reads.
@@ -3262,6 +3348,18 @@ void RefreshManagedReferences(bool force = false) {
         loadResInstanceField = GetFieldInfoFromName("", "LoadRes", "s_instance");
     }
 
+    if (!IsBattleActive(GetSelfAccountId())) {
+        FeatureState::BattleBridge = nullptr;
+        FeatureState::LoadResInstance = nullptr;
+        FeatureState::HeroShopPanel = nullptr;
+        FeatureState::HeroShopItemList = nullptr;
+        FeatureState::BattleBridgeHandle = 0;
+        FeatureState::LoadResInstanceHandle = 0;
+        FeatureState::HeroShopPanelHandle = 0;
+        FeatureState::HeroShopItemListHandle = 0;
+        return;
+    }
+
     void* battleBridge = GetStaticField<void*>(battleBridgeField);
     void* loadResInstance = GetStaticField<void*>(loadResInstanceField);
     void* heroShopPanel = nullptr;
@@ -3281,10 +3379,26 @@ void RefreshManagedReferences(bool force = false) {
         );
     }
 
-    FeatureState::BattleBridge = battleBridge;
-    FeatureState::LoadResInstance = loadResInstance;
-    FeatureState::HeroShopPanel = heroShopPanel;
-    FeatureState::HeroShopItemList = heroShopItemList;
+    PublishPinnedManagedReference(
+        FeatureState::BattleBridge,
+        FeatureState::BattleBridgeHandle,
+        battleBridge
+    );
+    PublishPinnedManagedReference(
+        FeatureState::LoadResInstance,
+        FeatureState::LoadResInstanceHandle,
+        loadResInstance
+    );
+    PublishPinnedManagedReference(
+        FeatureState::HeroShopPanel,
+        FeatureState::HeroShopPanelHandle,
+        heroShopPanel
+    );
+    PublishPinnedManagedReference(
+        FeatureState::HeroShopItemList,
+        FeatureState::HeroShopItemListHandle,
+        heroShopItemList
+    );
 }
 
 // Returns the cached or live table cache counts value used by runtime features.
@@ -3544,7 +3658,7 @@ bool IsBattleActive(uint64_t selfAccountId) {
     int entryLimit = 0;
 
     if (!TryGetDictionaryEntries(battleManagers, &entries, &entryLimit)) {
-        return false;
+        return selfAccountId != 0;
     }
 
     for (int i = 0; entries && i < entryLimit; ++i) {
@@ -3570,6 +3684,11 @@ void RefreshTableDataForMatch(uint64_t selfAccountId) {
     }
 
     bool battleActive = IsBattleActive(selfAccountId);
+    bool endedMatch = !battleActive && FeatureState::WasInMatch.load();
+    if (endedMatch) {
+        ClearManagedObjectHandlesAfterMatch();
+    }
+
     std::lock_guard<std::mutex> lock(RuntimeMutex::FeatureMutex);
     bool selfChanged =
         selfAccountId != 0 &&

@@ -277,7 +277,12 @@ Secara umum, proyek ini berisi:
   static libcurl hanya untuk metadata rilis publik, dan menyimpan data
   changelog di memory selama sesi berjalan.
 - State runtime primitive yang bersifat atomic dengan domain mutex terpisah
-  untuk cache IL2CPP, koleksi fitur, dan string UI/config.
+  untuk cache IL2CPP, handle object managed yang dipin, koleksi fitur, dan
+  string UI/config.
+- Ownership `il2cpp_gchandle_new(obj, true)` yang dipin untuk reference object
+  managed persisten seperti `MCBattleBridge`, panel hero shop, list item shop,
+  dan `LoadRes`, dengan semua handle match dilepas bersama hanya setelah match
+  aktif berakhir.
 - Helper typed berbasis offset untuk read field instance reguler dan write
   non-pointer, dengan fallback raw IL2CPP dan field static tetap memakai
   accessor static IL2CPP.
@@ -292,13 +297,14 @@ Secara umum, proyek ini berisi:
 Sebagian besar logic fitur tetap berada di `jni/Main.cpp` agar native entry point, runtime state, dan retry behavior mudah diperiksa. Refactor besar sebaiknya tetap mempertahankan lifecycle binding yang ada, kecuali refactor tersebut memang secara eksplisit mengubah desain tersebut.
 
 Shared state saat ini dipisahkan berdasarkan ownership. `RuntimeMutex::CacheMutex`
-melindungi cache method dan field, `RuntimeMutex::FeatureMutex` melindungi
-koleksi fitur kompleks seperti cache tabel dan selected target shop, dan
-`RuntimeMutex::UiMutex` melindungi string UI/config. Flag runtime primitive,
-pointer managed reference, dan counter fitur disimpan sebagai nilai
-`std::atomic`. Kode yang membaca koleksi kompleks sebaiknya memakai helper
-snapshot atau access yang sudah ada dan tidak menahan `FeatureMutex` saat
-memanggil API IL2CPP managed.
+melindungi cache method dan field, `RuntimeMutex::ManagedHandleMutex`
+melindungi registry handle object managed yang dipin, `RuntimeMutex::FeatureMutex`
+melindungi koleksi fitur kompleks seperti cache tabel dan selected target shop,
+dan `RuntimeMutex::UiMutex` melindungi string UI/config. Flag runtime primitive,
+pointer managed reference, ID GC handle yang dipublish, dan counter fitur
+disimpan sebagai nilai `std::atomic`. Kode yang membaca koleksi kompleks
+sebaiknya memakai helper snapshot atau access yang sudah ada dan tidak menahan
+`FeatureMutex` saat memanggil API IL2CPP managed.
 
 Auto-Play memakai model tick terbatas yang sama dengan fitur runtime lain. Fitur
 ini mengumpulkan snapshot lokal terlebih dahulu, membangun satu gold-interest
@@ -594,8 +600,8 @@ Pada saat load dan selama frame presentation, `jni/Main.cpp` menjalankan urutan 
 8. Setiap hooked frame attach render thread ke IL2CPP bila memungkinkan sebelum
    pekerjaan fitur managed berjalan.
 9. `TickFeatures()` mencoba ulang binding yang belum tersedia, me-refresh battle
-   bridge dan shop panel reference, me-refresh state match, dan mencoba ulang
-   loading table cache.
+   bridge dan shop panel reference melalui GC handle yang dipin saat match
+   aktif, me-refresh state match, dan mencoba ulang loading table cache.
 10. Diagnostik Info, Shop, Arena, Auto-Play, HUD Settings, dan Test hanya
     me-refresh data runtime yang dibutuhkan.
 11. Auto-Play, Arena, Shop, Combat, dan riwayat opponent berjalan pada tick
@@ -605,6 +611,8 @@ Pada saat load dan selama frame presentation, `jni/Main.cpp` menjalankan urutan 
     daripada menjalankan semua pekerjaan managed yang tertunda sekaligus.
 12. Input touch Unity diteruskan ke input mouse ImGui melalui path hook
     `GetTouch`.
+13. Saat state match berpindah ke ended, semua handle object managed yang dipin
+    selama match dilepas bersama dan pointer managed reference cache dibersihkan.
 
 Urutan ini disengaja. Render hook bisa aktif sebelum IL2CPP siap, sehingga logic
 fitur managed harus tetap berada di balik readiness check. Rendering, input, dan
@@ -628,6 +636,11 @@ area yang rawan bug berikut:
   HUD prediksi, serta scan board/opponent Auto-Play yang lebih berat boleh
   menunda tick automation berikutnya ke frame selanjutnya, tetapi tick tersebut
   tetap retryable.
+- Reference object managed yang persisten hanya dipublish setelah dipin dengan
+  `il2cpp_gchandle_new(obj, true)`. Registry handle bersifat match-scoped:
+  handle tetap hidup selama refresh object dan hanya dilepas saat match aktif
+  sudah berakhir, sehingga perubahan reference sementara tidak membuat raw
+  object cache rentan terhadap GC move atau collection.
 - Action group Auto-Play setelah planning juga dibatasi budget. Scoring card,
   bid auction, built-in AI, smart formation, dan level-up tidak boleh menumpuk
   dalam satu render pass ketika budget frame sudah terpakai.

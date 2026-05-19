@@ -35,6 +35,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Hooking Strategy**: Uses Dobby to hook `eglSwapBuffers` for frame-by-frame UI injection, `UnityEngine.Input.GetTouch` for touch-to-mouse forwarding, and selected game methods for Combat visibility and Arena behavior.
 - **Runtime Ticks**: Arena effects and Shop automation run on separate 100 ms ticks. Combat power and Auto-Play run on separate 250 ms ticks. GGC Info, opponent prediction history, and next-enemy HUD text refresh on 500 ms cadences. Frame-time feature work has a small render budget so lower-priority ticks defer instead of stacking heavy managed work into one render pass. Auto-Play builds a shared gold-interest plan and uses bounded cooldowns for opt-in safe-phase built-in AI startup, long-gated AI refresh, built-in deployment, separate smart formation moves, level-up actions, and auction bidding. Shop automation uses bounded cooldowns for buy, repeat-buy, refresh, target-worth, and Recommendation Lineup checks, and waits for the shop panel to be operable before UI actions.
 - **Runtime Caches**: Managed references are cached through atomic pointers. Hero/equipment/GogoCard table data is collected locally and published under `RuntimeMutex::FeatureMutex` when entering a new match. GitHub release metadata is cached in memory under `RuntimeMutex::UpdateMutex` for the session.
+- **Pinned Managed References**: Persistent managed-object caches are published
+  only after `il2cpp_gchandle_new(obj, true)` succeeds. The pinned handle set is
+  match-scoped: refreshed objects add handles without freeing old ones, and all
+  accumulated handles are released only when the match ends.
 - **Field Access**: Typed regular instance field reads and non-pointer writes
   use resolved `il2cpp_field_get_offset` values for direct bounded copies on
   hot paths. Raw IL2CPP get/set fallbacks remain for unresolved offsets, static
@@ -151,6 +155,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Keep startup sleeps in the detached setup thread, not the constructor, so the
   loader thread is not blocked before Unity continues startup.
 - Runtime method matching is dump-guided but still name, parameter-count, and parameter-name-shape based. Treat overload-sensitive bindings as unsafe until checked in `dump/dump.cs`.
+- Cached managed objects such as `MCBattleBridge`, `UIPanelBattleHeroShop`, the
+  shop item list, and `LoadRes` should stay behind pinned GC handles. Never free
+  those handles on ordinary reference refresh, feature reset, or object
+  replacement; release them only from the match-ended cleanup path.
 - Regular instance field helper work should keep offset-based direct access
   limited to validated field offsets and retain IL2CPP fallback behavior for
   unresolved metadata or barrier-sensitive writes.
@@ -177,6 +185,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ### Shared State Discipline
 
 - `RuntimeMutex::CacheMutex` protects IL2CPP method and field caches.
+- `RuntimeMutex::ManagedHandleMutex` protects the pinned managed-object handle
+  registry for cached references.
 - `RuntimeMutex::FeatureMutex` protects complex feature collections, including `FeatureState::Heroes`, `FeatureState::Equips`, `FeatureState::Cards`, and `FeatureState::ShopSelectedHeroes`.
 - `RuntimeMutex::UpdateMutex` protects GitHub release update/check metadata and
   cached changelog entries.
