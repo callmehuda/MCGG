@@ -16,3 +16,6 @@
 [submodule "jni/libpsl"]
 	path = jni/libpsl
 	url = https://github.com/rockdaboot/libpsl.git
+[submodule "jni/json"]
+	path = jni/json
+	url = https://github.com/nlohmann/json

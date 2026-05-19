@@ -97,6 +97,7 @@ LOCAL_LDLIBS := \
 
 LOCAL_C_INCLUDES := \
     $(LOCAL_PATH)/../obj/curl-install/include/ \
+    $(LOCAL_PATH)/json/single_include/ \
     $(LOCAL_PATH)/xDL/xdl/src/main/cpp/include/ \
     $(LOCAL_PATH)/xDL/xdl/src/main/cpp/ \
     $(LOCAL_PATH)/imgui/ \

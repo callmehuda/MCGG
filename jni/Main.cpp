@@ -26,6 +26,7 @@
 #include <atomic>
 
 #include <curl/curl.h>
+#include <nlohmann/json.hpp>
 
 #include "structures/Structures.hpp"
 #include "xdl.h"
@@ -7445,229 +7446,40 @@ int CompareReleaseVersions(const std::string& localVersion, const std::string& l
     return 0;
 }
 
-// Decodes a JSON string value enough for GitHub release metadata display.
-std::string DecodeJsonString(const std::string& value) {
-    std::string output;
-    output.reserve(value.size());
-
-    for (size_t i = 0; i < value.size(); ++i) {
-        char ch = value[i];
-        if (ch != '\\' || i + 1 >= value.size()) {
-            output += ch;
-            continue;
-        }
-
-        char escaped = value[++i];
-        switch (escaped) {
-            case '"':
-            case '\\':
-            case '/':
-                output += escaped;
-                break;
-            case 'b':
-                output += '\b';
-                break;
-            case 'f':
-                output += '\f';
-                break;
-            case 'n':
-                output += '\n';
-                break;
-            case 'r':
-                output += '\r';
-                break;
-            case 't':
-                output += '\t';
-                break;
-            case 'u': {
-                if (i + 4 >= value.size()) {
-                    output += '?';
-                    break;
-                }
-
-                int codepoint = 0;
-                bool valid = true;
-                for (size_t j = 0; j < 4; ++j) {
-                    char hex = value[++i];
-                    codepoint <<= 4;
-
-                    if (hex >= '0' && hex <= '9') {
-                        codepoint += hex - '0';
-                    } else if (hex >= 'a' && hex <= 'f') {
-                        codepoint += 10 + hex - 'a';
-                    } else if (hex >= 'A' && hex <= 'F') {
-                        codepoint += 10 + hex - 'A';
-                    } else {
-                        valid = false;
-                    }
-                }
-
-                output += valid && codepoint > 0 && codepoint < 0x80 ?
-                    static_cast<char>(codepoint) :
-                    '?';
-                break;
-            }
-            default:
-                output += escaped;
-                break;
-        }
-    }
-
-    return output;
-}
-
-// Finds a JSON object key in a small release object slice.
-size_t FindJsonKey(const std::string& object, const char* key) {
-    std::string pattern = "\"";
-    pattern += key;
-    pattern += "\"";
-    return object.find(pattern);
-}
-
 // Extracts a JSON string field from a GitHub release object.
 bool JsonStringField(
-    const std::string& object,
+    const nlohmann::json& object,
     const char* key,
     std::string& output,
     bool allowNull = false
 ) {
-    size_t keyPos = FindJsonKey(object, key);
-    if (keyPos == std::string::npos) {
+    auto value = object.find(key);
+    if (value == object.end()) {
         return false;
     }
 
-    size_t colon = object.find(':', keyPos);
-    if (colon == std::string::npos) {
-        return false;
-    }
-
-    size_t valueStart = object.find_first_not_of(" \t\r\n", colon + 1);
-    if (valueStart == std::string::npos) {
-        return false;
-    }
-
-    if (allowNull && object.compare(valueStart, 4, "null") == 0) {
+    if (allowNull && value->is_null()) {
         output.clear();
         return true;
     }
 
-    if (object[valueStart] != '"') {
+    if (!value->is_string()) {
         return false;
     }
 
-    std::string encoded;
-    bool escaped = false;
-    for (size_t i = valueStart + 1; i < object.size(); ++i) {
-        char ch = object[i];
-        if (escaped) {
-            encoded += '\\';
-            encoded += ch;
-            escaped = false;
-            continue;
-        }
-
-        if (ch == '\\') {
-            escaped = true;
-            continue;
-        }
-
-        if (ch == '"') {
-            output = DecodeJsonString(encoded);
-            return true;
-        }
-
-        encoded += ch;
-    }
-
-    return false;
+    output = value->get_ref<const std::string&>();
+    return true;
 }
 
 // Extracts a JSON boolean field from a GitHub release object.
-bool JsonBoolField(const std::string& object, const char* key, bool& output) {
-    size_t keyPos = FindJsonKey(object, key);
-    if (keyPos == std::string::npos) {
+bool JsonBoolField(const nlohmann::json& object, const char* key, bool& output) {
+    auto value = object.find(key);
+    if (value == object.end() || !value->is_boolean()) {
         return false;
     }
 
-    size_t colon = object.find(':', keyPos);
-    if (colon == std::string::npos) {
-        return false;
-    }
-
-    size_t valueStart = object.find_first_not_of(" \t\r\n", colon + 1);
-    if (valueStart == std::string::npos) {
-        return false;
-    }
-
-    if (object.compare(valueStart, 4, "true") == 0) {
-        output = true;
-        return true;
-    }
-
-    if (object.compare(valueStart, 5, "false") == 0) {
-        output = false;
-        return true;
-    }
-
-    return false;
-}
-
-// Splits the top-level GitHub releases array into individual release objects.
-std::vector<std::string> ExtractReleaseObjects(const std::string& json) {
-    std::vector<std::string> objects;
-    size_t arrayStart = json.find('[');
-    if (arrayStart == std::string::npos) {
-        return objects;
-    }
-
-    int depth = 1;
-    bool inString = false;
-    bool escaped = false;
-    size_t objectStart = std::string::npos;
-
-    for (size_t i = arrayStart + 1; i < json.size(); ++i) {
-        char ch = json[i];
-
-        if (inString) {
-            if (escaped) {
-                escaped = false;
-            } else if (ch == '\\') {
-                escaped = true;
-            } else if (ch == '"') {
-                inString = false;
-            }
-            continue;
-        }
-
-        if (ch == '"') {
-            inString = true;
-            continue;
-        }
-
-        if (ch == '{' || ch == '[') {
-            if (ch == '{' && depth == 1) {
-                objectStart = i;
-            }
-
-            ++depth;
-            continue;
-        }
-
-        if (ch == '}' || ch == ']') {
-            --depth;
-
-            if (ch == '}' && depth == 1 && objectStart != std::string::npos) {
-                objects.push_back(json.substr(objectStart, i - objectStart + 1));
-                objectStart = std::string::npos;
-            }
-
-            if (depth <= 0) {
-                break;
-            }
-        }
-    }
-
-    return objects;
+    output = value->get<bool>();
+    return true;
 }
 
 // Builds a compact first-line release summary for status display.
@@ -7703,16 +7515,20 @@ std::string BuildReleaseSummary(const ReleaseInfo& release) {
 }
 
 // Parses GitHub release metadata needed by the update overlay.
-bool ParseGitHubReleases(const std::string& json, std::vector<ReleaseInfo>& releases) {
-    std::vector<std::string> objects = ExtractReleaseObjects(json);
-    if (objects.empty()) {
+bool ParseGitHubReleases(const std::string& jsonText, std::vector<ReleaseInfo>& releases) {
+    nlohmann::json parsed = nlohmann::json::parse(jsonText, nullptr, false);
+    if (parsed.is_discarded() || !parsed.is_array() || parsed.empty()) {
         return false;
     }
 
     releases.clear();
-    releases.reserve(objects.size());
+    releases.reserve(parsed.size());
 
-    for (const std::string& object : objects) {
+    for (const nlohmann::json& object : parsed) {
+        if (!object.is_object()) {
+            continue;
+        }
+
         ReleaseInfo release;
         if (!JsonStringField(object, "tag_name", release.tag)) {
             continue;
