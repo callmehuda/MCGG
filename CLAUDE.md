@@ -15,6 +15,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - There is no unit test framework. Verification is a successful curl and native
   build: `bash jni/build-curl-android.sh` then `ndk-build -C jni`.
 - For IL2CPP changes, verify method signatures and field offsets against `dump/dump.cs`.
+- `dump/dump.cs` is Git LFS-managed. A dump refresh can show only a pointer
+  object ID and file-size change in Git, so inspect the full local artifact and
+  compare against the previous dump snapshot when one is available. Do not
+  commit old dump backup files unless explicitly requested.
 - Run `git diff --check` for native or mixed code changes.
 - For documentation-only edits, inspect the Markdown diff before finishing.
 - The GitHub Actions release workflow is `.github/workflows/build.yml`; it
@@ -64,6 +68,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **CI Releases**: `.github/workflows/build.yml` creates UTC date-based release tags before build, embeds that version into the native library, packages `libs/` with `BUILD_INFO.txt`, and generates release notes from commit subjects and body text in the push range or release-tag fallback.
 - **Memory Mapping**: `jni/structures/Structures.hpp` defines the layout of Unity/Mono types to allow native interaction with managed objects. Function-level comments document the shared layout helpers so offset and value-type reviews do not rely on names alone.
 - **Reference**: `dump/dump.cs` serves as the source of truth for the target game's internal C# structure.
+- **Current Dump Refresh**: The local dump was refreshed on 2026-05-20 and is
+  605,385 lines. It still exposes the native overlay's main binding contracts:
+  `MCLogicBattleManager.StartAI(Int32)`, `StopAI()`, `TryAutoDeploy()`,
+  `OnPlayerLvlUp()`, `CalcCurrentFightValue()`, `GetLineupWorth()`,
+  `MoveHeroInBattleField(UInt32, Byte, Byte, Boolean)`,
+  `MCLogicBattleData.ILOGIC_GetAllBattleMgr()`,
+  `ILOGIC_GetCurrentOpponentAccountID(UInt64)`,
+  `ILOGIC_GetCrystalQualityByRound(UInt64, Int32)`,
+  `LogicRoundMgr.get_m_AuctionComp()`, `SetRound(UInt32)`,
+  `NextRound(Boolean)`, `MCLogicAuctionComp.Bid(...)`,
+  `MCLogicGoGoCardComp.get_m_CurrData()`, and
+  `UnityEngine.Time.set_timeScale(Single)`. Treat RVAs as per-build diagnostics
+  and keep native binding logic signature-based.
 
 ### Game Context From External Research
 

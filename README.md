@@ -17,6 +17,7 @@ This repository builds an `arm64-v8a` shared library for a Unity `2019.4.33f1` I
 
 - [Responsible Use](#responsible-use)
 - [Project Status](#project-status)
+- [Dump Reference](#dump-reference)
 - [Game Context](#game-context)
 - [Features](#features)
 - [Architecture](#architecture)
@@ -62,6 +63,37 @@ The default supported target is:
 - Primary branch: `master`
 - Current overlay tabs: Info, Combat, Auto-Play, Shop, Arena, Appearance,
   Settings, and Test
+
+## Dump Reference
+
+`dump/dump.cs` is the current IL2CPP signature reference and was refreshed from
+the latest local dump on 2026-05-20. The working artifact is 605,385 lines.
+Because `dump/**` is stored through Git LFS, an ordinary tracked diff may show
+only the pointer object ID and file size; review the full local artifact, and
+compare it with the previous dump snapshot when one is available.
+
+The refreshed dump still validates the core runtime contracts used by this
+native overlay:
+
+- `MCLogicBattleManager`: `StartAI(Int32)`, `StopAI()`, `TryAutoDeploy()`,
+  `OnPlayerLvlUp()`, `CalcCurrentFightValue()`, `GetLineupWorth()`, and
+  `MoveHeroInBattleField(UInt32, Byte, Byte, Boolean)`.
+- `MCLogicBattleData`: `ILOGIC_GetAllBattleMgr()`,
+  `ILOGIC_GetCurrentOpponentAccountID(UInt64)`,
+  `ILOGIC_GetCrystalQualityByRound(UInt64, Int32)`, round/phase readers,
+  economy readers, shop readers, and Recommendation Lineup readers.
+- `LogicRoundMgr`: `get_m_AuctionComp()`, `SetRound(UInt32)`, and
+  `NextRound(Boolean)`.
+- `Battle.MCLogicAuctionComp.Bid(MCLogicAuctionSlotInfo, UInt64, UInt32)`,
+  `Battle.MCLogicGoGoCardComp.get_m_CurrData()`,
+  `UnityEngine.Time.set_timeScale(Single)`, and the achievement record
+  helpers used by Arena diagnostics.
+
+Addresses and RVAs in `dump/dump.cs` are per-build diagnostics. Native logic
+should continue to bind by class, method name, return type, parameter count,
+and parameter-name shape instead of copying address literals. Keep older dump
+snapshots out of commits unless a task explicitly asks for a checked-in
+historical reference.
 
 ## Game Context
 

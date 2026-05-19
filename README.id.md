@@ -17,6 +17,7 @@ Repository ini membangun shared library `arm64-v8a` untuk lingkungan Android Uni
 
 - [Penggunaan yang Bertanggung Jawab](#penggunaan-yang-bertanggung-jawab)
 - [Status Proyek](#status-proyek)
+- [Referensi Dump](#referensi-dump)
 - [Konteks Game](#konteks-game)
 - [Fitur](#fitur)
 - [Arsitektur](#arsitektur)
@@ -62,6 +63,37 @@ Target default yang didukung:
 - Branch utama: `master`
 - Tab overlay saat ini: Info, Combat, Auto-Play, Shop, Arena, Appearance,
   Settings, dan Test
+
+## Referensi Dump
+
+`dump/dump.cs` adalah referensi signature IL2CPP saat ini dan sudah di-refresh
+dari dump lokal terbaru pada 2026-05-20. Artifact kerja berisi 605.385 baris.
+Karena `dump/**` disimpan melalui Git LFS, diff tracked biasa dapat hanya
+menampilkan object ID pointer dan ukuran file; review artifact lokal penuh, dan
+bandingkan dengan snapshot dump sebelumnya jika tersedia.
+
+Dump yang sudah di-refresh masih memvalidasi kontrak runtime inti yang dipakai
+overlay native ini:
+
+- `MCLogicBattleManager`: `StartAI(Int32)`, `StopAI()`, `TryAutoDeploy()`,
+  `OnPlayerLvlUp()`, `CalcCurrentFightValue()`, `GetLineupWorth()`, dan
+  `MoveHeroInBattleField(UInt32, Byte, Byte, Boolean)`.
+- `MCLogicBattleData`: `ILOGIC_GetAllBattleMgr()`,
+  `ILOGIC_GetCurrentOpponentAccountID(UInt64)`,
+  `ILOGIC_GetCrystalQualityByRound(UInt64, Int32)`, reader round/phase, reader
+  economy, reader shop, dan reader Recommendation Lineup.
+- `LogicRoundMgr`: `get_m_AuctionComp()`, `SetRound(UInt32)`, dan
+  `NextRound(Boolean)`.
+- `Battle.MCLogicAuctionComp.Bid(MCLogicAuctionSlotInfo, UInt64, UInt32)`,
+  `Battle.MCLogicGoGoCardComp.get_m_CurrData()`,
+  `UnityEngine.Time.set_timeScale(Single)`, dan helper achievement record yang
+  dipakai diagnostik Arena.
+
+Alamat dan RVA di `dump/dump.cs` adalah diagnostik per-build. Logic native
+harus tetap melakukan binding berdasarkan class, nama method, return type,
+jumlah parameter, dan bentuk nama parameter, bukan menyalin literal alamat.
+Jangan commit snapshot dump lama kecuali task secara eksplisit meminta referensi
+historis yang ikut dilacak.
 
 ## Konteks Game
 

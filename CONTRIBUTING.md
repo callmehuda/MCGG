@@ -45,6 +45,26 @@ bash jni/build-curl-android.sh
 - Keep source changes focused on the requested feature or fix.
 - Use `dump/dump.cs` to verify IL2CPP class names, method signatures, return
   types, and fields before changing native calls.
+- Treat `dump/dump.cs` as a Git LFS-managed source artifact. A dump refresh may
+  appear in Git as only a pointer object ID and size change, so inspect the full
+  local file and compare against the previous dump snapshot when one is
+  available. Do not commit old dump backup files unless the task explicitly asks
+  for a checked-in historical reference.
+- The current dump refresh was checked locally on 2026-05-20 and is 605,385
+  lines. It still exposes the main contracts used by native runtime features:
+  `MCLogicBattleManager.StartAI(Int32)`, `StopAI()`, `TryAutoDeploy()`,
+  `OnPlayerLvlUp()`, `CalcCurrentFightValue()`, `GetLineupWorth()`,
+  `MoveHeroInBattleField(UInt32, Byte, Byte, Boolean)`,
+  `MCLogicBattleData.ILOGIC_GetAllBattleMgr()`,
+  `ILOGIC_GetCurrentOpponentAccountID(UInt64)`,
+  `ILOGIC_GetCrystalQualityByRound(UInt64, Int32)`,
+  `LogicRoundMgr.get_m_AuctionComp()`, `SetRound(UInt32)`,
+  `NextRound(Boolean)`, `MCLogicAuctionComp.Bid(...)`,
+  `MCLogicGoGoCardComp.get_m_CurrData()`, and
+  `UnityEngine.Time.set_timeScale(Single)`.
+- Treat dump addresses and RVAs as per-build diagnostics. Native bindings should
+  continue to use class names, method names, return types, parameter counts, and
+  parameter-name shape instead of address literals.
 - Regular instance field helpers should use resolved field offsets for hot
   typed reads and non-pointer writes, while retaining raw IL2CPP fallbacks.
   Keep static fields on the IL2CPP static APIs and preserve write barriers for

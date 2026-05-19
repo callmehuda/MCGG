@@ -23,7 +23,13 @@ Startup waits belong in the detached setup thread, not the library constructor,
 so process loading is not blocked by hook delays.
 
 `dump/dump.cs` is the IL2CPP signature reference. Use it before changing native
-method pointers, hook signatures, value-type layouts, or field offsets.
+method pointers, hook signatures, value-type layouts, or field offsets. The
+current dump refresh was checked locally on 2026-05-20 and is 605,385 lines.
+Because `dump/**` is Git LFS-managed, tracked diffs can show only pointer object
+ID and file-size changes; inspect the full local artifact and compare against a
+previous dump snapshot when one is available. Treat dump addresses and RVAs as
+per-build diagnostics, not binding contracts, and do not commit old dump backup
+files unless explicitly requested.
 Vendored or external components live under `jni/dobby/`, `jni/imgui/`,
 `jni/xDL/`, `jni/curl/`, `jni/libpsl/`, `jni/openssl/`, and
 `jni/Il2CppVersions/`. The project-owned `jni/build-curl-android.sh` script
@@ -280,6 +286,9 @@ When changing Auto-Play automation, verify the related
 `MCLogicGoGoCardComp.get_m_CurrData` signatures against `dump/dump.cs`. Keep
 the overlay in a `Waiting for ...` state while required runtime data is
 unavailable.
+The 2026-05-20 dump refresh still exposes these signatures with the same
+parameter shapes; re-check them again before changing native function pointer
+types because future dumps can drift independently of public game context.
 
 When changing Arena Skip Round automation, verify
 `MCLogicBattleData.get_logicRoundMgr`, `LogicRoundMgr.SetRound(UInt32)`, and
