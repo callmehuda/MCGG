@@ -40,7 +40,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   hot paths. Raw IL2CPP get/set fallbacks remain for unresolved offsets, static
   fields stay on static IL2CPP APIs, and managed-object pointer writes should
   preserve IL2CPP write barriers.
-- **Diagnostics**: The Test tab houses Runtime Status plus binding readiness, update-check status, Auto-Play readiness, Recommendation Lineup readiness, managed reference refresh, Battle Power readiness, round state, Arena round-manager readiness, Unity timeScale readiness, player economy/rank/shop state, grouped shop diagnostic reader readiness, battle manager fields, battle bridge state, shop panel state, behavior API state, all manager entries, and opponent prediction signals. Shop diagnostics become ready when any core shop diagnostic reader resolves, while individual rows keep their own `Waiting` states. In the prediction table, `Will fight` is local-player opponent probability; `Current enemy` is the observed opponent for that row; `Recent` comes from the per-player opponent history.
+- **Diagnostics**: The Test tab houses Runtime Status plus binding readiness, update-check status, Auto-Play readiness, Recommendation Lineup readiness, managed reference refresh, Battle Power readiness, round state, Arena round-manager readiness, Unity timeScale readiness, player economy/rank/shop state, grouped shop diagnostic reader readiness, battle manager fields, battle bridge state, shop panel state, behavior API state, all manager entries, and opponent prediction signals. Shop diagnostics become ready when any core shop diagnostic reader resolves, while individual rows keep their own `Waiting` states. In the prediction table, `Will fight` is local-player opponent probability; `Current enemy` is the observed opponent for that row; `Recent` comes from the per-player opponent history, while the seven-round cycle-pattern signal is folded into the weighted prediction.
 - **Configuration**: Settings saves and loads visual, window, HUD, Auto-Play, Combat, Shop, and Arena controls from `/data/data/<game-package>/files/mcgg_config.ini`.
 - **Updates / Changelog**: Settings includes an informational GitHub Releases
   checker. It uses embedded `MCGG_BUILD_REPOSITORY`, `MCGG_BUILD_VERSION`,
@@ -85,6 +85,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   rotating opponent order that deprioritizes recent opponents until a cycle
   advances. Use that only as a heuristic beneath live runtime pair observations
   and dump-backed invader reads.
+- The sibling `../MCGG_Predictor` app contributes a bounded seven-round
+  completed-history model: unknown pattern can tentatively predict R4 from local
+  R1, classic pattern repeats local R1 at R4 and uses local R3 at R5, and shifted
+  pattern predicts R5/R6/R7 from the local R1 opponent's R4/R2/R3 matchups. Keep
+  that signal below exact current-opponent, reverse-pair, and invader-order
+  evidence.
 - Google Play and third-party store mirrors can disagree on exact update dates
   by region/cache. Treat store metadata as product context, not stable binding
   assumptions.
@@ -156,8 +162,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Opponent prediction may display exact data and weighted guesses together. Only the exact local current opponent should be forced to `100%`.
 - Opponent prediction rows should be built on the throttled 500 ms feature tick,
   not inside the ImGui draw path. Weight live current-opponent data first, then
-  invader order, recent-cycle learning, cycle-gap distance, round-robin
-  fallback, and history.
+  invader order, recent-cycle learning, the completed-history seven-round
+  cycle-pattern signal, cycle-gap distance, round-robin fallback, and history.
 - GGC Info should keep `ILOGIC_GetCrystalQualityByRound(UInt64, Int32)`
   dump-verified, scan only the bounded configured round range, and refresh on
   its 500 ms cadence rather than every render frame.

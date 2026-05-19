@@ -83,8 +83,9 @@ bash jni/build-curl-android.sh
   rather than native binding assumptions.
 - Prediction research should treat public scouting and positioning advice as
   weak heuristics. Runtime current-opponent data, invader order, recent-cycle
-  learning, cycle-gap distance, and local history should drive predictions
-  before any generic internet or video-derived assumption.
+  learning, the completed-history seven-round cycle model adapted from
+  `../MCGG_Predictor`, cycle-gap distance, and local history should drive
+  predictions before any generic internet or video-derived assumption.
 - Preserve the current startup order: process gate, setup thread, early
   `eglSwapBuffers` hook, `liblogic.so` wait, IL2CPP export resolution, setup
   thread attach, `UnityEngine.Input.GetTouch` hook, then lazy render-thread
@@ -112,8 +113,13 @@ bash jni/build-curl-android.sh
   `LogicInvasionMgr`, `LogicRealPlayerInvader.lbmList`,
   `PairGenRoundTable`/`PairGenTwoPlayerMode`, `lastRoundEnemy`, and
   `prevRealPlayerEnemy` before falling back to heuristic account ordering.
-  Recent-cycle distance may bias probabilities, but it must stay weaker than
-  exact current-opponent or reverse-pair reads.
+  The seven-round cycle-pattern signal learned from `../MCGG_Predictor` should
+  use only completed current-cycle history: unknown pattern can tentatively
+  predict R4 from local R1, classic pattern predicts R4/R5 from local R1/R3,
+  and shifted pattern predicts R5/R6/R7 from the local R1 opponent's R4/R2/R3
+  matchups. Recent-cycle distance and cycle-pattern signals may bias
+  probabilities, but they must stay weaker than exact current-opponent or
+  reverse-pair reads.
 - For Shop changes, preserve the existing throttled automation model: buy,
   repeat-buy, refresh, target-worth, and Recommendation Lineup checks must stay
   bounded, snapshot-based, and retryable. Buy and refresh UI actions should also
@@ -283,8 +289,9 @@ Use this checklist when looking for hidden bugs or logic flaws:
 - Confirm render-frame budget checks still let delayed work retry on later
   frames and do not turn retryable runtime state into a one-shot failure.
 - Confirm prediction changes preserve the source priority: exact live pair,
-  reverse live pair, invader-order read, recent-cycle queue, round-robin
-  fallback, recent-cycle distance, and only then generic history weighting.
+  reverse live pair, invader-order read, recent-cycle queue, seven-round
+  cycle-pattern signal from completed history, round-robin fallback,
+  recent-cycle distance, and only then generic history weighting.
 - Keep method misses and field misses backed off rather than permanently cached
   as unavailable, and keep feature binding resolution single-flight so setup and
   render retries do not scan IL2CPP metadata at the same time.

@@ -222,7 +222,8 @@ they are backed by `dump/dump.cs` and live runtime verification.
 - Manual binding retry and managed reference refresh controls.
 - Account inspection by self, opponent, or explicit account ID.
 - Fight prediction table with direct, manager-derived, invasion-pair,
-  dump-derived invader order, queue/cycle, and opponent-history signals.
+  dump-derived invader order, queue/cycle, seven-round cycle-pattern, and
+  opponent-history signals.
   `Will fight` is the chance that the row is the local player's opponent;
   `Current enemy` shows that row's observed opponent when available; `Recent`
   shows recent local meetings from the per-player opponent history.
@@ -244,10 +245,14 @@ metadata every frame. When a binding is not ready, the overlay reports a
 
 Opponent prediction combines runtime sources before public heuristics. Live
 current-opponent observations and reverse pair reads remain strongest, followed
-by dump-backed invader ordering, learned recent-opponent cycles, round-robin
-fallback, bounded cycle-gap learning, and bounded history weights. Prediction
-rows are cached on the 500 ms feature cadence so the Test tab and next-enemy HUD
-do not rebuild managed state every render frame.
+by dump-backed invader ordering, learned recent-opponent cycles, a seven-round
+cycle-pattern model adapted from `../MCGG_Predictor`, round-robin fallback,
+bounded cycle-gap learning, and bounded history weights. The cycle-pattern
+signal uses completed current-cycle history only: it treats R4 matching local R1
+as the classic pattern, otherwise uses the shifted pattern where R5/R6/R7 derive
+from the local R1 opponent's R4/R2/R3 matchups. Prediction rows are cached on
+the 500 ms feature cadence so the Test tab and next-enemy HUD do not rebuild
+managed state every render frame.
 
 ## Architecture
 
@@ -636,9 +641,10 @@ the following bug-prone areas:
   enabling Auto-Play itself does not immediately invoke the game's AI entry
   point.
 - Opponent prediction combines exact pair data, invasion manager state,
-  dump-backed invader order, round-robin fallback, recent-cycle distance, and
-  recent meeting history. Only the exact local current opponent should be shown
-  as `100%`.
+  dump-backed invader order, learned recent cycles, the bounded seven-round
+  cycle-pattern signal, round-robin fallback, recent-cycle distance, and recent
+  meeting history. Only the exact local current opponent should be shown as
+  `100%`.
 - SpeedHack changes global Unity time scale. It must continue to reset to
   `1.0x` when disabled, when the active battle state is gone, or when feature
   state is reset.
@@ -680,6 +686,10 @@ the following bug-prone areas:
   `LogicInvasionMgr`, `LogicRealPlayerInvader.lbmList`,
   `PairGenRoundTable`/`PairGenTwoPlayerMode`, `lastRoundEnemy`, and
   `prevRealPlayerEnemy` before falling back to heuristic ordering.
+- The seven-round cycle-pattern signal comes from completed per-player history
+  learned from `../MCGG_Predictor`; keep it below exact pair and invader-order
+  evidence and ignore current-round entries so predictions do not leak live
+  observations as completed history.
 - Public scouting and positioning guides support recent-cycle and board-read
   heuristics, but they should not override exact runtime current-opponent data.
 - Keep Test diagnostics read-only unless a task explicitly requests an action,
@@ -867,7 +877,9 @@ Check the GitHub Actions log for:
   validation against `dump/dump.cs`.
 - Recommendation Lineup automation depends on the active match lineup data exposed by the runtime.
 - Opponent prediction is probabilistic when current-pair data is unavailable;
-  live `m_CurPairDict` data still takes precedence when the runtime exposes it.
+  live `m_CurPairDict` data still takes precedence when the runtime exposes it,
+  and the seven-round cycle-pattern signal needs enough completed current-cycle
+  observations to identify the pattern or key matchup.
 - The embedded Noto Sans CJK font increases native source input size and font atlas build time.
 - Curl is configured with the pinned OpenSSL `4.0.0` TLS backend, pinned libpsl
   `0.21.5` support, and without curl feature-disabling flags; optional features

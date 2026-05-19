@@ -10843,6 +10843,18 @@ struct OpponentHistoryEntry {
     bool fromCurrentApi = false;
 };
 
+enum class OpponentCyclePattern {
+    Unknown,
+    Classic,
+    Shifted
+};
+
+struct OpponentCyclePrediction {
+    uint64_t opponentId = 0;
+    OpponentCyclePattern pattern = OpponentCyclePattern::Unknown;
+    bool tentative = false;
+};
+
 namespace PredictionCache {
     std::unordered_map<uint64_t, CurrentOpponentObservation> CurrentRoundOpponents;
     std::unordered_map<uint64_t, std::vector<OpponentHistoryEntry>> OpponentHistory;
@@ -11102,6 +11114,154 @@ std::vector<uint64_t> BuildRecentOpponentCycle(uint64_t accountId, size_t maxOpp
 // Reports whether an account already appears in a bounded recent opponent set.
 bool ContainsAccountId(const std::vector<uint64_t>& accounts, uint64_t accountId) {
     return std::find(accounts.begin(), accounts.end(), accountId) != accounts.end();
+}
+
+// Converts the game round into the seven-round opponent cycle index.
+uint32_t GetOpponentCycleEffectiveRound(uint32_t round) {
+    return round > 0 ? ((round - 1) % 7) + 1 : 0;
+}
+
+// Returns the absolute first round for the current seven-round opponent cycle.
+uint32_t GetOpponentCycleStartRound(uint32_t round) {
+    return round > 0 ? ((round - 1) / 7) * 7 + 1 : 0;
+}
+
+// Reads a completed, non-mirror opponent history entry for one absolute round.
+uint64_t GetCompletedHistoryOpponentForRound(
+    uint64_t accountId,
+    uint32_t targetRound,
+    uint32_t currentRound
+) {
+    if (accountId == 0 || targetRound == 0 || targetRound >= currentRound) {
+        return 0;
+    }
+
+    auto found = PredictionCache::OpponentHistory.find(accountId);
+    if (found == PredictionCache::OpponentHistory.end()) {
+        return 0;
+    }
+
+    const std::vector<OpponentHistoryEntry>& history = found->second;
+    for (auto it = history.rbegin(); it != history.rend(); ++it) {
+        if (it->round != targetRound ||
+            it->mirror ||
+            it->opponentId == 0 ||
+            it->opponentId == accountId) {
+            continue;
+        }
+
+        return it->opponentId;
+    }
+
+    return 0;
+}
+
+// Reads a completed opponent for an effective round in the active seven-round cycle.
+uint64_t GetCompletedCycleOpponent(
+    uint64_t accountId,
+    uint32_t cycleStartRound,
+    uint32_t effectiveRound,
+    uint32_t currentRound
+) {
+    if (cycleStartRound == 0 || effectiveRound == 0 || effectiveRound > 7) {
+        return 0;
+    }
+
+    return GetCompletedHistoryOpponentForRound(
+        accountId,
+        cycleStartRound + effectiveRound - 1,
+        currentRound
+    );
+}
+
+// Detects the active seven-round cycle pattern from completed local R1 and R4 data.
+OpponentCyclePattern DetectOpponentCyclePattern(
+    uint64_t selfAccountId,
+    uint32_t currentRound
+) {
+    uint32_t cycleStartRound = GetOpponentCycleStartRound(currentRound);
+    if (cycleStartRound == 0) {
+        return OpponentCyclePattern::Unknown;
+    }
+
+    uint64_t roundOneOpponent =
+        GetCompletedCycleOpponent(selfAccountId, cycleStartRound, 1, currentRound);
+    uint64_t roundFourOpponent =
+        GetCompletedCycleOpponent(selfAccountId, cycleStartRound, 4, currentRound);
+
+    if (roundOneOpponent == 0 || roundFourOpponent == 0) {
+        return OpponentCyclePattern::Unknown;
+    }
+
+    return roundFourOpponent == roundOneOpponent ?
+        OpponentCyclePattern::Classic :
+        OpponentCyclePattern::Shifted;
+}
+
+// Predicts the local opponent from the seven-round pattern learned from MCGG_Predictor.
+OpponentCyclePrediction PredictCyclePatternOpponent(
+    uint64_t selfAccountId,
+    uint32_t currentRound
+) {
+    OpponentCyclePrediction prediction{};
+    if (selfAccountId == 0 || currentRound == 0) {
+        return prediction;
+    }
+
+    uint32_t effectiveRound = GetOpponentCycleEffectiveRound(currentRound);
+    uint32_t cycleStartRound = GetOpponentCycleStartRound(currentRound);
+    uint64_t roundOneOpponent =
+        GetCompletedCycleOpponent(selfAccountId, cycleStartRound, 1, currentRound);
+
+    if (roundOneOpponent == 0) {
+        return prediction;
+    }
+
+    OpponentCyclePattern pattern =
+        DetectOpponentCyclePattern(selfAccountId, currentRound);
+    prediction.pattern = pattern;
+
+    if (pattern == OpponentCyclePattern::Unknown) {
+        if (effectiveRound == 4) {
+            prediction.opponentId = roundOneOpponent;
+            prediction.tentative = true;
+        }
+        return prediction;
+    }
+
+    if (pattern == OpponentCyclePattern::Classic) {
+        if (effectiveRound == 4) {
+            prediction.opponentId = roundOneOpponent;
+        } else if (effectiveRound == 5) {
+            prediction.opponentId =
+                GetCompletedCycleOpponent(selfAccountId, cycleStartRound, 3, currentRound);
+        }
+    } else if (pattern == OpponentCyclePattern::Shifted) {
+        uint32_t keyEffectiveRound = 0;
+
+        if (effectiveRound == 5) {
+            keyEffectiveRound = 4;
+        } else if (effectiveRound == 6) {
+            keyEffectiveRound = 2;
+        } else if (effectiveRound == 7) {
+            keyEffectiveRound = 3;
+        }
+
+        if (keyEffectiveRound != 0) {
+            prediction.opponentId = GetCompletedCycleOpponent(
+                roundOneOpponent,
+                cycleStartRound,
+                keyEffectiveRound,
+                currentRound
+            );
+        }
+    }
+
+    if (prediction.opponentId == selfAccountId) {
+        prediction.opponentId = 0;
+    }
+
+    return prediction;
 }
 
 // Uses recent opponent cycles to guess who should be next in the pairing queue.
@@ -11452,6 +11612,10 @@ std::vector<OpponentPredictionRow> BuildOpponentPredictions(uint64_t selfAccount
     uint32_t round = Originals::MCLogicBattleData_ILOGIC_GetGameRound ?
         Originals::MCLogicBattleData_ILOGIC_GetGameRound(nullptr) :
         0;
+    OpponentCyclePrediction cyclePatternPrediction =
+        PredictCyclePatternOpponent(selfAccountId, round);
+    bool cyclePatternOpponentAlive =
+        ContainsAccountId(aliveAccounts, cyclePatternPrediction.opponentId);
     uint64_t roundRobinOpponent = PredictRoundRobinOpponent(
         aliveAccounts,
         selfAccountId,
@@ -11558,6 +11722,19 @@ std::vector<OpponentPredictionRow> BuildOpponentPredictions(uint64_t selfAccount
         } else if (historyQueueOpponent == 0 && roundRobinOpponent != 0) {
             weight *= row.accountId == roundRobinOpponent ? 2.2 : 0.86;
             if (row.accountId == roundRobinOpponent) {
+                ++sourceVotes;
+            }
+        }
+
+        if (cyclePatternOpponentAlive) {
+            bool cycleMatch = row.accountId == cyclePatternPrediction.opponentId;
+            double cycleMatchBoost = cyclePatternPrediction.tentative ?
+                1.9 :
+                (cyclePatternPrediction.pattern == OpponentCyclePattern::Classic ? 3.1 : 3.4);
+            double cycleMissPenalty = cyclePatternPrediction.tentative ? 0.91 : 0.76;
+
+            weight *= cycleMatch ? cycleMatchBoost : cycleMissPenalty;
+            if (cycleMatch && !cyclePatternPrediction.tentative) {
                 ++sourceVotes;
             }
         }

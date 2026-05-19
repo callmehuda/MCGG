@@ -61,6 +61,12 @@ of volatile meta instructions. Current public context checked on 2026-05-19:
   advances. Treat that as a prediction heuristic only; live runtime pair data,
   invader-order reads, recent-cycle distance, and local opponent history remain
   stronger evidence.
+- The sibling `../MCGG_Predictor` app models two seven-round pairing patterns
+  from completed history: unknown pattern can tentatively predict R4 from local
+  R1, classic pattern repeats local R1 at R4 and uses local R3 at R5, and shifted
+  pattern derives R5/R6/R7 from the local R1 opponent's R4/R2/R3 matchups. Treat
+  this as a bounded runtime-history signal below exact pair and invader-order
+  reads, not as a native binding contract.
 
 Engineering takeaway: prefer documenting stable runtime surfaces such as battle
 managers, player economy, shop panel state, round manager state, Commander and
@@ -211,8 +217,8 @@ needs the data.
 Opponent prediction should not rebuild managed prediction rows from the draw
 path. Reuse the 500 ms prediction tick, keep live current-opponent observations
 highest priority, then combine invader order, recent opponent cycle learning,
-cycle-gap distance, round-robin fallback, and per-player history as weaker
-signals.
+the completed-history seven-round cycle-pattern signal, cycle-gap distance,
+round-robin fallback, and per-player history as weaker signals.
 
 Auto-Play temporarily owns selected Shop, Arena, and Combat assists through its
 policy backup while enabled. If a change touches those assist toggles, preserve
@@ -338,8 +344,9 @@ In the Test prediction table, `Will fight` is the local player's opponent
 probability and `Current enemy` is the observed opponent for that row. Only the
 exact local current opponent should be forced to `100%`; do not mark every row
 as `100%` just because that row has a known current enemy. Preserve per-player
-enemy history collection and dump-backed invader order reads so prediction
-weights can account for recent meetings and the game's pairing list.
+enemy history collection, completed-cycle pattern reads, and dump-backed invader
+order reads so prediction weights can account for recent meetings, the
+seven-round learned pattern, and the game's pairing list.
 Appearance currently includes ImGui Dark, Catppuccin Mocha, and additional
 palettes inspired by Dear ImGui issue #707. Keep `kAppearanceThemes` and
 `Issue707ThemePalette` entries aligned, and preserve Catppuccin Mocha at theme
@@ -361,4 +368,5 @@ toggles, opt-in safe-phase built-in AI startup, separate Auto-Play
 deploy/formation cooldowns, render-frame budget deferral between Auto-Play
 action groups, method-miss backoff, guarded binding resolution, update-check
 thread/cache/backoff behavior, clipped long tables, exact-opponent-only `100%`
-prediction rows, bounded GGC round scans, and Unity timeScale reset paths.
+prediction rows, completed-history seven-round prediction patterns, bounded GGC
+round scans, and Unity timeScale reset paths.

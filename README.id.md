@@ -227,10 +227,11 @@ behavior kecuali sudah didukung oleh `dump/dump.cs` dan verifikasi runtime live.
 - Kontrol manual untuk retry binding dan refresh managed reference.
 - Inspeksi account berdasarkan self, opponent, atau account ID eksplisit.
 - Tabel prediksi fight dengan sinyal direct, manager-derived, invasion-pair,
-  urutan invader dari dump, queue/cycle, dan riwayat opponent. `Will fight`
-  adalah peluang row tersebut menjadi opponent player lokal; `Current enemy`
-  menampilkan opponent yang terdeteksi untuk row tersebut jika tersedia;
-  `Recent` menampilkan pertemuan terbaru dari riwayat opponent per player.
+  urutan invader dari dump, queue/cycle, pola siklus tujuh round, dan riwayat
+  opponent. `Will fight` adalah peluang row tersebut menjadi opponent player
+  lokal; `Current enemy` menampilkan opponent yang terdeteksi untuk row tersebut
+  jika tersedia; `Recent` menampilkan pertemuan terbaru dari riwayat opponent
+  per player.
 - Readout runtime bertab untuk kesiapan binding, round state, identitas player,
   rank, ekonomi, state shop, field battle manager, state battle bridge, state
   panel shop, state behavior API, dan seluruh manager entry.
@@ -249,9 +250,13 @@ binding belum siap, overlay akan menampilkan status `Waiting for ...`.
 
 Prediksi opponent menggabungkan sumber runtime sebelum heuristik publik.
 Observasi current-opponent live dan reverse pair tetap paling kuat, lalu urutan
-invader berbasis dump, pembelajaran siklus opponent terbaru, fallback
-round-robin, pembelajaran jarak dalam siklus, dan bobot riwayat yang dibatasi.
-Row prediksi di-cache pada cadence 500 ms agar tab Test dan HUD next-enemy tidak
+invader berbasis dump, pembelajaran siklus opponent terbaru, model pola siklus
+tujuh round yang diadaptasi dari `../MCGG_Predictor`, fallback round-robin,
+pembelajaran jarak dalam siklus, dan bobot riwayat yang dibatasi. Sinyal pola
+siklus hanya memakai history current-cycle yang sudah selesai: R4 yang sama
+dengan R1 lokal dianggap pola classic, sedangkan pola shifted memakai matchup
+opponent R1 lokal pada R4/R2/R3 untuk menurunkan prediksi R5/R6/R7. Row
+prediksi di-cache pada cadence 500 ms agar tab Test dan HUD next-enemy tidak
 membangun ulang state managed pada setiap render frame.
 
 ## Arsitektur
@@ -647,9 +652,10 @@ area yang rawan bug berikut:
   luar fase fight, fight-result, dan monster, serta pertahankan default nonaktif
   agar mengaktifkan Auto-Play tidak langsung memanggil entry point AI game.
 - Prediksi opponent menggabungkan pair data exact, state invasion manager,
-  urutan invader berbasis dump, fallback round-robin, jarak siklus terbaru, dan
-  riwayat pertemuan terbaru. Hanya current opponent lokal yang exact yang boleh
-  ditampilkan sebagai `100%`.
+  urutan invader berbasis dump, siklus terbaru yang dipelajari, sinyal pola
+  siklus tujuh round yang dibatasi, fallback round-robin, jarak siklus terbaru,
+  dan riwayat pertemuan terbaru. Hanya current opponent lokal yang exact yang
+  boleh ditampilkan sebagai `100%`.
 - SpeedHack mengubah time scale Unity global. Fitur ini harus tetap reset ke
   `1.0x` saat dinonaktifkan, saat state battle aktif hilang, atau saat feature
   state di-reset.
@@ -695,6 +701,10 @@ area yang rawan bug berikut:
   seperti `LogicInvasionMgr`, `LogicRealPlayerInvader.lbmList`,
   `PairGenRoundTable`/`PairGenTwoPlayerMode`, `lastRoundEnemy`, dan
   `prevRealPlayerEnemy` sebelum fallback ke urutan heuristik.
+- Sinyal pola siklus tujuh round berasal dari history per-player yang sudah
+  selesai dan dipelajari dari `../MCGG_Predictor`; jaga posisinya di bawah bukti
+  pair exact dan invader-order, serta abaikan entry current-round agar prediksi
+  tidak memakai observasi live sebagai history yang sudah selesai.
 - Guide publik tentang scouting dan positioning mendukung heuristik siklus
   terbaru dan board-read, tetapi tidak boleh mengalahkan data runtime exact
   current-opponent.
@@ -885,7 +895,9 @@ Periksa log GitHub Actions untuk:
   validasi manual terhadap `dump/dump.cs`.
 - Automation Recommendation Lineup bergantung pada data lineup match aktif yang diekspos runtime.
 - Prediksi opponent bersifat probabilistik saat data current-pair belum tersedia;
-  data live `m_CurPairDict` tetap menjadi prioritas saat runtime mengeksposnya.
+  data live `m_CurPairDict` tetap menjadi prioritas saat runtime mengeksposnya,
+  dan sinyal pola siklus tujuh round membutuhkan cukup observasi current-cycle
+  yang sudah selesai untuk mengenali pola atau key matchup.
 - Font Noto Sans CJK embedded menambah ukuran input source native dan waktu build atlas font.
 - Curl dikonfigurasi dengan backend TLS OpenSSL `4.0.0` yang dipin, dukungan
   libpsl `0.21.5` yang dipin, dan tanpa flag yang menonaktifkan fitur curl;
