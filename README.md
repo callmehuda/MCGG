@@ -187,6 +187,9 @@ they are backed by `dump/dump.cs` and live runtime verification.
 - Auto-buy free heroes.
 - Auto-buy selected hero targets.
 - Auto-buy heroes from the active Recommendation Lineup.
+- Force Scavenger to leave the most expensive shop heroes by clearing cheaper
+  heroes immediately after automatic regular shop refreshes when Scavenger is
+  active at count 2 or higher.
 - Auto-refresh shop with stop conditions for free heroes, selected targets, or Recommendation Lineup heroes.
 - Gold reserve threshold for safer automation.
 - Hero target table with configurable target counts and no keyboard-dependent search field.
@@ -661,6 +664,11 @@ the following bug-prone areas:
 - Shop automation depends on live UI operability, not only battle-data methods.
   Buy and refresh actions should continue to require a non-delayed,
   non-spectate shop panel accepted by `CanOperate(Boolean)`.
+- Scavenger expensive-hero forcing is tied to `MCBattleBridge.OnRefreshShop`
+  automatic regular-shop refreshes. It resolves the Scavenger/Shadow Mercenary
+  relation from relation-tip metadata, requires active count 2 or higher, then
+  buys lower-priced shop slots while respecting affordability and keep-gold
+  settings.
 - Auto-Play temporarily owns selected Shop, Arena, and Combat assists through a
   captured policy backup. User edits to those assist toggles while Auto-Play is
   active can be restored to the pre-Auto-Play backup when Auto-Play stops.
@@ -855,6 +863,7 @@ messages.
 When investigating continuous-use issues, verify:
 
 - Shop select and shop automation bindings are ready.
+- Shop Scavenger bindings are ready when Scavenger expensive-hero forcing is enabled.
 - Shop refresh panel is ready when auto-refresh is enabled.
 - Shop diagnostics are ready when at least one core shop diagnostic reader is
   available; missing individual shop values should still show `Waiting`.
@@ -862,6 +871,7 @@ When investigating continuous-use issues, verify:
   accepted by `UIPanelBattleHeroShop.CanOperate(Boolean)`.
 - Recommendation Lineup bindings are ready when recommendation buying or pause-refresh is enabled.
 - Keep-gold reserve is not blocking the action.
+- Scavenger active count is 2 or higher when expensive-hero forcing is enabled.
 - Target counts have not already been reached.
 - Buy and refresh cooldowns are not still active.
 

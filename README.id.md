@@ -192,6 +192,9 @@ behavior kecuali sudah didukung oleh `dump/dump.cs` dan verifikasi runtime live.
 - Auto-buy hero gratis.
 - Auto-buy target hero yang dipilih.
 - Auto-buy hero dari Recommendation Lineup yang aktif.
+- Force Scavenger agar hero shop termahal tersisa dengan membeli hero yang
+  lebih murah segera setelah regular shop auto-refresh, saat Scavenger aktif
+  pada count 2 atau lebih.
 - Auto-refresh shop dengan stop condition untuk hero gratis, target yang dipilih, atau hero Recommendation Lineup.
 - Gold reserve threshold untuk automasi yang lebih aman.
 - Tabel target hero dengan jumlah target yang dapat dikonfigurasi dan tanpa field search yang bergantung pada keyboard.
@@ -671,6 +674,11 @@ area yang rawan bug berikut:
 - Automation Shop bergantung pada operability UI live, bukan hanya method battle
   data. Aksi buy dan refresh harus tetap membutuhkan shop panel yang tidak
   delay, tidak spectate, dan diterima oleh `CanOperate(Boolean)`.
+- Force hero termahal untuk Scavenger terikat ke auto-refresh regular shop dari
+  `MCBattleBridge.OnRefreshShop`. Fitur ini me-resolve relation
+  Scavenger/Shadow Mercenary dari metadata relation-tip, membutuhkan active
+  count 2 atau lebih, lalu membeli slot shop yang lebih murah sambil menghormati
+  affordability dan keep-gold.
 - Auto-Play sementara memiliki assist Shop, Arena, dan Combat melalui policy
   backup yang di-capture. Edit user pada toggle assist saat Auto-Play aktif
   dapat kembali ke nilai sebelum Auto-Play saat Auto-Play berhenti.
@@ -870,12 +878,14 @@ section Runtime Status di tab Test dan tab Shop untuk pesan `Waiting for ...`.
 Saat menelusuri masalah penggunaan terus-menerus, verifikasi:
 
 - Binding shop select dan shop automation sudah siap.
+- Binding Shop Scavenger sudah siap saat force hero termahal Scavenger aktif.
 - Panel shop refresh sudah siap saat auto-refresh aktif.
 - Diagnostik shop siap saat minimal satu reader diagnostik shop inti tersedia;
   nilai shop individual yang belum punya reader tetap menampilkan `Waiting`.
 - Panel shop operable: tidak delay, tidak dalam state refresh spectate, dan
   diterima oleh `UIPanelBattleHeroShop.CanOperate(Boolean)`.
 - Binding Recommendation Lineup sudah siap saat recommendation buying atau pause-refresh aktif.
+- Active count Scavenger minimal 2 saat force hero termahal Scavenger aktif.
 - Keep-gold reserve tidak sedang memblokir aksi.
 - Target count belum tercapai.
 - Cooldown buy dan refresh sudah selesai.

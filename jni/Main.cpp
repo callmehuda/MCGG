@@ -144,6 +144,11 @@ struct CardTableEntry {
     std::string name;
 };
 
+struct RelationTableEntry {
+    int id = 0;
+    std::string name;
+};
+
 enum class UpdateCheckStatus {
     Waiting,
     Checking,
@@ -186,6 +191,7 @@ struct TableCacheCounts {
     int heroes = 0;
     int equips = 0;
     int cards = 0;
+    int relations = 0;
 };
 
 struct HeroAutomationState {
@@ -229,6 +235,9 @@ namespace RuntimeConfig {
     constexpr int ShopRefreshCooldownMs = 650;
     constexpr int ShopWorthCheckMs = 500;
     constexpr int RecommendLineupCheckMs = 500;
+    constexpr int ScavengerCheckMs = 250;
+    constexpr int ScavengerMinimumActiveCount = 2;
+    constexpr int ScavengerDynamicEnumRefreshShopCost = 1;
     constexpr int ArenaSkipCooldownMs = 750;
     constexpr int AutoPlayAiStartCooldownMs = 2000;
     constexpr int AutoPlayAiRefreshMs = 8000;
@@ -279,6 +288,7 @@ void RefreshGgcInfo(bool force);
 void RefreshInfoPlayerRows(bool force);
 void RefreshNextEnemyHudText(uint64_t selfAccountId);
 bool IsBattleActive(uint64_t selfAccountId);
+bool HasShopSelectBinding();
 
 // Feature toggles, cached managed references, and throttled runtime state.
 namespace FeatureState {
@@ -354,6 +364,7 @@ namespace FeatureState {
     std::atomic<bool> ShopBuyFreeHero{false};
     std::atomic<bool> ShopBuySelectedHero{false};
     std::atomic<bool> ShopBuyRecommendLineup{false};
+    std::atomic<bool> ShopForceScavengerExpensiveHero{false};
     std::atomic<bool> ShopRefresh{false};
     std::atomic<bool> ShopStopRefreshAtFreeHero{false};
     std::atomic<bool> ShopStopRefreshAtSelectedHero{false};
@@ -404,6 +415,7 @@ namespace FeatureState {
     std::unordered_map<int, HeroTableEntry> Heroes;
     std::unordered_map<int, EquipTableEntry> Equips;
     std::unordered_map<int, CardTableEntry> Cards;
+    std::unordered_map<int, RelationTableEntry> Relations;
 
     std::chrono::steady_clock::time_point LastBindingRetry{};
     std::chrono::steady_clock::time_point LastReferenceRefresh{};
@@ -419,6 +431,7 @@ namespace FeatureState {
     std::chrono::steady_clock::time_point LastShopRefreshAttempt{};
     std::chrono::steady_clock::time_point LastShopWorthCheck{};
     std::chrono::steady_clock::time_point LastRecommendLineupCheck{};
+    std::chrono::steady_clock::time_point LastScavengerCheck{};
     std::chrono::steady_clock::time_point LastArenaSkipAttempt{};
     std::chrono::steady_clock::time_point LastAutoPlayAiStartAttempt{};
     std::chrono::steady_clock::time_point LastAutoPlayDeployAttempt{};
@@ -427,6 +440,10 @@ namespace FeatureState {
     std::chrono::steady_clock::time_point LastAutoPlayAuctionAttempt{};
     std::atomic<bool> CachedShopHasWorthwhileTarget{false};
     std::atomic<int> CachedRecommendLineupHeroId{0};
+    std::atomic<int> CachedScavengerRelationId{0};
+    std::atomic<int> CachedScavengerActiveCount{-1};
+    std::atomic<bool> ShopScavengerAutoRefreshPending{false};
+    std::atomic<bool> ShopScavengerProcessing{false};
     std::atomic<uint64_t> LastShopBuyAccountId{0};
     std::atomic<int> LastShopBuySlot{-1};
     std::atomic<int> LastShopBuyHeroId{0};
@@ -690,6 +707,8 @@ namespace Originals {
         (*CData_MCEquipBase_GetAll)(void* instance);
     void* (*CData_MCSuperCrystalKey_GetInstance)();
     MonoStructures::Dictionary<int, void*>* (*CData_MCSuperCrystalKey_GetAll)(void* instance);
+    void* (*CData_RelationSkillTip_MC_GetInstance)();
+    MonoStructures::Dictionary<int, void*>* (*CData_RelationSkillTip_MC_GetAll)(void* instance);
     Il2CppString* (*ShowMsgTool_GetDesc)(int id);
     bool (*LoadRes_IsCommander)(void* instance, int heroId);
 
@@ -768,6 +787,14 @@ namespace Originals {
     bool (*MCBattleBridge_IsSuperCrystalShopOpen)(void* instance);
     bool (*MCBattleBridge_IsGoGoCardPanelOpen)(void* instance);
     bool (*MCBattleBridge_CheckEnableKeyBoard)(void* instance);
+    void (*MCBattleBridge_OnRefreshShop)(
+        void* instance,
+        bool isAutoRefresh,
+        void* dictHeroSlot,
+        void* sameRefreshHero,
+        bool isDelayOpenShop,
+        bool onlyRefreshHero
+    );
     int64_t (*MCBattleBridge_GetFreeMemory)(void* instance);
     uint32_t (*MCBattleBridge_GetPingTimes)(void* instance);
     float (*MCBattleBridge_GetStdevPing)(void* instance);
@@ -785,6 +812,7 @@ namespace Originals {
 
     void (*MCShowSpectatorComp_SetSpectate)(void* instance, uint64_t accountId);
     bool (*MCBondUtil_CheckRelationActive_Config)(void* config, int curActiveCount, void* curBondDict);
+    int (*MCBondUtil_GetBondActiveCount)(uint64_t accountId, int bondId, bool onlyActive);
     bool (*MCBondUtil_CheckRelationActive_Special)(
         void* specialCondition,
         int needCount,
@@ -1890,6 +1918,14 @@ std::vector<std::pair<TKey, TValue>> CopyDictionaryEntries(
 }
 
 namespace Hooks {
+    void MCBattleBridge_OnRefreshShop(
+        void* instance,
+        bool isAutoRefresh,
+        void* dictHeroSlot,
+        void* sameRefreshHero,
+        bool isDelayOpenShop,
+        bool onlyRefreshHero
+    );
     void MCShowSpectatorComp_SetSpectate(void* instance, uint64_t accountId);
     bool MCLogicBattleData_ILOGIC_IsCurrFreeBuy(
         void* instance,
@@ -2467,6 +2503,20 @@ void ResolveFeatureBindings() {
         "GetAll",
         {}
     );
+    ResolveOriginal(
+        Originals::CData_RelationSkillTip_MC_GetInstance,
+        "",
+        "CData_RelationSkillTip_MC",
+        "GetInstance",
+        {}
+    );
+    ResolveOriginal(
+        Originals::CData_RelationSkillTip_MC_GetAll,
+        "",
+        "CData_RelationSkillTip_MC",
+        "GetAll",
+        {}
+    );
     ResolveOriginal(Originals::ShowMsgTool_GetDesc, "", "ShowMsgTool", "GetDesc", {"Int32"});
     ResolveOriginal(Originals::LoadRes_IsCommander, "", "LoadRes", "IsCommander", {"Int32"});
     ResolveOriginal(
@@ -2731,6 +2781,14 @@ void ResolveFeatureBindings() {
         "CheckEnableKeyBoard",
         {}
     );
+    HookResolvedMethod(
+        Originals::MCBattleBridge_OnRefreshShop,
+        (void*)Hooks::MCBattleBridge_OnRefreshShop,
+        "",
+        "MCBattleBridge",
+        "OnRefreshShop",
+        {"Boolean", "Dictionary", "List", "Boolean", "Boolean"}
+    );
     ResolveOriginal(
         Originals::MCBattleBridge_GetFreeMemory,
         "",
@@ -2810,6 +2868,13 @@ void ResolveFeatureBindings() {
         "MCBondUtil",
         "CheckRelationActive",
         {"CData_RelationSkill_MC_Element", "Int32", "Dictionary"}
+    );
+    ResolveOriginal(
+        Originals::MCBondUtil_GetBondActiveCount,
+        "Battle",
+        "MCBondUtil",
+        "GetBondActiveCount",
+        {"UInt64", "Int32", "Boolean"}
     );
     HookResolvedMethod(
         Originals::MCBondUtil_CheckRelationActive_Special,
@@ -3616,7 +3681,8 @@ TableCacheCounts GetTableCacheCounts() {
     return {
         static_cast<int>(FeatureState::Heroes.size()),
         static_cast<int>(FeatureState::Equips.size()),
-        static_cast<int>(FeatureState::Cards.size())
+        static_cast<int>(FeatureState::Cards.size()),
+        static_cast<int>(FeatureState::Relations.size())
     };
 }
 
@@ -3808,12 +3874,14 @@ void ClearTableDataCacheUnlocked() {
     FeatureState::Heroes.clear();
     FeatureState::Equips.clear();
     FeatureState::Cards.clear();
+    FeatureState::Relations.clear();
     FeatureState::LastTableLoadAttempt = {};
     FeatureState::LastShopAction = {};
     FeatureState::LastShopBuyAttempt = {};
     FeatureState::LastShopRefreshAttempt = {};
     FeatureState::LastShopWorthCheck = {};
     FeatureState::LastRecommendLineupCheck = {};
+    FeatureState::LastScavengerCheck = {};
     FeatureState::LastArenaSkipAttempt = {};
     FeatureState::LastAutoPlayAiStartAttempt = {};
     FeatureState::LastAutoPlayDeployAttempt = {};
@@ -3825,6 +3893,10 @@ void ClearTableDataCacheUnlocked() {
     FeatureState::CachedGameRound = 0;
     FeatureState::CachedShopHasWorthwhileTarget = false;
     FeatureState::CachedRecommendLineupHeroId = 0;
+    FeatureState::CachedScavengerRelationId = 0;
+    FeatureState::CachedScavengerActiveCount = -1;
+    FeatureState::ShopScavengerAutoRefreshPending = false;
+    FeatureState::ShopScavengerProcessing = false;
     FeatureState::LastShopBuyAccountId = 0;
     FeatureState::LastShopBuySlot = -1;
     FeatureState::LastShopBuyHeroId = 0;
@@ -3849,7 +3921,8 @@ bool ShouldLoadTableDataForFrame(int activeMainTab) {
         activeMainTab == MainTabShop ||
         activeMainTab == MainTabArena ||
         activeMainTab == MainTabTest ||
-        FeatureState::AutoPlayEnabled.load();
+        FeatureState::AutoPlayEnabled.load() ||
+        FeatureState::ShopForceScavengerExpensiveHero.load();
 }
 
 // Checks the battle active condition before work proceeds.
@@ -3951,6 +4024,7 @@ void EnsureTableDataLoaded() {
     std::unordered_map<int, HeroTableEntry> localHeroes;
     std::unordered_map<int, EquipTableEntry> localEquips;
     std::unordered_map<int, CardTableEntry> localCards;
+    std::unordered_map<int, RelationTableEntry> localRelations;
 
     if (Originals::CData_MCHero_GetInstance && Originals::CData_MCHero_GetAll) {
         void* heroInstance = Originals::CData_MCHero_GetInstance();
@@ -4179,11 +4253,83 @@ void EnsureTableDataLoaded() {
         }
     }
 
+    if (Originals::CData_RelationSkillTip_MC_GetInstance &&
+        Originals::CData_RelationSkillTip_MC_GetAll) {
+        void* relationInstance = Originals::CData_RelationSkillTip_MC_GetInstance();
+        auto* relationDictionary =
+            relationInstance ? Originals::CData_RelationSkillTip_MC_GetAll(relationInstance) :
+                nullptr;
+
+        if (relationDictionary) {
+            static FieldInfo* idField = nullptr;
+            static FieldInfo* attachField = nullptr;
+            static FieldInfo* nameField = nullptr;
+
+            if (!idField) {
+                idField =
+                    GetFieldInfoFromName("", "CData_RelationSkillTip_MC_Element", "m_RelationId");
+            }
+
+            if (!attachField) {
+                attachField = GetFieldInfoFromName(
+                    "",
+                    "CData_RelationSkillTip_MC_Element",
+                    "m_mRelationAttach"
+                );
+            }
+
+            if (!nameField) {
+                nameField =
+                    GetFieldInfoFromName("", "CData_RelationSkillTip_MC_Element", "m_mRelationName");
+            }
+
+            for (const auto& item : CopyDictionaryEntries(relationDictionary)) {
+                void* relation = item.second;
+
+                if (!relation) {
+                    continue;
+                }
+
+                if (!TryConsumeManagedWorkUnits(3)) {
+                    break;
+                }
+
+                int relationId =
+                    GetField<int>(reinterpret_cast<Il2CppObject*>(relation), idField);
+
+                if (relationId <= 0) {
+                    continue;
+                }
+
+                std::string relationName = ManagedStringToStd(
+                    GetField<Il2CppString*>(
+                        reinterpret_cast<Il2CppObject*>(relation),
+                        attachField
+                    )
+                );
+
+                if (relationName.empty()) {
+                    relationName = ManagedStringToStd(
+                        GetField<Il2CppString*>(
+                            reinterpret_cast<Il2CppObject*>(relation),
+                            nameField
+                        )
+                    );
+                }
+
+                if (!relationName.empty()) {
+                    localRelations[relationId] = {relationId, relationName};
+                }
+            }
+        }
+    }
+
     {
         std::lock_guard<std::mutex> lock(RuntimeMutex::FeatureMutex);
         FeatureState::Heroes = std::move(localHeroes);
         FeatureState::Equips = std::move(localEquips);
         FeatureState::Cards = std::move(localCards);
+        FeatureState::Relations = std::move(localRelations);
         FeatureState::TableDataLoaded =
             !FeatureState::Heroes.empty() &&
             !FeatureState::Equips.empty() &&
@@ -4518,6 +4664,406 @@ bool HasWorthwhileShopTarget(
     }
 
     return FeatureState::CachedShopHasWorthwhileTarget;
+}
+
+// Checks relation text and dynamic markers for the Scavenger/Shadow Mercenary bond.
+bool RelationLooksLikeScavenger(const std::string& text) {
+    return StringIncludesCaseInsensitive(text, "scavenger") ||
+        StringIncludesCaseInsensitive(text, "shadow mercenary") ||
+        (StringIncludesCaseInsensitive(text, "shadow") &&
+         StringIncludesCaseInsensitive(text, "mercenary")) ||
+        StringIncludesCaseInsensitive(text, "pemulung");
+}
+
+// Reads a string field from a relation table row.
+std::string ReadRelationStringField(void* relation, FieldInfo* field) {
+    if (!relation || !field) {
+        return {};
+    }
+
+    return ManagedStringToStd(
+        GetField<Il2CppString*>(reinterpret_cast<Il2CppObject*>(relation), field)
+    );
+}
+
+// Checks Scavenger dynamic-desc markers that survive localization.
+bool RelationHasScavengerDynamicMarker(void* relation, FieldInfo* dynamicEnumField) {
+    if (!relation || !dynamicEnumField) {
+        return false;
+    }
+
+    auto* dynamicEnums = GetField<MonoStructures::Array<int>*>(
+        reinterpret_cast<Il2CppObject*>(relation),
+        dynamicEnumField
+    );
+    const int* values = nullptr;
+    int valueCount = 0;
+
+    if (!TryGetManagedArrayData(dynamicEnums, &values, &valueCount, 16)) {
+        return false;
+    }
+
+    for (int i = 0; values && i < valueCount; ++i) {
+        if (values[i] == RuntimeConfig::ScavengerDynamicEnumRefreshShopCost) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// Checks Scavenger dynamic string params for code-name markers.
+bool RelationHasScavengerDynamicParam(void* relation, FieldInfo* dynamicParamField) {
+    if (!relation || !dynamicParamField) {
+        return false;
+    }
+
+    auto* dynamicParams = GetField<MonoStructures::Array<Il2CppString*>*>(
+        reinterpret_cast<Il2CppObject*>(relation),
+        dynamicParamField
+    );
+    Il2CppString* const* values = nullptr;
+    int valueCount = 0;
+
+    if (!TryGetManagedArrayData(dynamicParams, &values, &valueCount, 16)) {
+        return false;
+    }
+
+    for (int i = 0; values && i < valueCount; ++i) {
+        if (RelationLooksLikeScavenger(ManagedStringToStd(values[i]))) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// Resolves the localized Scavenger relation id from relation-tip table data.
+int ResolveScavengerRelationId() {
+    int cachedRelationId = FeatureState::CachedScavengerRelationId.load();
+    if (cachedRelationId > 0) {
+        return cachedRelationId;
+    }
+
+    {
+        std::lock_guard<std::mutex> lock(RuntimeMutex::FeatureMutex);
+        for (const auto& item : FeatureState::Relations) {
+            if (RelationLooksLikeScavenger(item.second.name)) {
+                FeatureState::CachedScavengerRelationId = item.first;
+                return item.first;
+            }
+        }
+    }
+
+    if (!Originals::CData_RelationSkillTip_MC_GetInstance ||
+        !Originals::CData_RelationSkillTip_MC_GetAll) {
+        return 0;
+    }
+
+    void* relationInstance = Originals::CData_RelationSkillTip_MC_GetInstance();
+    auto* relationDictionary =
+        relationInstance ? Originals::CData_RelationSkillTip_MC_GetAll(relationInstance) :
+            nullptr;
+    if (!relationDictionary) {
+        return 0;
+    }
+
+    static FieldInfo* idField = nullptr;
+    static FieldInfo* attachField = nullptr;
+    static FieldInfo* nameField = nullptr;
+    static FieldInfo* explainField = nullptr;
+    static FieldInfo* dynamicTextField = nullptr;
+    static FieldInfo* dynamicEnumField = nullptr;
+    static FieldInfo* dynamicParamField = nullptr;
+
+    if (!idField) {
+        idField =
+            GetFieldInfoFromName("", "CData_RelationSkillTip_MC_Element", "m_RelationId");
+    }
+
+    if (!attachField) {
+        attachField =
+            GetFieldInfoFromName("", "CData_RelationSkillTip_MC_Element", "m_mRelationAttach");
+    }
+
+    if (!nameField) {
+        nameField =
+            GetFieldInfoFromName("", "CData_RelationSkillTip_MC_Element", "m_mRelationName");
+    }
+
+    if (!explainField) {
+        explainField =
+            GetFieldInfoFromName("", "CData_RelationSkillTip_MC_Element", "m_mRelationExplain");
+    }
+
+    if (!dynamicTextField) {
+        dynamicTextField =
+            GetFieldInfoFromName("", "CData_RelationSkillTip_MC_Element", "m_mDynamicText");
+    }
+
+    if (!dynamicEnumField) {
+        dynamicEnumField =
+            GetFieldInfoFromName("", "CData_RelationSkillTip_MC_Element", "m_DynamicEnum");
+    }
+
+    if (!dynamicParamField) {
+        dynamicParamField =
+            GetFieldInfoFromName("", "CData_RelationSkillTip_MC_Element", "m_DynamicParam");
+    }
+
+    for (const auto& item : CopyDictionaryEntries(relationDictionary)) {
+        void* relation = item.second;
+
+        if (!relation) {
+            continue;
+        }
+
+        if (!TryConsumeManagedWorkUnits(6)) {
+            return 0;
+        }
+
+        int relationId = GetField<int>(reinterpret_cast<Il2CppObject*>(relation), idField);
+        if (relationId <= 0) {
+            continue;
+        }
+
+        std::string relationName = ReadRelationStringField(relation, attachField);
+        if (relationName.empty()) {
+            relationName = ReadRelationStringField(relation, nameField);
+        }
+
+        std::string relationText = relationName;
+        relationText += " ";
+        relationText += ReadRelationStringField(relation, explainField);
+        relationText += " ";
+        relationText += ReadRelationStringField(relation, dynamicTextField);
+
+        if (RelationLooksLikeScavenger(relationText) ||
+            RelationHasScavengerDynamicMarker(relation, dynamicEnumField) ||
+            RelationHasScavengerDynamicParam(relation, dynamicParamField)) {
+            FeatureState::CachedScavengerRelationId = relationId;
+
+            if (!relationName.empty()) {
+                std::lock_guard<std::mutex> lock(RuntimeMutex::FeatureMutex);
+                FeatureState::Relations[relationId] = {relationId, relationName};
+            }
+
+            return relationId;
+        }
+    }
+
+    return 0;
+}
+
+// Reads the current active Scavenger bond count for the local player.
+int GetScavengerActiveCount(
+    uint64_t selfAccountId,
+    std::chrono::steady_clock::time_point now,
+    bool force
+) {
+    if (selfAccountId == 0) {
+        FeatureState::CachedScavengerActiveCount = -1;
+        return -1;
+    }
+
+    if (!force &&
+        !IntervalElapsed(FeatureState::LastScavengerCheck, RuntimeConfig::ScavengerCheckMs, now)) {
+        return FeatureState::CachedScavengerActiveCount.load();
+    }
+
+    int relationId = ResolveScavengerRelationId();
+    if (relationId <= 0 || !Originals::MCBondUtil_GetBondActiveCount) {
+        FeatureState::CachedScavengerActiveCount = -1;
+        FeatureState::LastScavengerCheck = now;
+        return -1;
+    }
+
+    if (!TryConsumeManagedWorkUnits(2)) {
+        return FeatureState::CachedScavengerActiveCount.load();
+    }
+
+    int activeCount =
+        Originals::MCBondUtil_GetBondActiveCount(selfAccountId, relationId, true);
+    FeatureState::CachedScavengerActiveCount = activeCount;
+    FeatureState::LastScavengerCheck = now;
+    return activeCount;
+}
+
+// Checks whether Scavenger is active at the minimum level needed for cleanup.
+bool IsScavengerReadyForExpensiveHero(
+    uint64_t selfAccountId,
+    std::chrono::steady_clock::time_point now,
+    bool force
+) {
+    return GetScavengerActiveCount(selfAccountId, now, force) >=
+        RuntimeConfig::ScavengerMinimumActiveCount;
+}
+
+struct ScavengerShopCandidate {
+    int slot = -1;
+    MCLogicHeroShopItemData data{};
+    bool isFreeBuy = false;
+};
+
+// Buys lower-priced shop heroes after an automatic shop refresh leaves Scavenger active.
+bool RunScavengerShopCleanup(
+    uint64_t selfAccountId,
+    std::chrono::steady_clock::time_point now,
+    bool forceScavengerRefresh
+) {
+    if (!FeatureState::ShopForceScavengerExpensiveHero.load()) {
+        return true;
+    }
+
+    if (selfAccountId == 0 ||
+        !Originals::MCLogicBattleData_ILOGIC_GetShopItemData ||
+        !Originals::MCLogicBattleData_ILOGIC_GetPlayerCoin ||
+        !HasShopSelectBinding()) {
+        return false;
+    }
+
+    if (!IsShopPanelReadyForAutomation()) {
+        return false;
+    }
+
+    if (!IsScavengerReadyForExpensiveHero(selfAccountId, now, forceScavengerRefresh)) {
+        return true;
+    }
+
+    if (FeatureState::ShopScavengerProcessing.exchange(true)) {
+        return false;
+    }
+
+    struct ProcessingGuard {
+        ~ProcessingGuard() {
+            FeatureState::ShopScavengerProcessing = false;
+        }
+    } processingGuard;
+
+    std::vector<ScavengerShopCandidate> candidates;
+    candidates.reserve(5);
+    int maxPrice = -1;
+
+    for (int slot = 0; slot < 5; ++slot) {
+        if (!TryConsumeManagedWorkUnits(4)) {
+            return false;
+        }
+
+        bool needFx = false;
+        bool isFreeBuy = false;
+
+        if (Originals::MCLogicBattleData_ILOGIC_IsCurrFreeBuy) {
+            isFreeBuy = Originals::MCLogicBattleData_ILOGIC_IsCurrFreeBuy(
+                nullptr,
+                selfAccountId,
+                slot,
+                &needFx
+            );
+        }
+
+        if (FeatureState::ArenaFreeEconomy) {
+            isFreeBuy = true;
+        }
+
+        MCLogicHeroShopItemData shopData =
+            Originals::MCLogicBattleData_ILOGIC_GetShopItemData(
+                nullptr,
+                selfAccountId,
+                slot
+            );
+
+        if (!IsValidShopItemData(shopData, slot)) {
+            continue;
+        }
+
+        maxPrice = std::max(maxPrice, shopData.m_iPrice);
+        candidates.push_back({slot, shopData, isFreeBuy});
+    }
+
+    if (candidates.empty() || maxPrice <= 0) {
+        return true;
+    }
+
+    std::sort(
+        candidates.begin(),
+        candidates.end(),
+        [](const ScavengerShopCandidate& left, const ScavengerShopCandidate& right) {
+            if (left.data.m_iPrice != right.data.m_iPrice) {
+                return left.data.m_iPrice < right.data.m_iPrice;
+            }
+
+            return left.slot < right.slot;
+        }
+    );
+
+    bool hasLowerPricedHero = false;
+    for (const ScavengerShopCandidate& candidate : candidates) {
+        if (candidate.data.m_iPrice < maxPrice) {
+            hasLowerPricedHero = true;
+            break;
+        }
+    }
+
+    if (!hasLowerPricedHero) {
+        return true;
+    }
+
+    int cachedCoin = -1;
+    auto getCoin = [&]() {
+        if (FeatureState::ArenaFreeEconomy) {
+            return 999999999;
+        }
+
+        if (cachedCoin < 0) {
+            if (!TryConsumeManagedWorkUnits()) {
+                return -1;
+            }
+
+            cachedCoin =
+                Originals::MCLogicBattleData_ILOGIC_GetPlayerCoin(nullptr, selfAccountId);
+        }
+
+        return cachedCoin;
+    };
+
+    for (const ScavengerShopCandidate& candidate : candidates) {
+        if (candidate.data.m_iPrice >= maxPrice) {
+            continue;
+        }
+
+        int coin = getCoin();
+        if (coin < 0) {
+            return false;
+        }
+
+        if (!candidate.isFreeBuy) {
+            if (coin < candidate.data.m_iPrice) {
+                continue;
+            }
+
+            if (FeatureState::ShopKeepGold.load() &&
+                coin - candidate.data.m_iPrice < FeatureState::ShopKeepGoldAt.load()) {
+                continue;
+            }
+        }
+
+        if (SelectShopSlot(candidate.slot)) {
+            MarkShopBuyAttempt(
+                selfAccountId,
+                candidate.slot,
+                candidate.data,
+                -1,
+                candidate.isFreeBuy,
+                now
+            );
+
+            if (!candidate.isFreeBuy && cachedCoin >= 0) {
+                cachedCoin -= candidate.data.m_iPrice;
+            }
+        }
+    }
+
+    return true;
 }
 
 // Grants hero through verified live-game bindings.
@@ -5191,6 +5737,7 @@ struct AutoPlayPolicyBackup {
     bool shopBuyFreeHero = false;
     bool shopBuySelectedHero = false;
     bool shopBuyRecommendLineup = false;
+    bool shopForceScavengerExpensiveHero = false;
     bool shopRefresh = false;
     bool shopStopRefreshAtFreeHero = false;
     bool shopStopRefreshAtSelectedHero = false;
@@ -5230,6 +5777,8 @@ void CaptureAutoPlayPolicyBackup() {
     backup.shopBuyFreeHero = FeatureState::ShopBuyFreeHero.load();
     backup.shopBuySelectedHero = FeatureState::ShopBuySelectedHero.load();
     backup.shopBuyRecommendLineup = FeatureState::ShopBuyRecommendLineup.load();
+    backup.shopForceScavengerExpensiveHero =
+        FeatureState::ShopForceScavengerExpensiveHero.load();
     backup.shopRefresh = FeatureState::ShopRefresh.load();
     backup.shopStopRefreshAtFreeHero = FeatureState::ShopStopRefreshAtFreeHero.load();
     backup.shopStopRefreshAtSelectedHero = FeatureState::ShopStopRefreshAtSelectedHero.load();
@@ -5266,6 +5815,8 @@ void RestoreAutoPlayPolicyBackup() {
     FeatureState::ShopBuyFreeHero = backup.shopBuyFreeHero;
     FeatureState::ShopBuySelectedHero = backup.shopBuySelectedHero;
     FeatureState::ShopBuyRecommendLineup = backup.shopBuyRecommendLineup;
+    FeatureState::ShopForceScavengerExpensiveHero =
+        backup.shopForceScavengerExpensiveHero;
     FeatureState::ShopRefresh = backup.shopRefresh;
     FeatureState::ShopStopRefreshAtFreeHero = backup.shopStopRefreshAtFreeHero;
     FeatureState::ShopStopRefreshAtSelectedHero = backup.shopStopRefreshAtSelectedHero;
@@ -7128,7 +7679,7 @@ void RunShopAutomation(uint64_t selfAccountId) {
         return;
     }
 
-    bool anyShopAutomation =
+    bool regularShopAutomation =
         FeatureState::ShopBuyFreeHero ||
         FeatureState::ShopBuySelectedHero ||
         FeatureState::ShopBuyRecommendLineup ||
@@ -7136,6 +7687,9 @@ void RunShopAutomation(uint64_t selfAccountId) {
         FeatureState::ShopStopRefreshAtFreeHero ||
         FeatureState::ShopStopRefreshAtSelectedHero ||
         FeatureState::ShopStopRefreshAtRecommendLineup;
+    bool anyShopAutomation =
+        regularShopAutomation ||
+        FeatureState::ShopForceScavengerExpensiveHero;
 
     if (!anyShopAutomation || selfAccountId == 0) {
         return;
@@ -7147,6 +7701,17 @@ void RunShopAutomation(uint64_t selfAccountId) {
     }
 
     auto now = std::chrono::steady_clock::now();
+
+    if (FeatureState::ShopScavengerAutoRefreshPending.load()) {
+        if (RunScavengerShopCleanup(selfAccountId, now, true)) {
+            FeatureState::ShopScavengerAutoRefreshPending = false;
+        }
+        return;
+    }
+
+    if (!regularShopAutomation) {
+        return;
+    }
 
     if (!CooldownElapsed(
             FeatureState::LastShopAction,
@@ -7424,6 +7989,14 @@ void TickFeatures() {
         FeatureState::ShopStopRefreshAtRecommendLineup.load() ||
         (FeatureState::AutoPlayEnabled.load() && FeatureState::AutoPlayUseShop.load())) {
         GetRecommendLineupHeroId(now);
+    }
+
+    if (activeMainTab == MainTabShop ||
+        FeatureState::ShopForceScavengerExpensiveHero.load()) {
+        ResolveScavengerRelationId();
+        if (FeatureState::ShopForceScavengerExpensiveHero.load()) {
+            GetScavengerActiveCount(selfAccountId, now, false);
+        }
     }
 
     if (Originals::MCLogicBattleData_ILOGIC_GetGameRound &&
@@ -8454,6 +9027,7 @@ void ResetFeatureSettings() {
     FeatureState::ShopBuyFreeHero = false;
     FeatureState::ShopBuySelectedHero = false;
     FeatureState::ShopBuyRecommendLineup = false;
+    FeatureState::ShopForceScavengerExpensiveHero = false;
     FeatureState::ShopRefresh = false;
     FeatureState::ShopStopRefreshAtFreeHero = false;
     FeatureState::ShopStopRefreshAtSelectedHero = false;
@@ -8461,6 +9035,8 @@ void ResetFeatureSettings() {
     FeatureState::ShopKeepGold = false;
     FeatureState::ShopKeepGoldAt = 20;
     FeatureState::ShopRecommendTargetCount = 9;
+    FeatureState::CachedScavengerActiveCount = -1;
+    FeatureState::ShopScavengerAutoRefreshPending = false;
     ClearShopHeroTargets();
     FeatureState::ArenaHeroStar = 1;
     FeatureState::ArenaItemEnhanced = false;
@@ -8721,6 +9297,7 @@ void ApplyConfigValue(const std::string& key, const std::string& value) {
     else if (key == "shopBuyFreeHero") FeatureState::ShopBuyFreeHero = ParseConfigBool(value, FeatureState::ShopBuyFreeHero);
     else if (key == "shopBuySelectedHero") FeatureState::ShopBuySelectedHero = ParseConfigBool(value, FeatureState::ShopBuySelectedHero);
     else if (key == "shopBuyRecommendLineup") FeatureState::ShopBuyRecommendLineup = ParseConfigBool(value, FeatureState::ShopBuyRecommendLineup);
+    else if (key == "shopForceScavengerExpensiveHero") FeatureState::ShopForceScavengerExpensiveHero = ParseConfigBool(value, FeatureState::ShopForceScavengerExpensiveHero);
     else if (key == "shopRefresh") FeatureState::ShopRefresh = ParseConfigBool(value, FeatureState::ShopRefresh);
     else if (key == "shopStopRefreshAtFreeHero") FeatureState::ShopStopRefreshAtFreeHero = ParseConfigBool(value, FeatureState::ShopStopRefreshAtFreeHero);
     else if (key == "shopStopRefreshAtSelectedHero") FeatureState::ShopStopRefreshAtSelectedHero = ParseConfigBool(value, FeatureState::ShopStopRefreshAtSelectedHero);
@@ -8830,6 +9407,11 @@ bool SaveConfigToFile(const std::string& path) {
     WriteConfigBool(file, "shopBuyFreeHero", FeatureState::ShopBuyFreeHero);
     WriteConfigBool(file, "shopBuySelectedHero", FeatureState::ShopBuySelectedHero);
     WriteConfigBool(file, "shopBuyRecommendLineup", FeatureState::ShopBuyRecommendLineup);
+    WriteConfigBool(
+        file,
+        "shopForceScavengerExpensiveHero",
+        FeatureState::ShopForceScavengerExpensiveHero
+    );
     WriteConfigBool(file, "shopRefresh", FeatureState::ShopRefresh);
     WriteConfigBool(file, "shopStopRefreshAtFreeHero", FeatureState::ShopStopRefreshAtFreeHero);
     WriteConfigBool(file, "shopStopRefreshAtSelectedHero", FeatureState::ShopStopRefreshAtSelectedHero);
@@ -9322,6 +9904,7 @@ bool HasShopSelectBinding();
 bool HasShopAutomationBindings();
 bool HasShopRefreshBindings();
 bool HasShopRecommendLineupBindings();
+bool HasShopScavengerBindings();
 bool HasShopDiagnosticBindings();
 bool HasCombatPowerBindings();
 bool HasArenaHeroBindings();
@@ -9549,10 +10132,11 @@ void DrawRuntimeStatus() {
     snprintf(
         tableText,
         sizeof(tableText),
-        "%d heroes / %d items / %d cards",
+        "%d heroes / %d items / %d cards / %d synergies",
         tableCounts.heroes,
         tableCounts.equips,
-        tableCounts.cards
+        tableCounts.cards,
+        tableCounts.relations
     );
     UpdateCheckSnapshot updateSnapshot = GetUpdateCheckSnapshot();
 
@@ -9581,6 +10165,7 @@ void DrawRuntimeStatus() {
         DrawStatusRow("Shop select", HasShopSelectBinding());
         DrawStatusRow("Shop automation", HasShopAutomationBindings());
         DrawStatusRow("Recommend lineup", HasShopRecommendLineupBindings());
+        DrawStatusRow("Shop Scavenger", HasShopScavengerBindings());
         DrawStatusRow("Shop refresh panel", HasShopRefreshBindings());
         DrawStatusRow("Shop diagnostics", HasShopDiagnosticBindings());
         DrawStatusRow("Battle power", HasCombatPowerBindings());
@@ -9721,13 +10306,15 @@ bool HasShopAutomationBindings() {
     bool needsRecommendLineup =
         FeatureState::ShopBuyRecommendLineup ||
         FeatureState::ShopStopRefreshAtRecommendLineup;
+    bool needsScavenger = FeatureState::ShopForceScavengerExpensiveHero;
 
     return IsIl2CppRuntimeReady() &&
         Originals::MCLogicBattleData_ILOGIC_GetShopItemData &&
         Originals::MCLogicBattleData_ILOGIC_GetPlayerCoin &&
         HasShopSelectBinding() &&
         (!needsHeroCount || Originals::MCLogicBattleData_ILogic_HeroOwnCount) &&
-        (!needsRecommendLineup || HasShopRecommendLineupBindings());
+        (!needsRecommendLineup || HasShopRecommendLineupBindings()) &&
+        (!needsScavenger || HasShopScavengerBindings());
 }
 
 // Checks the shop refresh bindings condition before work proceeds.
@@ -9743,6 +10330,18 @@ bool HasShopRecommendLineupBindings() {
         (Originals::MCLogicBattleData_ILOGIC_GetHeroByRecommendLineup ||
          (FeatureState::BattleBridge &&
           Originals::MCBattleBridge_IsHeroInRecommendLineup));
+}
+
+// Checks the shop Scavenger bindings condition before work proceeds.
+bool HasShopScavengerBindings() {
+    return IsIl2CppRuntimeReady() &&
+        Originals::MCBattleBridge_OnRefreshShop &&
+        Originals::MCBondUtil_GetBondActiveCount &&
+        Originals::CData_RelationSkillTip_MC_GetInstance &&
+        Originals::CData_RelationSkillTip_MC_GetAll &&
+        Originals::MCLogicBattleData_ILOGIC_GetShopItemData &&
+        Originals::MCLogicBattleData_ILOGIC_GetPlayerCoin &&
+        HasShopSelectBinding();
 }
 
 // Checks the shop diagnostic bindings condition before work proceeds.
@@ -12920,6 +13519,32 @@ void DrawShopTab() {
 
             DrawAtomicCheckbox("Auto-buy free heroes", FeatureState::ShopBuyFreeHero);
             DrawAtomicCheckbox("Auto-buy selected targets", FeatureState::ShopBuySelectedHero);
+            DrawAtomicCheckbox(
+                "Force Scavenger to Always Get Expensive Heroes",
+                FeatureState::ShopForceScavengerExpensiveHero
+            );
+
+            if (FeatureState::ShopForceScavengerExpensiveHero.load()) {
+                if (!HasShopScavengerBindings()) {
+                    DrawWaitingText("Waiting for Scavenger shop bindings");
+                }
+
+                int scavengerRelationId = FeatureState::CachedScavengerRelationId.load();
+                int scavengerActiveCount = FeatureState::CachedScavengerActiveCount.load();
+                std::string scavengerState = scavengerRelationId > 0 ?
+                    "Relation #" + std::to_string(scavengerRelationId) :
+                    "Waiting";
+
+                if (scavengerRelationId > 0) {
+                    scavengerState += ", active count ";
+                    scavengerState += (scavengerActiveCount >= 0) ?
+                        std::to_string(scavengerActiveCount) :
+                        std::string("Waiting");
+                }
+
+                ImGui::Text("Scavenger: %s", scavengerState.c_str());
+            }
+
             ImGui::Separator();
             ImGui::SeparatorText("Recommendation Lineup");
             DrawAtomicCheckbox(
@@ -13622,6 +14247,43 @@ bool AttachRenderIl2CppThread(std::atomic<bool>& attached) {
 }
 
 namespace Hooks {
+    // Tracks automatic regular shop refreshes so Scavenger cleanup can run before the passive resolves.
+    void MCBattleBridge_OnRefreshShop(
+        void* instance,
+        bool isAutoRefresh,
+        void* dictHeroSlot,
+        void* sameRefreshHero,
+        bool isDelayOpenShop,
+        bool onlyRefreshHero
+    ) {
+        if (Originals::MCBattleBridge_OnRefreshShop) {
+            Originals::MCBattleBridge_OnRefreshShop(
+                instance,
+                isAutoRefresh,
+                dictHeroSlot,
+                sameRefreshHero,
+                isDelayOpenShop,
+                onlyRefreshHero
+            );
+        }
+
+        if (!isAutoRefresh || !FeatureState::ShopForceScavengerExpensiveHero.load()) {
+            return;
+        }
+
+        FeatureState::ShopScavengerAutoRefreshPending = true;
+        RefreshManagedReferences(true);
+
+        uint64_t selfAccountId = GetSelfAccountId();
+        if (selfAccountId == 0) {
+            return;
+        }
+
+        if (RunScavengerShopCleanup(selfAccountId, std::chrono::steady_clock::now(), true)) {
+            FeatureState::ShopScavengerAutoRefreshPending = false;
+        }
+    }
+
     // Hook wrapper for show spectator comp set spectate, applying feature overrides only when enabled.
     void MCShowSpectatorComp_SetSpectate(void* instance, uint64_t accountId) {
         if (FeatureState::CombatInvisibleScout) {

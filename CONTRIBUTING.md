@@ -129,6 +129,10 @@ bash jni/build-curl-android.sh
   bounded, snapshot-based, and retryable. Buy and refresh UI actions should also
   wait for a non-delayed, non-spectate, operable shop panel when those panel
   bindings are available.
+- For Scavenger shop forcing, keep the trigger tied to automatic regular-shop
+  refreshes, require Scavenger/Shadow Mercenary active count 2 or higher, and
+  respect affordability plus keep-gold settings while clearing only lower-priced
+  shop slots.
 - For Auto-Play changes, preserve the 250 ms tick and bounded action model:
   built-in AI startup, deployment/formation moves, level-up actions, and auction
   bids must stay cooldown-based. Use runtime snapshots, table metadata, current
@@ -204,9 +208,10 @@ adaptive strategy pressure, opponent-aware board analysis, advanced role-aware
 formation moves, selected shop target promotion, GogoCard scoring, auction
 scoring, gold-interest economy decisions, and optional coordination of Combat
 and Arena assists. Shop currently includes free-hero buying, manual target
-buying, Recommendation Lineup buying, auto-refresh pause conditions, keep-gold
-reserve, and target counts. Combat includes Invisible Scout. Arena includes
-hero/item/card granting, Battle Power controls for force-win, HP-loss
+buying, Recommendation Lineup buying, Scavenger expensive-hero forcing,
+auto-refresh pause conditions, keep-gold reserve, and target counts. Combat
+includes Invisible Scout. Arena includes hero/item/card granting, Battle Power
+controls for force-win, HP-loss
 prevention, attack-ratio boosting, fight-value boosting, and enemy-board
 crippling, active synergy forcing, level/population forcing, enemy HP pressure,
 achievement task forcing, passive gold, free economy, unlimited hero pool,

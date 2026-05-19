@@ -190,7 +190,12 @@ forced update, bypass, or evasion behavior.
 
 Shop automation is intentionally single-threaded and throttled on the frame
 tick. Preserve the existing buy, repeat-buy, refresh, target-worth, and
-Recommendation Lineup cooldowns. Read selected target state through
+Recommendation Lineup cooldowns. Scavenger expensive-hero forcing is the
+exception that may run immediately from an automatic regular-shop refresh hook;
+it must still stay bounded to the five visible shop slots, require the
+Scavenger/Shadow Mercenary active count to be 2 or higher, respect affordability
+and keep-gold settings, and defer if the shop panel is not operable. Read
+selected target state through
 `GetShopHeroTargetsSnapshot()` or `GetSelectedShopHeroTargetsSnapshot()` and
 keep scans bounded by the existing runtime limits. Buy and refresh actions
 should wait for an operable shop panel, including delay/spectate/CanOperate
@@ -344,8 +349,9 @@ opponent-aware board analysis, advanced role-aware formation moves, selected
 shop target promotion, GogoCard scoring, auction scoring, gold-interest economy
 decisions, and optional coordination of Combat and Arena assists. Shop currently
 includes free-hero buying, selected target buying, Recommendation Lineup buying,
-auto-refresh pause conditions, keep-gold reserve, and target counts. Combat includes
-Invisible Scout. Arena includes hero/item/card granting, Battle Power controls
+Scavenger expensive-hero forcing, auto-refresh pause conditions, keep-gold
+reserve, and target counts. Combat includes Invisible Scout. Arena includes
+hero/item/card granting, Battle Power controls
 for force-win, HP-loss prevention, attack-ratio boosting, fight-value boosting,
 and enemy-board crippling, active synergy forcing, level/population forcing,
 enemy HP pressure, achievement task forcing, passive gold, free economy,
