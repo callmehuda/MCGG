@@ -34,7 +34,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Feature Binding**: `ResolveFeatureBindings()` resolves game methods and hooks. Missing methods and fields are retried periodically because Unity metadata and battle objects may not be ready during first setup. Empty method scans and field misses use short retry backoffs so hot feature paths do not rescan missing metadata every frame. Binding resolution is single-flight so the setup thread and render thread do not scan IL2CPP metadata at the same time.
 - **Hooking Strategy**: Uses Dobby to hook `eglSwapBuffers` for frame-by-frame UI injection, `UnityEngine.Input.GetTouch` for touch-to-mouse forwarding, and selected game methods for Combat visibility and Arena behavior.
 - **Runtime Ticks**: Arena effects and Shop automation run on separate 100 ms ticks. Combat power and Auto-Play run on separate 250 ms ticks. GGC Info, opponent prediction history, and next-enemy HUD text refresh on 500 ms cadences. Frame-time feature work has a small render budget plus a per-frame managed-work unit budget so lower-priority ticks, hot loops, and Test diagnostics defer instead of stacking heavy IL2CPP/Unity/game calls into one render pass. Auto-Play builds a shared gold-interest plan and uses bounded cooldowns for opt-in safe-phase built-in AI startup, long-gated AI refresh, built-in deployment, separate smart formation moves, level-up actions, and auction bidding. Shop automation uses bounded cooldowns for buy, repeat-buy, refresh, target-worth, and Recommendation Lineup checks, and waits for the shop panel to be operable before UI actions.
-- **Runtime Caches**: Managed references are cached through atomic pointers. Hero/equipment/GogoCard table data is collected locally and published under `RuntimeMutex::FeatureMutex` when entering a new match. GitHub release metadata is cached in memory under `RuntimeMutex::UpdateMutex` for the session.
+- **Runtime Caches**: Managed references are cached through atomic pointers. Commander-filtered hero/equipment/GogoCard table data and Recommendation Lineup hero IDs are collected locally and published under `RuntimeMutex::FeatureMutex` when entering a new match. GitHub release metadata is cached in memory under `RuntimeMutex::UpdateMutex` for the session.
 - **Pinned Managed References**: Persistent managed-object caches are published
   only after `il2cpp_gchandle_new(obj, true)` succeeds. The pinned handle set is
   match-scoped: refreshed objects add handles without freeing old ones, and all
@@ -120,8 +120,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   interval to recover if the game drops its internal AI state.
 - **Appearance**: ImGui Dark, Catppuccin Mocha, Dear ImGui issue #707-inspired theme selection, Default/Noto Sans CJK font selection, English/Indonesian menu language selection, and localized tooltips for interactive overlay controls.
 - **Settings**: menu size, fixed position, mobile-friendly TabBar helpers, next-enemy HUD text, font scale, style tuning, GitHub release update/changelog status, and save/load configuration, including language and Auto-Play state.
-- **Shop**: auto-buy free heroes, auto-buy selected targets, auto-buy Recommendation Lineup heroes, Scavenger expensive-hero forcing after automatic regular-shop refreshes, auto-refresh, pause-refresh conditions, keep-gold threshold, manual target counts, Recommendation Lineup target counts, and shop-panel operability gates before buy/refresh UI actions.
-- **Arena**: hero spawn, equipment grant, GogoCard forcing, Battle Power controls, active synergy forcing, level/population 99, outside-map placement, enemy HP 1, achievement task forcing, passive gold, free economy, unlimited hero pool, shop-lock bypass helpers, fight/result-aware Skip Round, and SpeedHack with reset-to-normal handling.
+- **Shop**: auto-buy free heroes, auto-buy selected targets, auto-buy all detected Recommendation Lineup heroes with per-hero target counts, Scavenger expensive-hero forcing after automatic regular-shop refreshes, auto-refresh, pause-refresh conditions, keep-gold threshold, manual target counts, and shop-panel operability gates before buy/refresh UI actions.
+- **Arena**: hero spawn, equipment grant, GogoCard forcing, Battle Power controls, active synergy forcing, level/population 99, outside-map placement, enemy HP 1, achievement task forcing, manual gold grant, fight/result-aware Skip Round, and SpeedHack with reset-to-normal handling.
 - **Test**: Runtime Status, manual binding retry, account inspection, fight prediction, binding, round, player, manager, bridge, shop UI, behavior API, and all-manager diagnostics. Only the exact local current opponent should be locked to `100%` in `Will fight`; every player's enemy history and dump-backed invader order should remain available for weighted predictions.
 
 ### Project Constraints
@@ -162,11 +162,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - Regular instance field helper work should keep offset-based direct access
   limited to validated field offsets and retain IL2CPP fallback behavior for
   unresolved metadata or barrier-sensitive writes.
-- Table cache loading publishes only after hero, equipment, and GogoCard data are all present. Dependent UI should keep `Waiting for ...` states while any table is missing.
+- Table cache loading publishes only after commander-filtered hero rows, equipment, and GogoCard data are all present. Dependent UI should keep `Waiting for ...` states while any table is missing.
 - Table cache loading should be deferred until a table-backed tab or active
   automation needs it, and long Shop/Arena table views should render visible
   rows with `ImGuiListClipper` rather than walking every row each frame.
-- Auto-Play owns selected Shop, Arena, and Combat assist settings through a backup while it is active; preserve capture/restore semantics.
+- Auto-Play owns selected Shop, Arena, and Combat assist settings plus Recommendation Lineup target defaults through a backup while it is active; preserve capture/restore semantics.
 - Opponent prediction may display exact data and weighted guesses together. Only the exact local current opponent should be forced to `100%`.
 - Opponent prediction rows should be built on the throttled 500 ms feature tick,
   not inside the ImGui draw path. Weight live current-opponent data first, then
@@ -187,7 +187,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `RuntimeMutex::CacheMutex` protects IL2CPP method and field caches.
 - `RuntimeMutex::ManagedHandleMutex` protects the pinned managed-object handle
   registry for cached references.
-- `RuntimeMutex::FeatureMutex` protects complex feature collections, including `FeatureState::Heroes`, `FeatureState::Equips`, `FeatureState::Cards`, and `FeatureState::ShopSelectedHeroes`.
+- `RuntimeMutex::FeatureMutex` protects complex feature collections, including `FeatureState::Heroes`, `FeatureState::Equips`, `FeatureState::Cards`, `FeatureState::ShopSelectedHeroes`, Recommendation Lineup target counts, and cached Recommendation Lineup hero IDs.
 - `RuntimeMutex::UpdateMutex` protects GitHub release update/check metadata and
   cached changelog entries.
 - `RuntimeMutex::UiMutex` protects UI/config strings and config save/load status.
@@ -224,8 +224,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   `CollectAutoPlayBoardUnits()`, `BuildAutoPlayBoardPlan()`, and the existing
   table/target helpers. Keep opponent scans bounded to the battle manager
   dictionary limit, keep board placement to one move per cooldown, keep shop,
-  auction, passive-gold, free-economy, and level-up decisions on the shared
-  gold plan, keep built-in AI startup opt-in, safe-phase, and stateful with only
+  auction, and level-up decisions on the shared gold plan, keep built-in AI
+  startup opt-in, safe-phase, and stateful with only
   a long-gated refresh, keep built-in deploy and smart formation cooldowns
   separate, keep SpeedHack as a manual Arena-only control, and never hold
   `FeatureMutex` while calling managed IL2CPP APIs.

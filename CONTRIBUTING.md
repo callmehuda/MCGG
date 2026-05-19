@@ -144,8 +144,8 @@ bash jni/build-curl-android.sh
   bids must stay cooldown-based. Use runtime snapshots, table metadata, current
   opponent data, board-unit scans, and selected-target helpers instead of
   unbounded searches or long lock holds. Keep gold-interest decisions centralized
-  in the Auto-Play gold plan so shop spending, auction bids, passive gold,
-  free-economy assists, and level-up actions share the same reserve logic.
+  in the Auto-Play gold plan so shop spending, auction bids, and level-up
+  actions share the same reserve logic.
   Built-in AI startup should be opt-in, limited to safe non-fight/non-result
   phases, and stateful so `StartAI` is not replayed continuously for the same
   account, with only a long-gated refresh to recover dropped internal AI state.
@@ -214,14 +214,14 @@ adaptive strategy pressure, opponent-aware board analysis, advanced role-aware
 formation moves, selected shop target promotion, GogoCard scoring, auction
 scoring, gold-interest economy decisions, and optional coordination of Combat
 and Arena assists. Shop currently includes free-hero buying, manual target
-buying, Recommendation Lineup buying, Scavenger expensive-hero forcing,
-auto-refresh pause conditions, keep-gold reserve, and target counts. Combat
+buying, Recommendation Lineup buying with per-hero target counts, Scavenger
+expensive-hero forcing, auto-refresh pause conditions, keep-gold reserve, and
+target counts. Combat
 includes Invisible Scout. Arena includes hero/item/card granting, Battle Power
 controls for force-win, HP-loss
 prevention, attack-ratio boosting, fight-value boosting, and enemy-board
 crippling, active synergy forcing, level/population forcing, enemy HP pressure,
-achievement task forcing, passive gold, free economy, unlimited hero pool,
-shop-lock bypass helpers, Skip Round, and SpeedHack.
+achievement task forcing, Skip Round, and SpeedHack.
 Appearance includes ImGui
 Dark, Catppuccin Mocha, and additional palettes inspired by Dear ImGui issue #707.
 Settings includes the optional next-enemy HUD and GitHub release update status
@@ -340,7 +340,7 @@ Use this checklist when looking for hidden bugs or logic flaws:
 - Keep long table UIs clipped and demand-load table caches only for table-backed
   tabs or active automation that consumes table metadata.
 - Preserve Auto-Play policy backup and restore behavior for Shop, Arena, and
-  Combat assist toggles.
+  Combat assist toggles, including Recommendation Lineup target defaults.
 - Keep opponent prediction exactness narrow: only the local player's exact
   current opponent should be forced to `100%`.
 - Keep GGC Info bounded: scan only the configured round range, ignore unknown

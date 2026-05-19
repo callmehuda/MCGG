@@ -127,7 +127,7 @@ they are backed by `dump/dump.cs` and live runtime verification.
 ### Auto-Play
 
 - Binary-side controller that reads the current round, phase, HP, gold, level,
-  population, lineup worth, fight value, Recommendation Lineup target, star-up
+  population, lineup worth, fight value, Recommendation Lineup signal, star-up
   target, and current opponent.
 - Adaptive strategy pressure model that shifts between Economy, Balanced, and
   Aggressive based on round progression, HP loss, gold state, own fight value,
@@ -135,7 +135,7 @@ they are backed by `dump/dump.cs` and live runtime verification.
 - Gold-interest planner that evaluates 10-gold interest tiers, next interest
   breakpoints, configured reserve, spend budget, population pressure, HP
   pressure, fight-value deficits, and strategy before allowing shop spending,
-  auction bids, level-up actions, passive gold targets, or free-economy assists.
+  auction bids, or level-up actions.
 - Opponent-aware scan across battle managers to count opponents, detect target
   contesting, track the current opponent, and compare the local board against
   the strongest board.
@@ -191,14 +191,17 @@ they are backed by `dump/dump.cs` and live runtime verification.
 
 - Auto-buy free heroes.
 - Auto-buy selected hero targets.
-- Auto-buy heroes from the active Recommendation Lineup.
+- Auto-buy every detected hero from the active Recommendation Lineup, with a
+  separate target count for each recommended hero.
 - Force Scavenger to leave the most expensive shop heroes by clearing cheaper
   heroes immediately after automatic regular shop refreshes when Scavenger is
   active at count 2 or higher.
-- Auto-refresh shop with stop conditions for free heroes, selected targets, or Recommendation Lineup heroes.
+- Auto-refresh shop while selected or Recommendation Lineup targets still need
+  copies, with stop conditions for free heroes, selected targets, or
+  Recommendation Lineup heroes that still need copies.
 - Gold reserve threshold for safer automation.
 - Hero target table with configurable target counts and no keyboard-dependent search field.
-- Recommendation Lineup target count for advanced shop automation.
+- Recommendation Lineup target table for advanced shop automation.
 - Buy and refresh throttles that reduce repeated actions during continuous automation.
 - Shop UI readiness checks that wait for an operable, non-delayed shop panel
   before selecting, buying, or refreshing.
@@ -216,8 +219,7 @@ they are backed by `dump/dump.cs` and live runtime verification.
 - Enemy HP 1 helper.
 - Force Complete Achievements Task helper that patches achievement reach/result
   checks and round achievement counters while enabled.
-- Manual and passive gold helpers.
-- Free shop/upgrade economy, unlimited hero pool, and shop-lock bypass helpers.
+- Manual gold grant helper.
 - Skip Round controls that move the local round manager to a selected target
   round, wait out fight/result phases during automatic skips, and suppress
   repeated requests for the same source and target round.
@@ -760,7 +762,8 @@ the following bug-prone areas:
 - Keep table cache loading demand-driven and clip long data tables so table UI
   does not walk every row every frame.
 - Guard direct access to `FeatureState::Heroes`, `FeatureState::Equips`,
-  `FeatureState::Cards`, and `FeatureState::ShopSelectedHeroes` with
+  `FeatureState::Cards`, `FeatureState::ShopSelectedHeroes`, recommendation
+  lineup target counts, and cached recommendation lineup hero IDs with
   `RuntimeMutex::FeatureMutex` or the existing snapshot/access helpers.
 - Avoid holding `RuntimeMutex::FeatureMutex` across managed IL2CPP calls.
   Collect local data first, then publish the result under the lock.
@@ -877,7 +880,9 @@ When investigating continuous-use issues, verify:
 - Recommendation Lineup bindings are ready when recommendation buying or pause-refresh is enabled.
 - Keep-gold reserve is not blocking the action.
 - Scavenger active count is 2 or higher when expensive-hero forcing is enabled.
-- Target counts have not already been reached.
+- Selected-target and per-hero Recommendation Lineup counts have not already
+  been reached, and the target hero still has pool availability when that reader
+  is ready.
 - Buy and refresh cooldowns are not still active.
 
 ### Noto Sans CJK font is unavailable
@@ -929,7 +934,9 @@ Check the GitHub Actions log for:
 - IL2CPP method resolution is dump-guided but still name and parameter-shape
   based at runtime; overloaded or renamed game methods require manual
   validation against `dump/dump.cs`.
-- Recommendation Lineup automation depends on the active match lineup data exposed by the runtime.
+- Recommendation Lineup automation depends on the active match lineup data
+  exposed by the runtime; listing every recommended hero requires the
+  recommendation-membership binding and a loaded, commander-filtered hero table.
 - Opponent prediction is probabilistic when current-pair data is unavailable;
   live `m_CurPairDict` data still takes precedence when the runtime exposes it,
   and the seven-round cycle-pattern signal needs enough completed current-cycle

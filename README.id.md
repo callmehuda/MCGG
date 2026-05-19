@@ -128,7 +128,7 @@ behavior kecuali sudah didukung oleh `dump/dump.cs` dan verifikasi runtime live.
 ### Auto-Play
 
 - Controller di sisi binary yang membaca round, phase, HP, gold, level,
-  population, lineup worth, fight value, target Recommendation Lineup, target
+  population, lineup worth, fight value, sinyal Recommendation Lineup, target
   star-up, dan opponent saat ini.
 - Model tekanan strategi adaptif yang berpindah antara Economy, Balanced, dan
   Aggressive berdasarkan progress round, kehilangan HP, kondisi gold, fight
@@ -137,7 +137,7 @@ behavior kecuali sudah didukung oleh `dump/dump.cs` dan verifikasi runtime live.
 - Planner gold interest yang mengevaluasi tier interest per 10 gold, breakpoint
   interest berikutnya, reserve terkonfigurasi, spend budget, tekanan population,
   tekanan HP, defisit fight value, dan strategi sebelum mengizinkan spending
-  shop, bid auction, aksi level-up, target passive gold, atau assist free economy.
+  shop, bid auction, atau aksi level-up.
 - Scan semua battle manager untuk menghitung opponent, mendeteksi perebutan
   target, melacak opponent saat ini, dan membandingkan board lokal dengan board
   terkuat.
@@ -196,14 +196,17 @@ behavior kecuali sudah didukung oleh `dump/dump.cs` dan verifikasi runtime live.
 
 - Auto-buy hero gratis.
 - Auto-buy target hero yang dipilih.
-- Auto-buy hero dari Recommendation Lineup yang aktif.
+- Auto-buy semua hero yang terdeteksi dari Recommendation Lineup aktif, dengan
+  target count terpisah untuk setiap hero rekomendasi.
 - Force Scavenger agar hero shop termahal tersisa dengan membeli hero yang
   lebih murah segera setelah regular shop auto-refresh, saat Scavenger aktif
   pada count 2 atau lebih.
-- Auto-refresh shop dengan stop condition untuk hero gratis, target yang dipilih, atau hero Recommendation Lineup.
+- Auto-refresh shop saat target terpilih atau hero Recommendation Lineup masih
+  butuh copy, dengan stop condition untuk hero gratis, target terpilih, atau
+  hero Recommendation Lineup yang masih belum mencapai count.
 - Gold reserve threshold untuk automasi yang lebih aman.
 - Tabel target hero dengan jumlah target yang dapat dikonfigurasi dan tanpa field search yang bergantung pada keyboard.
-- Jumlah target Recommendation Lineup untuk automation shop tingkat lanjut.
+- Tabel target Recommendation Lineup untuk automation shop tingkat lanjut.
 - Throttle buy dan refresh untuk mengurangi aksi berulang saat automation berjalan terus-menerus.
 - Pemeriksaan kesiapan UI shop yang menunggu panel shop operable, tidak delay,
   dan tidak berada pada state refresh spectate sebelum select, buy, atau refresh.
@@ -221,8 +224,7 @@ behavior kecuali sudah didukung oleh `dump/dump.cs` dan verifikasi runtime live.
 - Helper enemy HP 1.
 - Helper Force Complete Achievements Task yang mem-patch pengecekan reach/result
   achievement dan counter round achievement saat aktif.
-- Helper gold manual dan pasif.
-- Helper free shop/upgrade economy, unlimited hero pool, dan bypass shop lock.
+- Helper grant gold manual.
 - Kontrol Skip Round untuk memindahkan round manager lokal ke target round yang
   dipilih, menunggu phase fight/result selesai pada skip otomatis, dan menekan
   request berulang untuk source round dan target round yang sama.
@@ -773,7 +775,8 @@ area yang rawan bug berikut:
 - Jaga loading table cache tetap demand-driven dan clip tabel data panjang agar
   UI tabel tidak memproses setiap row pada setiap frame.
 - Lindungi akses langsung ke `FeatureState::Heroes`, `FeatureState::Equips`,
-  `FeatureState::Cards`, dan `FeatureState::ShopSelectedHeroes` dengan
+  `FeatureState::Cards`, `FeatureState::ShopSelectedHeroes`, target count
+  Recommendation Lineup, dan cache hero Recommendation Lineup dengan
   `RuntimeMutex::FeatureMutex` atau helper snapshot/access yang sudah ada.
 - Hindari menahan `RuntimeMutex::FeatureMutex` saat melakukan call IL2CPP
   managed. Kumpulkan data lokal terlebih dahulu, lalu publish hasilnya di
@@ -892,7 +895,8 @@ Saat menelusuri masalah penggunaan terus-menerus, verifikasi:
 - Binding Recommendation Lineup sudah siap saat recommendation buying atau pause-refresh aktif.
 - Active count Scavenger minimal 2 saat force hero termahal Scavenger aktif.
 - Keep-gold reserve tidak sedang memblokir aksi.
-- Target count belum tercapai.
+- Target count terpilih dan count per hero Recommendation Lineup belum tercapai,
+  serta target hero masih punya pool saat reader pool sudah siap.
 - Cooldown buy dan refresh sudah selesai.
 
 ### Font Noto Sans CJK tidak tersedia
@@ -945,7 +949,9 @@ Periksa log GitHub Actions untuk:
 - Resolution method IL2CPP dipandu dump tetapi saat runtime tetap berbasis nama
   dan bentuk parameter; method game yang overload atau rename membutuhkan
   validasi manual terhadap `dump/dump.cs`.
-- Automation Recommendation Lineup bergantung pada data lineup match aktif yang diekspos runtime.
+- Automation Recommendation Lineup bergantung pada data lineup match aktif yang
+  diekspos runtime; daftar lengkap hero rekomendasi membutuhkan binding
+  membership rekomendasi dan tabel hero yang sudah loaded dengan filter commander.
 - Prediksi opponent bersifat probabilistik saat data current-pair belum tersedia;
   data live `m_CurPairDict` tetap menjadi prioritas saat runtime mengeksposnya,
   dan sinyal pola siklus tujuh round membutuhkan cukup observasi current-cycle

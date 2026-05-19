@@ -220,7 +220,7 @@ level-up, and auction cooldowns. The controller should read runtime state throug
 existing target helpers. Keep opponent scans bounded to the battle manager
 dictionary limit, keep built-in deploy and smart formation on separate cooldowns,
 keep battlefield movement to one chosen action per formation cooldown,
-keep shop, auction, passive-gold, free-economy, and level-up decisions aligned
+keep shop, auction, and level-up decisions aligned
 with the shared gold plan, keep built-in AI startup opt-in, stateful, and limited
 to safe non-fight/non-result phases instead of replaying `StartAI` on every tick,
 allow only a long-gated `StartAI` refresh to recover from dropped internal AI
@@ -243,9 +243,10 @@ the completed-history seven-round cycle-pattern signal, cycle-gap distance,
 round-robin fallback, and per-player history as weaker signals.
 
 Auto-Play temporarily owns selected Shop, Arena, and Combat assists through its
-policy backup while enabled. If a change touches those assist toggles, preserve
-the capture/restore behavior and make it clear in user-facing docs when manual
-edits made during Auto-Play can be restored to the pre-Auto-Play values.
+policy backup while enabled. If a change touches those assist toggles or the
+Recommendation Lineup target defaults, preserve the capture/restore behavior and
+make it clear in user-facing docs when manual edits made during Auto-Play can be
+restored to the pre-Auto-Play values.
 
 ## Testing Guidelines
 
@@ -355,14 +356,13 @@ Auto-Play includes adaptive strategy pressure, opt-in built-in AI coordination,
 opponent-aware board analysis, advanced role-aware formation moves, selected
 shop target promotion, GogoCard scoring, auction scoring, gold-interest economy
 decisions, and optional coordination of Combat and Arena assists. Shop currently
-includes free-hero buying, selected target buying, Recommendation Lineup buying,
-Scavenger expensive-hero forcing, auto-refresh pause conditions, keep-gold
-reserve, and target counts. Combat includes Invisible Scout. Arena includes
+includes free-hero buying, selected target buying, Recommendation Lineup buying
+with per-hero target counts, Scavenger expensive-hero forcing, auto-refresh pause
+conditions, keep-gold reserve, and target counts. Combat includes Invisible Scout. Arena includes
 hero/item/card granting, Battle Power controls
 for force-win, HP-loss prevention, attack-ratio boosting, fight-value boosting,
 and enemy-board crippling, active synergy forcing, level/population forcing,
-enemy HP pressure, achievement task forcing, passive gold, free economy,
-unlimited hero pool, shop-lock bypass helpers, Skip Round, and SpeedHack. Use
+enemy HP pressure, achievement task forcing, Skip Round, and SpeedHack. Use
 the Test tab's Runtime Status
 section and diagnostics when checking binding readiness, managed references,
 round state, round-manager state, timeScale binding readiness, achievement
@@ -400,7 +400,8 @@ Settings config should default to the running game package directory as
 
 Known audit hotspots are early-render readiness, dump-backed signature drift,
 match-scoped pinned managed-object handles, table cache all-or-nothing
-publication, shop panel operability before buy or refresh, grouped shop
+publication with commander-filtered hero rows, shop panel operability before buy
+or refresh, grouped shop
 diagnostic readiness, Auto-Play policy ownership of assist toggles, opt-in
 safe-phase built-in AI startup, separate Auto-Play deploy/formation cooldowns,
 render-frame budget deferral between Auto-Play action groups, method-miss
