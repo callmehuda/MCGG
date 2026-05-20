@@ -61,7 +61,7 @@ Target default yang didukung:
 - Build system: `ndk-build`
 - Standar C++: `c++26`
 - Branch utama: `master`
-- Tab overlay saat ini: Info, Combat, Shop, Arena, Appearance, Settings, dan Test
+- Tab overlay saat ini: Info, Combat, Shop, Arena, Appearance, dan Settings
 
 ## Referensi Dump
 
@@ -146,6 +146,11 @@ behavior kecuali sudah didukung oleh `dump/dump.cs` dan verifikasi runtime live.
 - Tabel player dan next-enemy yang diurutkan dengan player lokal di posisi pertama.
 - Nama player menambahkan ` (Bot)` saat `SystemData.RoomData.bRobot` bernilai true.
 - Readout kualitas GGC otomatis untuk setiap round GGC yang terdeteksi.
+- Section Prediction di bawah Players dengan row berbobot `Will fight`,
+  `Current enemy`, dan `Recent` untuk player lokal.
+- Tabel forecast delapan round yang memakai history match saat ini, urutan
+  invader, sinyal siklus tujuh round, fallback round-robin, dan akurasi
+  forecast yang dipelajari dari prediksi sebelumnya yang salah.
 - Indikator status overlay untuk binding yang terlambat atau belum tersedia.
 
 ### Combat
@@ -203,8 +208,6 @@ behavior kecuali sudah didukung oleh `dump/dump.cs` dan verifikasi runtime live.
 - Grant equipment, termasuk enhanced equipment.
 - Force GogoCard yang dipilih.
 - Force active synergies.
-- Subtab Battle Power untuk force defend win, pencegahan HP-loss, booster
-  attack-ratio/fight-value player lokal, dan cripple enemy board.
 - Helper level dan population 99.
 - Helper outside-map placement.
 - Helper enemy HP 1.
@@ -217,30 +220,9 @@ behavior kecuali sudah didukung oleh `dump/dump.cs` dan verifikasi runtime live.
 - Kontrol SpeedHack berbasis `UnityEngine.Time.set_timeScale`, dengan reset
   eksplisit ke `1.0x` saat fitur keluar dari state battle aktif.
 
-### Test
-
-- Section Runtime Status untuk binding battle data, GGC, shop, Recommendation
-  Lineup, update check, Battle Power, arena, achievement, round skip, speedhack,
-  test, spectator, synergy, dan placement.
-- Kontrol manual untuk retry binding dan refresh managed reference.
-- Inspeksi account berdasarkan self, opponent, atau account ID eksplisit.
-- Tabel prediksi fight dengan sinyal direct, manager-derived, invasion-pair,
-  urutan invader dari dump, queue/cycle, pola siklus tujuh round, dan riwayat
-  opponent. `Will fight` adalah peluang row tersebut menjadi opponent player
-  lokal; `Current enemy` menampilkan opponent yang terdeteksi untuk row tersebut
-  jika tersedia; `Recent` menampilkan pertemuan terbaru dari riwayat opponent
-  per player.
-- Readout runtime bertab untuk kesiapan binding, round state, identitas player,
-  rank, ekonomi, state shop, field battle manager, state battle bridge, state
-  panel shop, state behavior API, dan seluruh manager entry.
-- Kesiapan diagnostik shop digabung dari reader diagnostik shop inti; setiap
-  row shop tetap menampilkan `Waiting` saat reader khusus row tersebut belum
-  tersedia.
-- Diagnostik Test dan hot path automation berbagi budget managed-work per
-  frame, sehingga reader IL2CPP/game live dapat menampilkan `Waiting` selama
-  satu frame alih-alih mengirim burst call yang terlalu besar.
-- Tabel data Shop dan Arena yang panjang hanya merender row yang terlihat agar
-  scroll dan perpindahan tab tetap responsif setelah metadata tabel dimuat.
+Tabel data Shop, Arena, dan Prediction di Info hanya merender row yang terlihat
+saat diperlukan agar scroll dan perpindahan tab tetap responsif setelah
+metadata tabel atau row prediksi dimuat.
 
 Feature binding di-resolve terhadap local reference artifacts dan metadata
 IL2CPP runtime. Method dan field yang belum tersedia akan dicoba ulang secara
@@ -253,12 +235,13 @@ Prediksi opponent menggabungkan sumber runtime sebelum heuristik publik.
 Observasi current-opponent live dan reverse pair tetap paling kuat, lalu urutan
 invader berbasis dump, pembelajaran siklus opponent terbaru, model pola siklus
 tujuh round yang diadaptasi dari `../MCGG_Predictor`, fallback round-robin,
-pembelajaran jarak dalam siklus, dan bobot riwayat yang dibatasi. Sinyal pola
-siklus hanya memakai history current-cycle yang sudah selesai: R4 yang sama
-dengan R1 lokal dianggap pola classic, sedangkan pola shifted memakai matchup
-opponent R1 lokal pada R4/R2/R3 untuk menurunkan prediksi R5/R6/R7. Row
-prediksi di-cache pada cadence 500 ms agar tab Test dan HUD next-enemy tidak
-membangun ulang state managed pada setiap render frame.
+pembelajaran jarak dalam siklus, histori per-player, dan feedback akurasi
+forecast yang dibatasi. Sinyal pola siklus hanya memakai history current-cycle
+yang sudah selesai: R4 yang sama dengan R1 lokal dianggap pola classic,
+sedangkan pola shifted memakai matchup opponent R1 lokal pada R4/R2/R3 untuk
+menurunkan prediksi R5/R6/R7. Row prediksi dan forecast delapan round di-cache
+pada cadence 500 ms agar tab Info dan HUD next-enemy tidak membangun ulang
+state managed pada setiap render frame.
 
 ## Arsitektur
 
@@ -516,7 +499,7 @@ generated secara eksplisit:
 ```
 
 Overlay memakai constant tersebut sebagai sumber setara `BUILD_INFO.txt` untuk
-indikator update di Settings dan diagnostik Runtime Status di Test.
+indikator update di Settings.
 
 ## Packaging Rilis CI
 
@@ -576,8 +559,8 @@ Pada saat load dan selama frame presentation, `jni/Main.cpp` menjalankan urutan 
 9. `TickFeatures()` retry binding yang hilang, refresh battle bridge dan shop
    panel melalui pinned GC handle saat match aktif, refresh match state, dan
    retry table cache loading.
-10. Diagnostik Info, Shop, Arena, HUD Settings, dan Test hanya me-refresh data
-    runtime yang dibutuhkan.
+10. Info, Shop, Arena, dan HUD Settings hanya me-refresh data runtime yang
+    dibutuhkan.
 11. Arena, Shop, Combat, dan riwayat opponent berjalan pada tick bounded
     masing-masing, bukan pada setiap render pass. Frame sibuk menunda feature
     tick prioritas lebih rendah, bukan menjalankan semua pending managed work
@@ -602,7 +585,7 @@ area yang rawan bug berikut:
 
 - Render hook dipasang sebelum `liblogic.so` dan IL2CPP siap, jadi code per
   frame harus aman saat managed runtime belum ready.
-- Retry binding, table load, refresh HUD prediksi, dan diagnostik dibatasi
+- Retry binding, table load, refresh prediksi, dan diagnostik dibatasi
   budget. Work yang tertunda harus retry di frame berikutnya, bukan menumpuk
   managed call dalam satu render pass.
 - Managed-object reference persistent harus dipin dengan
@@ -617,8 +600,9 @@ area yang rawan bug berikut:
   binding atau metadata field belum tersedia.
 - Prediksi opponent harus menggabungkan exact pair data terlebih dahulu, lalu
   invader order, recent-cycle learning, histori pola tujuh round, fallback
-  round-robin, dan histori per-player. Hanya exact current opponent player
-  lokal yang boleh tampil `100%`.
+  round-robin, histori per-player, simulasi forecast delapan round, dan akurasi
+  forecast yang dipelajari. Hanya exact current opponent player lokal yang
+  boleh tampil `100%`.
 - SpeedHack harus mereset Unity time scale ke `1.0x` saat disable, battle tidak
   aktif, dan feature reset.
 
@@ -718,7 +702,7 @@ Saat menambahkan atau memperbarui binding, verifikasi:
 
 Shop automation sengaja menunggu saat binding, managed reference, data coin,
 target count, atau data Recommendation Lineup yang dibutuhkan belum siap. Cek
-section Runtime Status di tab Test dan tab Shop untuk pesan `Waiting for ...`.
+tab Shop untuk pesan `Waiting for ...`.
 
 Saat menelusuri masalah penggunaan terus-menerus, verifikasi:
 
@@ -748,9 +732,9 @@ Path config default di-resolve dari process game yang sedang berjalan dan disimp
 
 Section `Updates / Changelog` di tab Settings memulai request GitHub Releases
 pada thread detached dan menyimpan metadata rilis di memory selama sesi
-berjalan. Row Runtime Status di tab Test menampilkan `Waiting for network
-check`, `Up to date`, `Update available`, `GitHub request failed`, `Malformed
-release metadata`, atau `Unknown local version`.
+berjalan. Tab Settings menampilkan `Waiting for network check`, `Up to date`,
+`Update available`, `GitHub request failed`, `Malformed release metadata`, atau
+`Unknown local version`.
 
 Jika request gagal, pastikan environment target dapat mengakses `api.github.com`
 melalui HTTPS. Request native saat ini menonaktifkan verifikasi certificate peer

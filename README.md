@@ -61,7 +61,7 @@ The default supported target is:
 - Build system: `ndk-build`
 - C++ standard: `c++26`
 - Primary branch: `master`
-- Current overlay tabs: Info, Combat, Shop, Arena, Appearance, Settings, and Test
+- Current overlay tabs: Info, Combat, Shop, Arena, Appearance, and Settings
 
 ## Dump Reference
 
@@ -145,6 +145,11 @@ they are backed by `dump/dump.cs` and live runtime verification.
 - Player and next-enemy table sorted with the local player first.
 - Player names append ` (Bot)` when `SystemData.RoomData.bRobot` is true.
 - Automatic GGC quality readout for every detected GGC round.
+- Prediction section below Players with weighted `Will fight`, `Current enemy`,
+  and `Recent` rows for the local player.
+- Eight-round forecast table that uses current match history, invader ordering,
+  seven-round cycle signals, round-robin fallback, and learned forecast
+  accuracy from earlier wrong predictions.
 - Overlay status indicators for delayed or unavailable bindings.
 
 ### Combat
@@ -201,8 +206,6 @@ they are backed by `dump/dump.cs` and live runtime verification.
 - Grant equipment, including enhanced equipment.
 - Force selected GogoCards.
 - Force active synergies.
-- Battle Power subtab for force defend win, HP-loss prevention, self
-  attack-ratio/fight-value boosting, and enemy-board crippling.
 - Level and population 99 helper.
 - Outside-map placement helper.
 - Enemy HP 1 helper.
@@ -215,30 +218,9 @@ they are backed by `dump/dump.cs` and live runtime verification.
 - SpeedHack controls backed by `UnityEngine.Time.set_timeScale`, with an
   explicit reset to `1.0x` when the feature leaves its active battle state.
 
-### Test
-
-- Runtime Status section for battle data, GGC, shop, Recommendation Lineup,
-  update checks, Battle Power, arena, achievements, round skip, speedhack, test,
-  spectator, synergy, and placement bindings.
-- Manual binding retry and managed reference refresh controls.
-- Account inspection by self, opponent, or explicit account ID.
-- Fight prediction table with direct, manager-derived, invasion-pair,
-  dump-derived invader order, queue/cycle, seven-round cycle-pattern, and
-  opponent-history signals.
-  `Will fight` is the chance that the row is the local player's opponent;
-  `Current enemy` shows that row's observed opponent when available; `Recent`
-  shows recent local meetings from the per-player opponent history.
-- Tabbed runtime readouts for binding readiness, round state, player identity,
-  rank, economy, shop state, battle manager fields, battle bridge state, shop
-  panel state, behavior API state, and all manager entries.
-- Shop diagnostic readiness is grouped across core shop diagnostic readers; each
-  individual shop row still reports `Waiting` when its specific reader is not
-  available.
-- Test diagnostics and automation hot paths share a per-frame managed-work
-  budget, so live IL2CPP/game readers can report `Waiting` for a frame instead
-  of issuing an oversized burst of calls.
-- Long Shop and Arena data tables render only visible rows to keep scrolling and
-  tab switches responsive after table metadata is loaded.
+Long Shop, Arena, and Info prediction tables render only visible rows where
+needed to keep scrolling and tab switches responsive after table metadata or
+prediction rows are loaded.
 
 Feature bindings are resolved against local reference artifacts and runtime
 IL2CPP metadata. Missing methods and fields are retried periodically instead of
@@ -251,12 +233,13 @@ Opponent prediction combines runtime sources before public heuristics. Live
 current-opponent observations and reverse pair reads remain strongest, followed
 by dump-backed invader ordering, learned recent-opponent cycles, a seven-round
 cycle-pattern model adapted from `../MCGG_Predictor`, round-robin fallback,
-bounded cycle-gap learning, and bounded history weights. The cycle-pattern
-signal uses completed current-cycle history only: it treats R4 matching local R1
-as the classic pattern, otherwise uses the shifted pattern where R5/R6/R7 derive
-from the local R1 opponent's R4/R2/R3 matchups. Prediction rows are cached on
-the 500 ms feature cadence so the Test tab and next-enemy HUD do not rebuild
-managed state every render frame.
+bounded cycle-gap learning, per-player history, and bounded forecast accuracy
+feedback. The cycle-pattern signal uses completed current-cycle history only:
+it treats R4 matching local R1 as the classic pattern, otherwise uses the
+shifted pattern where R5/R6/R7 derive from the local R1 opponent's R4/R2/R3
+matchups. Prediction rows and the eight-round forecast are cached on the 500 ms
+feature cadence so the Info tab and next-enemy HUD do not rebuild managed state
+every render frame.
 
 ## Architecture
 
@@ -321,13 +304,13 @@ The current runtime cadence is intentionally split by responsibility:
 - Table reload retry: 2000 ms.
 - Arena feature tick: 100 ms.
 - Shop automation tick: 100 ms.
-- Combat power tick: 250 ms.
+- Combat feature tick: 250 ms.
 - Feature frame budget: 12 ms.
 - Feature managed-work budget: 256 units per render frame; all-or-nothing table
   loading may use up to 2048 units before deferring.
 - Opponent prediction history tick: 500 ms.
 - Next-enemy HUD text refresh: 500 ms while the HUD is enabled.
-- Cached opponent prediction row refresh: 500 ms while the Test tab or
+- Cached opponent prediction row refresh: 500 ms while the Info tab or
   next-enemy HUD needs prediction data.
 - GitHub release update check: once per overlay session, then no more than
   every 6 hours unless the user presses refresh. Network or metadata failures
@@ -529,7 +512,7 @@ generated release metadata explicitly:
 ```
 
 The overlay uses those constants as a `BUILD_INFO.txt`-equivalent source for
-the Settings update indicator and Test Runtime Status diagnostics.
+the Settings update indicator.
 
 ## CI Release Packaging
 
@@ -591,7 +574,7 @@ At load time and during frame presentation, `jni/Main.cpp` performs the followin
 9. `TickFeatures()` retries missing bindings, refreshes battle bridge and shop
    panel references through pinned GC handles while a match is active, refreshes
    match state, and retries table cache loading.
-10. Active Info, Shop, Arena, Settings HUD, and Test diagnostics refresh only the runtime data they need.
+10. Active Info, Shop, Arena, and Settings HUD refresh only the runtime data they need.
 11. Arena, Shop, Combat, and opponent-history work run on their own bounded ticks rather than in every render pass. Busy frames defer lower-priority feature ticks instead of running all pending managed work at once.
 12. Unity touch input is forwarded into ImGui mouse input through the hooked
     `GetTouch` path.
@@ -612,7 +595,7 @@ the following bug-prone areas:
 
 - The render hook is installed before `liblogic.so` and IL2CPP are ready, so
   frame-time code must tolerate a non-ready managed runtime.
-- Binding retries, table loads, prediction HUD refreshes, and diagnostics are
+- Binding retries, table loads, prediction refreshes, and diagnostics are
   budgeted. Delayed work should retry later instead of piling managed calls into
   one render pass.
 - Persistent managed-object references must be pinned with
@@ -627,8 +610,9 @@ the following bug-prone areas:
   while that binding or field metadata is unavailable.
 - Opponent prediction should combine exact pair data first, then invader order,
   recent-cycle learning, seven-round cycle-pattern history, round-robin
-  fallback, and per-player history. Only the exact local current opponent should
-  be shown as `100%`.
+  fallback, per-player history, eight-round forecast simulation, and learned
+  forecast accuracy. Only the exact local current opponent should be shown as
+  `100%`.
 - SpeedHack must reset Unity time scale to `1.0x` on disable, inactive battle
   state, and feature reset.
 
@@ -728,8 +712,7 @@ When adding or updating a binding, verify:
 
 Shop automation intentionally waits when required bindings, managed references,
 coin data, target counts, or Recommendation Lineup data are not ready. Check the
-Test tab's Runtime Status section and the Shop tab for `Waiting for ...`
-messages.
+Shop tab for `Waiting for ...` messages.
 
 When investigating continuous-use issues, verify:
 
@@ -760,9 +743,9 @@ The default config path is resolved from the running game process and stored as 
 
 The Settings tab's `Updates / Changelog` section starts a detached GitHub
 Releases request and keeps cached release metadata in memory for the session.
-The Test tab Runtime Status row reports `Waiting for network check`, `Up to
-date`, `Update available`, `GitHub request failed`, `Malformed release
-metadata`, or `Unknown local version`.
+The Settings tab reports `Waiting for network check`, `Up to date`, `Update
+available`, `GitHub request failed`, `Malformed release metadata`, or `Unknown
+local version`.
 
 If the request fails, verify that the target environment can reach
 `api.github.com` over HTTPS. The current native request disables libcurl peer

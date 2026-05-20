@@ -244,7 +244,8 @@ namespace RuntimeConfig {
     constexpr int MaxManagedDictionaryEntries = 8192;
     constexpr int MaxManagedListItems = 2048;
     constexpr int MaxManagedStringChars = 4096;
-    constexpr int MaxOpponentHistoryRounds = 32;
+    constexpr int MaxOpponentHistoryRounds = 64;
+    constexpr int MaxOpponentForecastRounds = 8;
     constexpr size_t MaxReleaseResponseBytes = 512 * 1024;
     constexpr size_t MaxReleaseBodyPreviewChars = 12000;
     constexpr size_t MaxInstanceFieldOffsetBytes = 1024 * 1024;
@@ -278,6 +279,7 @@ bool RefreshCachedOpponentPredictionRows(
 void RefreshGgcInfo(bool force);
 void RefreshInfoPlayerRows(bool force);
 void RefreshNextEnemyHudText(uint64_t selfAccountId);
+void DrawOpponentPredictionSection(uint64_t selfAccountId);
 bool IsBattleActive(uint64_t selfAccountId);
 bool HasShopSelectBinding();
 
@@ -431,8 +433,7 @@ enum MainTabIndex {
     MainTabShop = 2,
     MainTabArena = 3,
     MainTabAppearance = 4,
-    MainTabSettings = 5,
-    MainTabTest = 6
+    MainTabSettings = 5
 };
 
 namespace AppearanceState {
@@ -494,20 +495,24 @@ struct MenuI18nEntry {
 static const MenuI18nEntry kMenuI18nEntries[] = {
     {"English", "English", "Inggris", "Use English menu text.", "Gunakan teks menu bahasa Inggris."},
     {"Bahasa Indonesia", "Bahasa Indonesia", "Bahasa Indonesia", "Use Indonesian menu text.", "Gunakan teks menu bahasa Indonesia."},
-    {"Info", "Info", "Info", "Show match overview, GGC rounds, and current enemies.", "Tampilkan ringkasan match, round GGC, dan enemy saat ini."},
-    {"Combat", "Combat", "Combat", "Open combat visibility and battle power controls.", "Buka kontrol visibilitas combat dan battle power."},
+    {"Info", "Info", "Info", "Show match overview, GGC rounds, current enemies, and predictions.", "Tampilkan ringkasan match, round GGC, enemy saat ini, dan prediksi."},
+    {"Combat", "Combat", "Combat", "Open combat visibility controls.", "Buka kontrol visibilitas combat."},
     {"Shop", "Shop", "Shop", "Configure shop buying, refreshing, and hero targets.", "Atur pembelian shop, refresh, dan target hero."},
-    {"Arena", "Arena", "Arena", "Open arena helpers for heroes, items, cards, rounds, and battle power.", "Buka helper arena untuk hero, item, card, round, dan battle power."},
+    {"Arena", "Arena", "Arena", "Open arena helpers for heroes, items, cards, rounds, synergy, placement, and resources.", "Buka helper arena untuk hero, item, card, round, synergy, placement, dan resource."},
     {"Appearance", "Appearance", "Tampilan", "Adjust theme, font, and menu language.", "Atur theme, font, dan bahasa menu."},
     {"Settings", "Settings", "Pengaturan", "Save configuration and adjust window behavior.", "Simpan konfigurasi dan atur perilaku window."},
-    {"Test", "Test", "Test", "Open read-only runtime diagnostics.", "Buka diagnostik runtime read-only."},
     {"Prev", "Prev", "Sebelumnya", "Switch to the previous overlay tab.", "Pindah ke tab overlay sebelumnya."},
     {"Next", "Next", "Berikutnya", "Switch to the next overlay tab.", "Pindah ke tab overlay berikutnya."},
     {"Config", "Config", "Konfig", "Save, load, and review configuration state.", "Simpan, load, dan tinjau state konfigurasi."},
     {"Window", "Window", "Window", "Adjust overlay size, position, HUD, and window interaction.", "Atur ukuran overlay, posisi, HUD, dan interaksi window."},
     {"Style", "Style", "Style", "Tune font scale, opacity, spacing, borders, and rounding.", "Atur skala font, opacity, spacing, border, dan rounding."},
     {"State", "State", "State", "Reset feature state or clear selected runtime lists.", "Reset state fitur atau bersihkan daftar runtime yang dipilih."},
+    {"Prediction", "Prediction", "Prediksi", "Inspect weighted opponent prediction rows and the eight-round forecast.", "Periksa baris prediksi opponent berbobot dan forecast delapan round."},
     {"Predict", "Predict", "Prediksi", "Inspect weighted next-opponent prediction rows.", "Periksa baris prediksi next-opponent berbobot."},
+    {"Forecast", "Forecast", "Forecast", "Inspect the next eight predicted opponent rounds.", "Periksa delapan round opponent berikutnya yang diprediksi."},
+    {"Ahead", "Ahead", "Ke Depan", "Shows how many rounds ahead this forecast row is.", "Menampilkan berapa round ke depan untuk row forecast ini."},
+    {"Confidence", "Confidence", "Confidence", "Shows the weighted confidence for this forecast row.", "Menampilkan confidence berbobot untuk row forecast ini."},
+    {"Source", "Source", "Sumber", "Shows the strongest prediction signal for this forecast row.", "Menampilkan sinyal prediksi terkuat untuk row forecast ini."},
     {"Bindings", "Bindings", "Binding", "Inspect resolved native and managed binding readiness.", "Periksa kesiapan binding native dan managed."},
     {"Round", "Round", "Round", "Inspect round state or configure round helpers.", "Periksa state round atau atur helper round."},
     {"Player", "Player", "Player", "Inspect player economy, rank, and shop state.", "Periksa economy, rank, dan state shop player."},
@@ -521,7 +526,6 @@ static const MenuI18nEntry kMenuI18nEntries[] = {
     {"Heroes", "Heroes", "Hero", "Spawn heroes from the loaded hero table.", "Spawn hero dari tabel hero yang sudah dimuat."},
     {"Items", "Items", "Item", "Grant equipment from the loaded item table.", "Berikan equipment dari tabel item yang sudah dimuat."},
     {"GogoCards", "GogoCards", "GogoCard", "Force selected Go Go Cards.", "Paksa Go Go Card yang dipilih."},
-    {"Battle Power", "Battle Power", "Battle Power", "Configure fight result and battle value helpers.", "Atur helper hasil fight dan battle value."},
     {"Other", "Other", "Lainnya", "Configure arena economy, synergy, placement, and pool helpers.", "Atur helper economy, synergy, placement, dan pool arena."},
     {"Refresh update check", "Refresh update check", "Refresh check update", "Start a manual GitHub release metadata refresh.", "Mulai refresh manual metadata rilis GitHub."},
     {"Save configuration", "Save configuration", "Simpan konfigurasi", "Write the current overlay settings to the config file.", "Tulis pengaturan overlay saat ini ke file config."},
@@ -636,6 +640,8 @@ static const MenuI18nEntry kMenuI18nEntries[] = {
     {"Failure", "Failure", "Kegagalan", "", ""},
     {"GGC", "GGC", "GGC", "", ""},
     {"Players", "Players", "Player", "", ""},
+    {"Will fight", "Will fight", "Akan lawan", "", ""},
+    {"Recent", "Recent", "Recent", "", ""},
     {"Hero", "Hero", "Hero", "", ""},
     {"Cost", "Cost", "Cost", "", ""},
     {"Action", "Action", "Aksi", "", ""},
@@ -671,7 +677,6 @@ static const MenuI18nEntry kMenuI18nEntries[] = {
     {"Waiting for player list", "Waiting for player list", "Menunggu daftar player", "", ""},
     {"No players found", "No players found", "Player tidak ditemukan", "", ""},
     {"Waiting for spectator hook", "Waiting for spectator hook", "Menunggu hook spectator", "", ""},
-    {"Waiting for battle power bindings", "Waiting for battle power bindings", "Menunggu binding battle power", "", ""},
     {"Waiting for Noto Sans CJK font", "Waiting for Noto Sans CJK font", "Menunggu font Noto Sans CJK", "", ""},
     {"Waiting for shop automation bindings", "Waiting for shop automation bindings", "Menunggu binding automasi shop", "", ""},
     {"Waiting for shop refresh panel", "Waiting for shop refresh panel", "Menunggu panel refresh shop", "", ""},
@@ -694,7 +699,12 @@ static const MenuI18nEntry kMenuI18nEntries[] = {
     {"Waiting for achievement bindings", "Waiting for achievement bindings", "Menunggu binding achievement", "", ""},
     {"Waiting for battle manager list", "Waiting for battle manager list", "Menunggu daftar battle manager", "", ""},
     {"Waiting for prediction refresh", "Waiting for prediction refresh", "Menunggu refresh prediksi", "", ""},
+    {"No 8-round forecast yet", "No 8-round forecast yet", "Forecast 8 round belum tersedia", "", ""},
     {"Waiting for diagnostic budget", "Waiting for diagnostic budget", "Menunggu budget diagnostik", "", ""},
+    {"Cycle", "Cycle", "Siklus", "", ""},
+    {"Rotation", "Rotation", "Rotasi", "", ""},
+    {"Learned", "Learned", "Belajar", "", ""},
+    {"History", "History", "Histori", "", ""},
     {"Blue", "Blue", "Biru", "", ""},
     {"Purple", "Purple", "Ungu", "", ""},
     {"Gold", "Gold", "Gold", "", ""}
@@ -4198,7 +4208,6 @@ bool ShouldLoadTableDataForFrame(int activeMainTab) {
 
     return activeMainTab == MainTabShop ||
         activeMainTab == MainTabArena ||
-        activeMainTab == MainTabTest ||
         FeatureState::ShopForceScavengerExpensiveHero.load() ||
         FeatureState::ShopBuyRecommendLineup.load() ||
         FeatureState::ShopStopRefreshAtRecommendLineup.load();
@@ -5932,7 +5941,7 @@ void TickFeatures() {
     auto frameStart = std::chrono::steady_clock::now();
     auto now = frameStart;
     int activeMainTab =
-        std::clamp(UiState::MainTabIndex.load(), 0, static_cast<int>(MainTabTest));
+        std::clamp(UiState::MainTabIndex.load(), 0, static_cast<int>(MainTabSettings));
 
     RetryFeatureBindingsIfNeeded();
     // Let setup-thread binding scans finish before the render thread does managed work.
@@ -5993,7 +6002,7 @@ void TickFeatures() {
     }
 
     bool predictionRowsRebuilt = false;
-    if (activeMainTab == MainTabTest || UiState::ShowNextEnemyHud.load()) {
+    if (activeMainTab == MainTabInfo || UiState::ShowNextEnemyHud.load()) {
         predictionRowsRebuilt = RefreshCachedOpponentPredictionRows(selfAccountId, now);
         if (predictionRowsRebuilt) {
             FeatureState::LastOpponentPredictionTick = now;
@@ -6351,7 +6360,7 @@ std::string FormatCurrentSystemTime() {
     return buffer;
 }
 
-// Converts update status into the short label used by Settings and Test UI.
+// Converts update status into the short label used by Settings UI.
 const char* UpdateStatusLabel(UpdateCheckStatus status) {
     switch (status) {
         case UpdateCheckStatus::UpToDate:
@@ -6829,7 +6838,8 @@ float ParseConfigFloat(const std::string& value, float fallback) {
 
 // Clamps configurable state to the supported runtime range.
 void ClampConfigurableState() {
-    UiState::MainTabIndex = std::clamp(UiState::MainTabIndex.load(), 0, static_cast<int>(MainTabTest));
+    UiState::MainTabIndex =
+        std::clamp(UiState::MainTabIndex.load(), 0, static_cast<int>(MainTabSettings));
     UiState::ThemeIndex =
         std::clamp(UiState::ThemeIndex.load(), 0, kAppearanceThemeCount - 1);
     UiState::FontIndex = std::clamp(UiState::FontIndex.load(), 0, 1);
@@ -7175,13 +7185,6 @@ void ApplyConfigValue(const std::string& key, const std::string& value) {
     else if (key == "itemSpacingY") UiState::ItemSpacingY = ParseConfigFloat(value, UiState::ItemSpacingY);
     else if (key == "indentSpacing") UiState::IndentSpacing = ParseConfigFloat(value, UiState::IndentSpacing);
     else if (key == "combatInvisibleScout") FeatureState::CombatInvisibleScout = ParseConfigBool(value, FeatureState::CombatInvisibleScout);
-    else if (key == "combatForceWin") FeatureState::CombatForceWin = ParseConfigBool(value, FeatureState::CombatForceWin);
-    else if (key == "combatPreventHpLoss") FeatureState::CombatPreventHpLoss = ParseConfigBool(value, FeatureState::CombatPreventHpLoss);
-    else if (key == "combatBoostAttackRatio") FeatureState::CombatBoostAttackRatio = ParseConfigBool(value, FeatureState::CombatBoostAttackRatio);
-    else if (key == "combatCrippleEnemies") FeatureState::CombatCrippleEnemies = ParseConfigBool(value, FeatureState::CombatCrippleEnemies);
-    else if (key == "combatAttackRatioPercent") FeatureState::CombatAttackRatioPercent = ParseConfigInt(value, FeatureState::CombatAttackRatioPercent);
-    else if (key == "combatEnemyAttackRatioPercent") FeatureState::CombatEnemyAttackRatioPercent = ParseConfigInt(value, FeatureState::CombatEnemyAttackRatioPercent);
-    else if (key == "combatFightValue") FeatureState::CombatFightValue = ParseConfigInt(value, FeatureState::CombatFightValue);
     else if (key == "shopBuyFreeHero") FeatureState::ShopBuyFreeHero = ParseConfigBool(value, FeatureState::ShopBuyFreeHero);
     else if (key == "shopBuySelectedHero") FeatureState::ShopBuySelectedHero = ParseConfigBool(value, FeatureState::ShopBuySelectedHero);
     else if (key == "shopBuyRecommendLineup") FeatureState::ShopBuyRecommendLineup = ParseConfigBool(value, FeatureState::ShopBuyRecommendLineup);
@@ -7263,17 +7266,6 @@ bool SaveConfigToFile(const std::string& path) {
     WriteConfigFloat(file, "itemSpacingY", UiState::ItemSpacingY);
     WriteConfigFloat(file, "indentSpacing", UiState::IndentSpacing);
     WriteConfigBool(file, "combatInvisibleScout", FeatureState::CombatInvisibleScout);
-    WriteConfigBool(file, "combatForceWin", FeatureState::CombatForceWin);
-    WriteConfigBool(file, "combatPreventHpLoss", FeatureState::CombatPreventHpLoss);
-    WriteConfigBool(file, "combatBoostAttackRatio", FeatureState::CombatBoostAttackRatio);
-    WriteConfigBool(file, "combatCrippleEnemies", FeatureState::CombatCrippleEnemies);
-    WriteConfigInt(file, "combatAttackRatioPercent", FeatureState::CombatAttackRatioPercent);
-    WriteConfigInt(
-        file,
-        "combatEnemyAttackRatioPercent",
-        FeatureState::CombatEnemyAttackRatioPercent
-    );
-    WriteConfigInt(file, "combatFightValue", FeatureState::CombatFightValue);
     WriteConfigBool(file, "shopBuyFreeHero", FeatureState::ShopBuyFreeHero);
     WriteConfigBool(file, "shopBuySelectedHero", FeatureState::ShopBuySelectedHero);
     WriteConfigBool(file, "shopBuyRecommendLineup", FeatureState::ShopBuyRecommendLineup);
@@ -8504,6 +8496,8 @@ void DrawInfoTab() {
     DrawGgcInfo();
     ImGui::Spacing();
     DrawInfoPlayersTable();
+    ImGui::Spacing();
+    DrawOpponentPredictionSection(FeatureState::LastSelfAccountId.load());
 }
 
 // Draws the combat tab overlay section without changing game state.
@@ -8516,34 +8510,6 @@ void DrawCombatTab() {
         "Invisible Scout - hide spectate switching",
         FeatureState::CombatInvisibleScout
     );
-}
-
-// Draws the arena battle power controls overlay section without changing game state.
-void DrawArenaBattlePowerControls() {
-    DrawMenuSeparatorText("Battle Power");
-
-    if (!HasCombatPowerBindings()) {
-        DrawWaitingText("Waiting for battle power bindings");
-    }
-
-    DrawAtomicCheckbox("Force defend win", FeatureState::CombatForceWin);
-    DrawAtomicCheckbox("Prevent self HP loss", FeatureState::CombatPreventHpLoss);
-    DrawAtomicCheckbox("Boost self attack ratio", FeatureState::CombatBoostAttackRatio);
-    ImGui::SetNextItemWidth(150.0f);
-    DrawAtomicInputInt("Self attack ratio %", FeatureState::CombatAttackRatioPercent);
-    FeatureState::CombatAttackRatioPercent =
-        std::clamp(FeatureState::CombatAttackRatioPercent.load(), 100, 100000);
-    ImGui::SetNextItemWidth(150.0f);
-    DrawAtomicInputInt("Self fight value", FeatureState::CombatFightValue);
-    FeatureState::CombatFightValue =
-        std::clamp(FeatureState::CombatFightValue.load(), 0, 999999999);
-
-    ImGui::Separator();
-    DrawAtomicCheckbox("Cripple enemy boards", FeatureState::CombatCrippleEnemies);
-    ImGui::SetNextItemWidth(150.0f);
-    DrawAtomicInputInt("Enemy attack ratio %", FeatureState::CombatEnemyAttackRatioPercent);
-    FeatureState::CombatEnemyAttackRatioPercent =
-        std::clamp(FeatureState::CombatEnemyAttackRatioPercent.load(), 0, 100);
 }
 
 // Draws the appearance tab overlay section without changing game state.
@@ -9802,6 +9768,15 @@ struct OpponentPredictionRow {
     std::string currentEnemyName;
 };
 
+struct OpponentForecastRow {
+    int ahead = 0;
+    uint32_t round = 0;
+    uint64_t opponentId = 0;
+    std::string name;
+    int confidence = 0;
+    std::string source;
+};
+
 struct CurrentOpponentObservation {
     uint64_t accountId = 0;
     uint64_t opponentId = 0;
@@ -9816,6 +9791,17 @@ struct OpponentHistoryEntry {
     uint64_t opponentId = 0;
     bool mirror = false;
     bool fromCurrentApi = false;
+};
+
+struct PredictionAccuracyEntry {
+    int correct = 0;
+    int wrong = 0;
+    uint32_t lastRound = 0;
+};
+
+struct PendingOpponentForecast {
+    uint32_t targetRound = 0;
+    uint64_t predictedOpponentId = 0;
 };
 
 enum class OpponentCyclePattern {
@@ -9833,7 +9819,11 @@ struct OpponentCyclePrediction {
 namespace PredictionCache {
     std::unordered_map<uint64_t, CurrentOpponentObservation> CurrentRoundOpponents;
     std::unordered_map<uint64_t, std::vector<OpponentHistoryEntry>> OpponentHistory;
+    std::unordered_map<uint64_t, std::unordered_map<uint64_t, PredictionAccuracyEntry>>
+        PredictionAccuracy;
+    std::unordered_map<uint64_t, std::vector<PendingOpponentForecast>> PendingForecasts;
     std::vector<OpponentPredictionRow> CachedRows;
+    std::vector<OpponentForecastRow> CachedForecastRows;
     std::chrono::steady_clock::time_point LastRowsRefresh{};
     uint64_t HistorySelfAccountId = 0;
     uint64_t CachedRowsSelfAccountId = 0;
@@ -9894,9 +9884,139 @@ void ResetOpponentPredictionHistoryIfNeeded(uint64_t selfAccountId) {
     if (PredictionCache::HistorySelfAccountId != 0 &&
         PredictionCache::HistorySelfAccountId != selfAccountId) {
         PredictionCache::OpponentHistory.clear();
+        PredictionCache::PredictionAccuracy.clear();
+        PredictionCache::PendingForecasts.clear();
+        PredictionCache::CachedForecastRows.clear();
     }
 
     PredictionCache::HistorySelfAccountId = selfAccountId;
+}
+
+// Records whether a previously cached forecast matched the later live opponent.
+void LearnFromForecastOutcome(uint64_t accountId, uint32_t round, uint64_t actualOpponentId) {
+    if (accountId == 0 ||
+        round == 0 ||
+        actualOpponentId == 0 ||
+        actualOpponentId == accountId) {
+        return;
+    }
+
+    auto pendingIt = PredictionCache::PendingForecasts.find(accountId);
+    if (pendingIt == PredictionCache::PendingForecasts.end()) {
+        return;
+    }
+
+    std::vector<PendingOpponentForecast>& forecasts = pendingIt->second;
+    bool learned = false;
+
+    for (const PendingOpponentForecast& forecast : forecasts) {
+        if (forecast.targetRound != round || forecast.predictedOpponentId == 0) {
+            continue;
+        }
+
+        PredictionAccuracyEntry& predictedAccuracy =
+            PredictionCache::PredictionAccuracy[accountId][forecast.predictedOpponentId];
+        predictedAccuracy.lastRound = round;
+
+        if (forecast.predictedOpponentId == actualOpponentId) {
+            predictedAccuracy.correct = std::min(predictedAccuracy.correct + 1, 1000);
+        } else {
+            predictedAccuracy.wrong = std::min(predictedAccuracy.wrong + 1, 1000);
+            PredictionAccuracyEntry& actualAccuracy =
+                PredictionCache::PredictionAccuracy[accountId][actualOpponentId];
+            actualAccuracy.correct = std::min(actualAccuracy.correct + 1, 1000);
+            actualAccuracy.lastRound = round;
+        }
+
+        learned = true;
+    }
+
+    if (!learned) {
+        return;
+    }
+
+    forecasts.erase(
+        std::remove_if(
+            forecasts.begin(),
+            forecasts.end(),
+            [round](const PendingOpponentForecast& forecast) {
+                return forecast.targetRound <= round;
+            }
+        ),
+        forecasts.end()
+    );
+
+    if (forecasts.empty()) {
+        PredictionCache::PendingForecasts.erase(pendingIt);
+    }
+}
+
+// Stores one predicted future matchup so later observations can adjust weights.
+void RememberPendingForecast(
+    uint64_t accountId,
+    uint32_t targetRound,
+    uint64_t predictedOpponentId
+) {
+    if (accountId == 0 ||
+        targetRound == 0 ||
+        predictedOpponentId == 0 ||
+        predictedOpponentId == accountId) {
+        return;
+    }
+
+    std::vector<PendingOpponentForecast>& forecasts =
+        PredictionCache::PendingForecasts[accountId];
+
+    for (PendingOpponentForecast& forecast : forecasts) {
+        if (forecast.targetRound == targetRound) {
+            forecast.predictedOpponentId = predictedOpponentId;
+            return;
+        }
+    }
+
+    forecasts.push_back({targetRound, predictedOpponentId});
+
+    if (forecasts.size() > static_cast<size_t>(RuntimeConfig::MaxOpponentForecastRounds * 2)) {
+        forecasts.erase(forecasts.begin());
+    }
+}
+
+// Converts forecast accuracy into a bounded scoring multiplier for a candidate.
+double GetPredictionAccuracyMultiplier(uint64_t accountId, uint64_t opponentId) {
+    auto accountIt = PredictionCache::PredictionAccuracy.find(accountId);
+    if (accountIt == PredictionCache::PredictionAccuracy.end()) {
+        return 1.0;
+    }
+
+    auto opponentIt = accountIt->second.find(opponentId);
+    if (opponentIt == accountIt->second.end()) {
+        return 1.0;
+    }
+
+    const PredictionAccuracyEntry& accuracy = opponentIt->second;
+    int total = accuracy.correct + accuracy.wrong;
+    if (total <= 0) {
+        return 1.0;
+    }
+
+    double smoothedAccuracy =
+        (static_cast<double>(accuracy.correct) + 1.0) / (static_cast<double>(total) + 2.0);
+    return std::clamp(0.65 + smoothedAccuracy * 0.75, 0.70, 1.35);
+}
+
+// Returns the remembered forecast misses for a candidate.
+int GetPredictionMistakeCount(uint64_t accountId, uint64_t opponentId) {
+    auto accountIt = PredictionCache::PredictionAccuracy.find(accountId);
+    if (accountIt == PredictionCache::PredictionAccuracy.end()) {
+        return 0;
+    }
+
+    auto opponentIt = accountIt->second.find(opponentId);
+    if (opponentIt == accountIt->second.end()) {
+        return 0;
+    }
+
+    return opponentIt->second.wrong;
 }
 
 // Stores one round of observed opponent data for prediction history.
@@ -9915,6 +10035,7 @@ void RememberOpponentObservation(
         history.back().opponentId = observation.opponentId;
         history.back().mirror = observation.mirror;
         history.back().fromCurrentApi = observation.fromCurrentApi;
+        LearnFromForecastOutcome(observation.accountId, round, observation.opponentId);
         return;
     }
 
@@ -9928,6 +10049,8 @@ void RememberOpponentObservation(
     if (history.size() > static_cast<size_t>(RuntimeConfig::MaxOpponentHistoryRounds)) {
         history.erase(history.begin());
     }
+
+    LearnFromForecastOutcome(observation.accountId, round, observation.opponentId);
 }
 
 // Finds the latest cached current-opponent observation for one account.
@@ -10177,18 +10300,19 @@ OpponentCyclePattern DetectOpponentCyclePattern(
         OpponentCyclePattern::Shifted;
 }
 
-// Predicts the local opponent from the seven-round pattern learned from MCGG_Predictor.
-OpponentCyclePrediction PredictCyclePatternOpponent(
+// Predicts the local opponent for a target round from the seven-round pattern.
+OpponentCyclePrediction PredictCyclePatternOpponentForTargetRound(
     uint64_t selfAccountId,
-    uint32_t currentRound
+    uint32_t currentRound,
+    uint32_t targetRound
 ) {
     OpponentCyclePrediction prediction{};
-    if (selfAccountId == 0 || currentRound == 0) {
+    if (selfAccountId == 0 || currentRound == 0 || targetRound == 0) {
         return prediction;
     }
 
-    uint32_t effectiveRound = GetOpponentCycleEffectiveRound(currentRound);
-    uint32_t cycleStartRound = GetOpponentCycleStartRound(currentRound);
+    uint32_t effectiveRound = GetOpponentCycleEffectiveRound(targetRound);
+    uint32_t cycleStartRound = GetOpponentCycleStartRound(targetRound);
     uint64_t roundOneOpponent =
         GetCompletedCycleOpponent(selfAccountId, cycleStartRound, 1, currentRound);
 
@@ -10243,6 +10367,14 @@ OpponentCyclePrediction PredictCyclePatternOpponent(
     return prediction;
 }
 
+// Predicts the local opponent from the active seven-round pattern.
+OpponentCyclePrediction PredictCyclePatternOpponent(
+    uint64_t selfAccountId,
+    uint32_t currentRound
+) {
+    return PredictCyclePatternOpponentForTargetRound(selfAccountId, currentRound, currentRound);
+}
+
 // Uses recent opponent cycles to guess who should be next in the pairing queue.
 uint64_t PredictHistoryQueueOpponent(
     uint64_t selfAccountId,
@@ -10295,6 +10427,197 @@ uint64_t PredictHistoryQueueOpponent(
     }
 
     return bestAccountId;
+}
+
+// Scores one future opponent candidate from history, rotation, cycle, and accuracy.
+double ScoreForecastCandidate(
+    uint64_t selfAccountId,
+    uint64_t candidateId,
+    uint64_t rotationOpponent,
+    uint64_t cycleOpponent,
+    const std::vector<uint64_t>& simulatedRecentOpponents,
+    size_t aliveOpponentCount,
+    int historyWindow
+) {
+    if (selfAccountId == 0 || candidateId == 0 || candidateId == selfAccountId) {
+        return 0.0;
+    }
+
+    double weight = 100.0;
+
+    if (rotationOpponent != 0) {
+        weight *= candidateId == rotationOpponent ? 2.75 : 0.82;
+    }
+
+    if (cycleOpponent != 0) {
+        weight *= candidateId == cycleOpponent ? 3.15 : 0.76;
+    }
+
+    int recentDistance = FindRecentOpponentDistance(selfAccountId, candidateId, historyWindow);
+    if (recentDistance == 0) {
+        weight *= 0.28;
+    } else if (recentDistance == 1) {
+        weight *= 0.48;
+    } else if (recentDistance < 0) {
+        weight *= 1.35;
+    } else if (aliveOpponentCount > 1 &&
+               recentDistance >= static_cast<int>(aliveOpponentCount) - 1) {
+        weight *= 1.22;
+    }
+
+    if (ContainsAccountId(simulatedRecentOpponents, candidateId)) {
+        weight *= 0.55;
+    } else {
+        weight *= 1.18;
+    }
+
+    double mutualScore = ScoreMutualRecentOpponentHistory(
+        selfAccountId,
+        candidateId,
+        historyWindow
+    );
+    if (mutualScore >= 1.60) {
+        weight *= 0.42;
+    } else if (mutualScore >= 0.85) {
+        weight *= 0.68;
+    }
+
+    const CurrentOpponentObservation* candidateObservation =
+        FindCurrentOpponentObservation(candidateId);
+    if (candidateObservation &&
+        candidateObservation->opponentId != 0 &&
+        candidateObservation->opponentId != selfAccountId &&
+        !candidateObservation->mirror) {
+        weight *= 0.92;
+    }
+
+    weight *= GetPredictionAccuracyMultiplier(selfAccountId, candidateId);
+    return std::max(weight, 0.0);
+}
+
+// Names the strongest signal behind a forecast row.
+std::string ForecastSourceLabel(
+    uint64_t opponentId,
+    uint64_t rotationOpponent,
+    uint64_t cycleOpponent,
+    int mistakeCount
+) {
+    if (opponentId != 0 && opponentId == cycleOpponent) {
+        return "Cycle";
+    }
+
+    if (opponentId != 0 && opponentId == rotationOpponent) {
+        return "Rotation";
+    }
+
+    if (mistakeCount > 0) {
+        return "Learned";
+    }
+
+    return "History";
+}
+
+// Builds the next eight local opponent forecasts from cached match history.
+std::vector<OpponentForecastRow> BuildOpponentForecastRows(
+    uint64_t selfAccountId,
+    uint32_t currentRound,
+    const std::vector<uint64_t>& aliveAccounts,
+    const std::vector<uint64_t>& orderedAccounts,
+    int realPlayerHistoryCount
+) {
+    std::vector<OpponentForecastRow> forecastRows;
+    if (selfAccountId == 0 || aliveAccounts.size() < 2 || orderedAccounts.size() < 2) {
+        return forecastRows;
+    }
+
+    std::vector<uint64_t> candidates;
+    candidates.reserve(aliveAccounts.size() - 1);
+    for (uint64_t accountId : aliveAccounts) {
+        if (accountId != 0 && accountId != selfAccountId) {
+            candidates.push_back(accountId);
+        }
+    }
+
+    if (candidates.empty()) {
+        return forecastRows;
+    }
+
+    size_t aliveOpponentCount = candidates.size();
+    std::vector<uint64_t> simulatedRecent =
+        BuildRecentOpponentCycle(selfAccountId, aliveOpponentCount);
+    forecastRows.reserve(RuntimeConfig::MaxOpponentForecastRounds);
+
+    for (int ahead = 1; ahead <= RuntimeConfig::MaxOpponentForecastRounds; ++ahead) {
+        uint32_t targetRound = currentRound > 0 ?
+            currentRound + static_cast<uint32_t>(ahead) :
+            0;
+        uint64_t rotationOpponent = PredictRoundRobinOpponent(
+            orderedAccounts,
+            selfAccountId,
+            static_cast<uint32_t>(std::max(realPlayerHistoryCount, 0) + ahead)
+        );
+        OpponentCyclePrediction cyclePrediction = targetRound > 0 ?
+            PredictCyclePatternOpponentForTargetRound(
+                selfAccountId,
+                currentRound,
+                targetRound
+            ) :
+            OpponentCyclePrediction{};
+        uint64_t cycleOpponent = ContainsAccountId(candidates, cyclePrediction.opponentId) ?
+            cyclePrediction.opponentId :
+            0;
+        double totalWeight = 0.0;
+        double bestWeight = -1.0;
+        uint64_t bestOpponent = 0;
+
+        for (uint64_t candidateId : candidates) {
+            double weight = ScoreForecastCandidate(
+                selfAccountId,
+                candidateId,
+                rotationOpponent,
+                cycleOpponent,
+                simulatedRecent,
+                aliveOpponentCount,
+                RuntimeConfig::MaxOpponentHistoryRounds
+            );
+            totalWeight += weight;
+
+            if (weight > bestWeight) {
+                bestWeight = weight;
+                bestOpponent = candidateId;
+            }
+        }
+
+        if (bestOpponent == 0 || totalWeight <= 0.0) {
+            break;
+        }
+
+        int confidence =
+            static_cast<int>((bestWeight * 100.0 / totalWeight) + 0.5);
+        confidence = std::clamp(confidence, 5, 95);
+        int mistakeCount = GetPredictionMistakeCount(selfAccountId, bestOpponent);
+        std::string opponentName = GetBattlePlayerName(bestOpponent);
+        if (opponentName.empty()) {
+            opponentName = FormatUInt64(bestOpponent);
+        }
+
+        forecastRows.push_back({
+            ahead,
+            targetRound,
+            bestOpponent,
+            opponentName,
+            confidence,
+            ForecastSourceLabel(bestOpponent, rotationOpponent, cycleOpponent, mistakeCount)
+        });
+
+        RememberPendingForecast(selfAccountId, targetRound, bestOpponent);
+        simulatedRecent.insert(simulatedRecent.begin(), bestOpponent);
+        if (simulatedRecent.size() > aliveOpponentCount) {
+            simulatedRecent.pop_back();
+        }
+    }
+
+    return forecastRows;
 }
 
 // Refreshes per-player current-opponent observations used by predictions and HUD text.
@@ -10447,6 +10770,7 @@ uint64_t FindExactPredictedOpponent(
 // Builds opponent predictions from current runtime evidence.
 std::vector<OpponentPredictionRow> BuildOpponentPredictions(uint64_t selfAccountId) {
     std::vector<OpponentPredictionRow> rows;
+    PredictionCache::CachedForecastRows.clear();
     std::vector<PredictionPlayer> players = CollectPredictionPlayers(selfAccountId);
 
     rows.reserve(players.size());
@@ -10605,6 +10929,13 @@ std::vector<OpponentPredictionRow> BuildOpponentPredictions(uint64_t selfAccount
         aliveAccounts,
         selfAccountId,
         round
+    );
+    PredictionCache::CachedForecastRows = BuildOpponentForecastRows(
+        selfAccountId,
+        round,
+        aliveAccounts,
+        patternAccounts,
+        realPlayerHistoryCount
     );
 
     static FieldInfo* lastRoundEnemyField = nullptr;
@@ -10770,6 +11101,8 @@ std::vector<OpponentPredictionRow> BuildOpponentPredictions(uint64_t selfAccount
             weight *= 1.15;
         }
 
+        weight *= GetPredictionAccuracyMultiplier(selfAccountId, row.accountId);
+
         if (sourceVotes >= 2) {
             weight *= 1.0 + (std::min(sourceVotes, 5) * 0.16);
         }
@@ -10845,6 +11178,7 @@ bool RefreshCachedOpponentPredictionRows(
 
     if (accountChanged) {
         PredictionCache::CachedRows.clear();
+        PredictionCache::CachedForecastRows.clear();
         PredictionCache::CachedRowsReady = false;
         PredictionCache::CachedRowsSelfAccountId = selfAccountId;
         PredictionCache::LastRowsRefresh = {};
@@ -10852,6 +11186,7 @@ bool RefreshCachedOpponentPredictionRows(
 
     if (!Originals::MCLogicBattleData_ILOGIC_GetAllBattleMgr) {
         PredictionCache::CachedRows.clear();
+        PredictionCache::CachedForecastRows.clear();
         PredictionCache::CachedRowsReady = false;
         PredictionCache::LastRowsRefresh = now;
         return false;
@@ -10875,6 +11210,11 @@ bool RefreshCachedOpponentPredictionRows(
 // Returns the last tick-built prediction rows without touching managed state.
 const std::vector<OpponentPredictionRow>& GetCachedOpponentPredictionRows() {
     return PredictionCache::CachedRows;
+}
+
+// Returns the last tick-built eight-round forecast without touching managed state.
+const std::vector<OpponentForecastRow>& GetCachedOpponentForecastRows() {
+    return PredictionCache::CachedForecastRows;
 }
 
 // Builds next enemy hud text from current runtime evidence.
@@ -11016,10 +11356,10 @@ void DrawOpponentPredictionTable(uint64_t selfAccountId) {
         return;
     }
 
-    ImGui::TableSetupColumn("Player");
-    ImGui::TableSetupColumn("Will fight", ImGuiTableColumnFlags_WidthFixed, 90.0f);
-    ImGui::TableSetupColumn("Recent", ImGuiTableColumnFlags_WidthFixed, 70.0f);
-    ImGui::TableSetupColumn("Current enemy");
+    ImGui::TableSetupColumn(MenuText("Player"));
+    ImGui::TableSetupColumn(MenuText("Will fight"), ImGuiTableColumnFlags_WidthFixed, 90.0f);
+    ImGui::TableSetupColumn(MenuText("Recent"), ImGuiTableColumnFlags_WidthFixed, 70.0f);
+    ImGui::TableSetupColumn(MenuText("Current enemy"));
     ImGui::TableHeadersRow();
 
     for (const OpponentPredictionRow& row : rows) {
@@ -11039,6 +11379,80 @@ void DrawOpponentPredictionTable(uint64_t selfAccountId) {
     }
 
     ImGui::EndTable();
+}
+
+// Draws the eight-round opponent forecast table from cached prediction state.
+void DrawOpponentForecastTable() {
+    const std::vector<OpponentForecastRow>& rows = GetCachedOpponentForecastRows();
+
+    DrawMenuSeparatorText("Forecast");
+
+    if (!PredictionCache::CachedRowsReady) {
+        DrawWaitingText("Waiting for prediction refresh");
+        return;
+    }
+
+    if (rows.empty()) {
+        ImGui::TextUnformatted(MenuText("No 8-round forecast yet"));
+        return;
+    }
+
+    if (!ImGui::BeginTable(
+        "##OpponentForecastTable",
+        5,
+        ImGuiTableFlags_Borders |
+            ImGuiTableFlags_RowBg |
+            ImGuiTableFlags_SizingStretchProp |
+            ImGuiTableFlags_ScrollY,
+        ImVec2(0.0f, 210.0f)
+    )) {
+        return;
+    }
+
+    ImGui::TableSetupColumn(MenuText("Ahead"), ImGuiTableColumnFlags_WidthFixed, 70.0f);
+    ImGui::TableSetupColumn(MenuText("Round"), ImGuiTableColumnFlags_WidthFixed, 80.0f);
+    ImGui::TableSetupColumn(MenuText("Player"));
+    ImGui::TableSetupColumn(MenuText("Confidence"), ImGuiTableColumnFlags_WidthFixed, 95.0f);
+    ImGui::TableSetupColumn(MenuText("Source"), ImGuiTableColumnFlags_WidthFixed, 95.0f);
+    ImGui::TableHeadersRow();
+
+    ImGuiListClipper clipper;
+    clipper.Begin(static_cast<int>(rows.size()));
+    while (clipper.Step()) {
+        for (int rowIndex = clipper.DisplayStart; rowIndex < clipper.DisplayEnd; ++rowIndex) {
+            const OpponentForecastRow& row = rows[static_cast<size_t>(rowIndex)];
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::Text("+%d", row.ahead);
+
+            ImGui::TableSetColumnIndex(1);
+            if (row.round > 0) {
+                ImGui::Text("%u", row.round);
+            } else {
+                ImGui::TextUnformatted("-");
+            }
+
+            ImGui::TableSetColumnIndex(2);
+            ImGui::TextUnformatted(row.name.empty() ? "-" : row.name.c_str());
+
+            ImGui::TableSetColumnIndex(3);
+            ImGui::Text("%d%%", row.confidence);
+
+            ImGui::TableSetColumnIndex(4);
+            ImGui::TextUnformatted(MenuText(row.source.c_str()));
+        }
+    }
+
+    ImGui::EndTable();
+}
+
+// Draws the full Info-tab prediction section without doing managed reads.
+void DrawOpponentPredictionSection(uint64_t selfAccountId) {
+    DrawMenuSeparatorText("Prediction");
+    DrawOpponentPredictionTable(selfAccountId);
+    ImGui::Spacing();
+    DrawOpponentForecastTable();
 }
 
 // Draws the test all managers table overlay section without changing game state.
@@ -11783,11 +12197,6 @@ void DrawArenaTab() {
             ImGui::EndTabItem();
         }
 
-        if (BeginMenuTabItem("Battle Power")) {
-            DrawArenaBattlePowerControls();
-            ImGui::EndTabItem();
-        }
-
         if (BeginMenuTabItem("Other")) {
             if (!Originals::MCBondUtil_CheckRelationActive_Config ||
                 !Originals::MCBondUtil_CheckRelationActive_Special) {
@@ -11936,8 +12345,7 @@ void DrawMainMenu() {
         {"Shop", DrawShopTab},
         {"Arena", DrawArenaTab},
         {"Appearance", DrawAppearanceTab},
-        {"Settings", DrawSettingsTab},
-        {"Test", DrawTestTab}
+        {"Settings", DrawSettingsTab}
     };
 
     constexpr int tabCount = static_cast<int>(IM_ARRAYSIZE(tabs));

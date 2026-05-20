@@ -10,8 +10,9 @@ event, collection, and string layouts are kept in
 
 `jni/Main.cpp` contains the process gate, setup thread, IL2CPP helpers, feature
 binding resolver, runtime caches, GitHub release update checker, Dobby hooks,
-ImGui rendering, and feature logic. It also owns the Info, Combat, Shop, Arena, Appearance, Settings, and Test overlay tabs. Keep feature work in
-this file unless the user explicitly requests a multi-file refactor.
+ImGui rendering, and feature logic. It also owns the Info, Combat, Shop, Arena,
+Appearance, and Settings overlay tabs. Keep feature work in this file unless
+the user explicitly requests a multi-file refactor.
 
 The current boot order is process gate, detached setup thread, early
 `eglSwapBuffers` hook, `liblogic.so` wait, IL2CPP export resolution, setup
@@ -143,7 +144,7 @@ for managed object instances unless a local structure layout is required.
 
 Keep runtime sections clear and local: IL2CPP resolution, managed reference
 refresh, table caches, appearance setup, Settings persistence, feature ticks,
-hooks, test diagnostics, and ImGui tabs should remain easy to scan. Keep
+hooks, diagnostic helpers, and ImGui tabs should remain easy to scan. Keep
 function comments focused on contract, safety boundary, or layout meaning, and
 avoid line-by-line narration of obvious control flow.
 
@@ -161,12 +162,12 @@ retry backoff so hot feature paths do not rescan metadata every frame. Method
 resolution is name, parameter-count, and parameter-name-shape based; verify
 overload-sensitive changes against `dump/dump.cs`. Preserve the separate 100 ms
 shop and arena ticks, 250 ms Combat tick, and 500 ms GGC Info,
-opponent history, and HUD cadences unless the task explicitly changes timing.
+opponent prediction, and HUD cadences unless the task explicitly changes timing.
 Frame-time feature work is guarded by a small render budget; when a frame is
 already busy, lower-priority ticks should defer to the next frame instead of
-stacking managed calls into one render pass. Hot loops and Test diagnostics
-also consume a per-frame managed-work unit budget so IL2CPP, Unity, and game
-function/field reads defer without changing the existing tick delays.
+stacking managed calls into one render pass. Hot loops and diagnostics consume
+a per-frame managed-work unit budget so IL2CPP, Unity, and game function/field
+reads defer without changing the existing tick delays.
 
 Typed regular instance field helpers should prefer resolved
 `il2cpp_field_get_offset` access and bounded direct copies for hot reads and
@@ -228,7 +229,8 @@ Opponent prediction should not rebuild managed prediction rows from the draw
 path. Reuse the 500 ms prediction tick, keep live current-opponent observations
 highest priority, then combine invader order, recent opponent cycle learning,
 the completed-history seven-round cycle-pattern signal, cycle-gap distance,
-round-robin fallback, and per-player history as weaker signals.
+round-robin fallback, per-player history, eight-round forecast simulation, and
+learned forecast accuracy as weaker signals.
 
 ## Testing Guidelines
 
@@ -316,18 +318,17 @@ Keep changes scoped. Do not modify vendored directories such as
 Do not revert unrelated local changes in the working tree.
 
 Current user-facing feature areas are Info, Combat, Shop, Arena, Appearance,
-Settings, and Test. Info includes the player/enemy table, `(Bot)` labels from
-`SystemData.RoomData.bRobot`, and automatic GGC quality readout for every
-detected GGC round. Combat includes Invisible Scout. Shop includes free-hero
+and Settings. Info includes the player/enemy table, `(Bot)` labels from
+`SystemData.RoomData.bRobot`, automatic GGC quality readout for every detected
+GGC round, weighted prediction rows, and the eight-round forecast. Combat
+includes Invisible Scout. Shop includes free-hero
 buying, selected target buying, Recommendation Lineup buying with per-hero
 target counts, Scavenger expensive-hero forcing, auto-refresh pause conditions,
 keep-gold reserve, and target counts. Arena includes hero/item/card granting,
-Battle Power controls, active synergy forcing, level/population forcing, enemy
-HP pressure, achievement task forcing, Skip Round, and SpeedHack. Appearance
-owns themes, fonts, language selection, and localized tooltips. Settings owns
-menu size/position/style, next-enemy HUD, config save/load, and update status.
-Test diagnostics should remain read-only unless the task explicitly requests an
-action.
+active synergy forcing, level/population forcing, enemy HP pressure,
+achievement task forcing, Skip Round, and SpeedHack. Appearance owns themes,
+fonts, language selection, and localized tooltips. Settings owns menu
+size/position/style, next-enemy HUD, config save/load, and update status.
 
 Known audit hotspots are early-render readiness, dump-backed signature drift,
 match-scoped pinned managed-object handles, table cache all-or-nothing
@@ -336,5 +337,6 @@ names, shop panel operability before buy or refresh, grouped shop diagnostic
 readiness, retryable method and field misses, guarded binding resolution,
 update-check thread/cache/backoff behavior, clipped long tables,
 exact-opponent-only `100%` prediction rows, completed-history seven-round
-prediction patterns, bounded GGC round scans, Unity timeScale reset paths, and
-Info bot labels sourced from `SystemData.RoomData.bRobot`.
+prediction patterns, eight-round forecast learning, bounded GGC round scans,
+Unity timeScale reset paths, and Info bot labels sourced from
+`SystemData.RoomData.bRobot`.

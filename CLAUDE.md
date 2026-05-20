@@ -71,13 +71,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   managed reads, and `Waiting for ...` states.
 
 ### Current Feature Areas
-- **Info**: player/enemy table, `(Bot)` labels from `SystemData.RoomData.bRobot`, and automatic GGC quality readout for every detected GGC round.
+- **Info**: player/enemy table, `(Bot)` labels from `SystemData.RoomData.bRobot`, automatic GGC quality readout for every detected GGC round, weighted opponent prediction rows, and an eight-round forecast that learns from observed misses.
 - **Combat**: Invisible Scout.
 - **Appearance**: ImGui Dark, Catppuccin Mocha, Dear ImGui issue #707-inspired theme selection, Default/Noto Sans CJK font selection, English/Indonesian menu language selection, and localized tooltips for interactive overlay controls.
 - **Settings**: menu size, fixed position, mobile-friendly TabBar helpers, next-enemy HUD text, font scale, style tuning, GitHub release update/changelog status, and save/load configuration, including language state.
 - **Shop**: auto-buy free heroes, auto-buy selected targets, auto-buy all detected Recommendation Lineup heroes with per-hero target counts, Scavenger expensive-hero forcing after automatic regular-shop refreshes, auto-refresh, pause-refresh conditions, keep-gold threshold, manual target counts, and shop-panel operability gates before buy/refresh UI actions.
-- **Arena**: hero spawn, equipment grant, GogoCard forcing, Battle Power controls, active synergy forcing, level/population 99, outside-map placement, enemy HP 1, achievement task forcing, manual gold grant, fight/result-aware Skip Round, and SpeedHack with reset-to-normal handling.
-- **Test**: Runtime Status, manual binding retry, account inspection, fight prediction, binding, round, player, manager, bridge, shop UI, behavior API, and all-manager diagnostics. Only the exact local current opponent should be locked to `100%` in `Will fight`; every player's enemy history and dump-backed invader order should remain available for weighted predictions.
+- **Arena**: hero spawn, equipment grant, GogoCard forcing, active synergy forcing, level/population 99, outside-map placement, enemy HP 1, achievement task forcing, manual gold grant, fight/result-aware Skip Round, and SpeedHack with reset-to-normal handling.
 
 ### Project Constraints
 - **Target ABI**: `arm64-v8a`
@@ -119,7 +118,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
   gated on shop panel operability before buy or refresh actions.
 - Keep table cache loading demand-driven and long tables clipped.
 - Keep opponent prediction exactness narrow: only the local player's exact
-  current opponent is forced to `100%`.
+  current opponent is forced to `100%`; per-player history, invader ordering,
+  eight-round forecast simulation, and learned forecast accuracy remain weaker
+  signals.
 - Reset Unity time scale to `1.0x` on every SpeedHack disable, inactive-battle,
   and feature-reset path.
 - Keep the update checker informational only and free of gameplay, account,

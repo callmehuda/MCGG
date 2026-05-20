@@ -54,6 +54,9 @@ bash jni/build-curl-android.sh
 - Info player bot labels should read `SystemData.RoomData.bRobot` through
   `ILOGIC_GetStPlayerData(UInt64)` and degrade to ordinary names when runtime
   data is unavailable.
+- Info opponent prediction should stay cached on the 500 ms prediction tick,
+  keep exact current-opponent evidence above heuristics, and keep the
+  eight-round forecast learning from later observed mistakes.
 
 ## Threading and Shared State
 
@@ -65,7 +68,7 @@ bash jni/build-curl-android.sh
   `FeatureState::Heroes`, `FeatureState::Equips`, `FeatureState::Cards`, and
   `FeatureState::ShopSelectedHeroes`.
 - `RuntimeMutex::UpdateMutex` guards GitHub release update-check state and the
-  cached changelog entries used by Settings and Test.
+  cached changelog entries used by Settings.
 - Use existing snapshot and access helpers such as `GetSortedHeroes()`,
   `GetSortedEquips()`, `GetSortedCards()`, `TryGetHeroTableEntry()`,
   `GetShopHeroTargetsSnapshot()`, and
@@ -107,7 +110,8 @@ Use this checklist when looking for hidden bugs or logic flaws:
 - Confirm table caches are demand-loaded and published only after required
   hero, equipment, and GogoCard data is available.
 - Confirm opponent prediction keeps exact current-opponent evidence above
-  heuristics and only locks the local exact opponent to `100%`.
+  heuristics, only locks the local exact opponent to `100%`, maintains
+  per-player history, and updates forecast accuracy from observed misses.
 - Confirm SpeedHack reset paths restore Unity time scale to `1.0x`.
 
 ## Build Verification
@@ -175,9 +179,10 @@ Accepted commit types:
 - `ci`: CI workflow or release packaging changes
 - `chore`: maintenance, merge commits, or submodule updates
 - `revert`: revert of a previous commit
-- `test`: test diagnostics or test-tab improvements
+- `test`: verification diagnostics or test harness improvements
 
-Scope is optional but recommended for clarity. Common scopes include `main`, `ui`, `shop`, `arena`, `hud`, `appearance`, `test`, and `readme`.
+Scope is optional but recommended for clarity. Common scopes include `main`,
+`ui`, `shop`, `arena`, `hud`, `prediction`, `appearance`, and `readme`.
 
 ## Pull Requests
 
