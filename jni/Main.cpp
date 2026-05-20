@@ -11,7 +11,6 @@
 #include <time.h>
 
 #include <algorithm>
-#include <array>
 #include <chrono>
 #include <cctype>
 #include <cstdint>
@@ -222,7 +221,6 @@ namespace RuntimeConfig {
     constexpr int ArenaTickMs = 100;
     constexpr int ShopTickMs = 100;
     constexpr int CombatTickMs = 250;
-    constexpr int AutoPlayTickMs = 250;
     constexpr int OpponentPredictionTickMs = 500;
     constexpr int GgcInfoRefreshMs = 500;
     constexpr int GgcRoundScanStart = 1;
@@ -239,17 +237,10 @@ namespace RuntimeConfig {
     constexpr int ScavengerMinimumActiveCount = 2;
     constexpr int ScavengerDynamicEnumRefreshShopCost = 1;
     constexpr int ArenaSkipCooldownMs = 750;
-    constexpr int AutoPlayAiStartCooldownMs = 2000;
-    constexpr int AutoPlayAiRefreshMs = 8000;
-    constexpr int AutoPlayDeployCooldownMs = 750;
-    constexpr int AutoPlayFormationCooldownMs = 1000;
-    constexpr int AutoPlayLevelCooldownMs = 900;
-    constexpr int AutoPlayAuctionCooldownMs = 750;
     constexpr int UpdateCheckRefreshMs = 6 * 60 * 60 * 1000;
     constexpr int UpdateCheckRetryBaseMs = 5 * 60 * 1000;
     constexpr int UpdateCheckRetryMaxMs = 60 * 60 * 1000;
     constexpr int MaxShopTargetChecks = 256;
-    constexpr int MaxAutoPlayFallbackEnemyManagers = 4;
     constexpr int MaxManagedDictionaryEntries = 8192;
     constexpr int MaxManagedListItems = 2048;
     constexpr int MaxManagedStringChars = 4096;
@@ -292,66 +283,6 @@ bool HasShopSelectBinding();
 
 // Feature toggles, cached managed references, and throttled runtime state.
 namespace FeatureState {
-    std::atomic<bool> AutoPlayEnabled{false};
-    std::atomic<bool> AutoPlayAdaptive{true};
-    std::atomic<bool> AutoPlayUseBuiltInAI{false};
-    std::atomic<bool> AutoPlayUseShop{true};
-    std::atomic<bool> AutoPlayUseEconomy{true};
-    std::atomic<bool> AutoPlayUseCombat{true};
-    std::atomic<bool> AutoPlayUseArenaAssist{true};
-    std::atomic<bool> AutoPlayUseFormation{true};
-    std::atomic<bool> AutoPlayUseAuction{true};
-    std::atomic<bool> AutoPlayUseGoGoCards{true};
-    std::atomic<int> AutoPlayAiDifficulty{3};
-    std::atomic<int> AutoPlayMinReserveGold{20};
-    std::atomic<int> AutoPlayTargetLevel{9};
-    std::atomic<int> AutoPlayPressure{25};
-    std::atomic<int> AutoPlayStrategy{1};
-    std::atomic<int> AutoPlayLearnedRounds{0};
-    std::atomic<int> AutoPlayStrategyChanges{0};
-    std::atomic<int> AutoPlayLastRound{0};
-    std::atomic<int> AutoPlayLastHp{-1};
-    std::atomic<bool> AutoPlayWasRunning{false};
-    std::atomic<bool> AutoPlayBuiltInAiRunning{false};
-    std::atomic<uint64_t> AutoPlayLastAiStartAccountId{0};
-    std::atomic<int> AutoPlayFocusGroup{0};
-    std::atomic<int> AutoPlayTargetHeroId{0};
-    std::atomic<int> AutoPlayBestCardId{0};
-    std::atomic<int> AutoPlayBestAuctionIndex{-1};
-    std::atomic<int> AutoPlayBestAuctionScore{0};
-    std::atomic<int> AutoPlayBoardSelfUnits{0};
-    std::atomic<int> AutoPlayBoardEnemyUnits{0};
-    std::atomic<int> AutoPlayBoardMoves{0};
-    std::atomic<int> AutoPlayLastMoveHeroId{0};
-    std::atomic<int> AutoPlayLastMoveGain{0};
-    std::atomic<int> AutoPlayLastMoveX{-1};
-    std::atomic<int> AutoPlayLastMoveY{-1};
-    std::atomic<int> AutoPlayOpponentCount{0};
-    std::atomic<int> AutoPlayContestedTargets{0};
-    std::atomic<int> AutoPlayStrongestOpponentFightValue{0};
-    std::atomic<uint64_t> AutoPlayCurrentOpponentId{0};
-    std::atomic<int> AutoPlayInterestTier{0};
-    std::atomic<int> AutoPlayInterestNextGold{10};
-    std::atomic<int> AutoPlayInterestReserveGold{20};
-    std::atomic<int> AutoPlaySpendBudget{0};
-    std::atomic<bool> AutoPlayHoldInterest{false};
-    std::atomic<bool> AutoPlaySnapshotReady{false};
-    std::atomic<uint64_t> AutoPlaySnapshotAccountId{0};
-    std::atomic<int> AutoPlaySnapshotRound{0};
-    std::atomic<int> AutoPlaySnapshotPhase{-1};
-    std::atomic<int> AutoPlaySnapshotHp{-1};
-    std::atomic<int> AutoPlaySnapshotCoin{-1};
-    std::atomic<int> AutoPlaySnapshotLevel{-1};
-    std::atomic<int> AutoPlaySnapshotCurrentPopulation{-1};
-    std::atomic<int> AutoPlaySnapshotTotalPopulation{-1};
-    std::atomic<int> AutoPlaySnapshotLineupWorth{-1};
-    std::atomic<int> AutoPlaySnapshotFightValue{-1};
-    std::atomic<int> AutoPlaySnapshotRecommendHeroId{0};
-    std::atomic<int> AutoPlaySnapshotStarUpHeroId{0};
-    std::atomic<int> AutoPlaySnapshotCurrentOpponentFightValue{-1};
-    std::atomic<bool> AutoPlaySnapshotFightSection{false};
-    std::atomic<bool> AutoPlaySnapshotMonsterRound{false};
-
     std::atomic<bool> CombatInvisibleScout{false};
     std::atomic<bool> CombatForceWin{false};
     std::atomic<bool> CombatPreventHpLoss{false};
@@ -419,7 +350,6 @@ namespace FeatureState {
     std::chrono::steady_clock::time_point LastArenaTick{};
     std::chrono::steady_clock::time_point LastShopTick{};
     std::chrono::steady_clock::time_point LastCombatTick{};
-    std::chrono::steady_clock::time_point LastAutoPlayTick{};
     std::chrono::steady_clock::time_point LastOpponentPredictionTick{};
     std::chrono::steady_clock::time_point LastMatchStateCheck{};
     std::chrono::steady_clock::time_point LastTableLoadAttempt{};
@@ -430,11 +360,6 @@ namespace FeatureState {
     std::chrono::steady_clock::time_point LastRecommendLineupCheck{};
     std::chrono::steady_clock::time_point LastScavengerCheck{};
     std::chrono::steady_clock::time_point LastArenaSkipAttempt{};
-    std::chrono::steady_clock::time_point LastAutoPlayAiStartAttempt{};
-    std::chrono::steady_clock::time_point LastAutoPlayDeployAttempt{};
-    std::chrono::steady_clock::time_point LastAutoPlayFormationAttempt{};
-    std::chrono::steady_clock::time_point LastAutoPlayLevelAttempt{};
-    std::chrono::steady_clock::time_point LastAutoPlayAuctionAttempt{};
     std::atomic<bool> CachedShopHasWorthwhileTarget{false};
     std::atomic<int> CachedRecommendLineupHeroId{0};
     std::atomic<int> CachedScavengerRelationId{0};
@@ -503,12 +428,11 @@ namespace UpdateState {
 enum MainTabIndex {
     MainTabInfo = 0,
     MainTabCombat = 1,
-    MainTabAutoPlay = 2,
-    MainTabShop = 3,
-    MainTabArena = 4,
-    MainTabAppearance = 5,
-    MainTabSettings = 6,
-    MainTabTest = 7
+    MainTabShop = 2,
+    MainTabArena = 3,
+    MainTabAppearance = 4,
+    MainTabSettings = 5,
+    MainTabTest = 6
 };
 
 namespace AppearanceState {
@@ -572,7 +496,6 @@ static const MenuI18nEntry kMenuI18nEntries[] = {
     {"Bahasa Indonesia", "Bahasa Indonesia", "Bahasa Indonesia", "Use Indonesian menu text.", "Gunakan teks menu bahasa Indonesia."},
     {"Info", "Info", "Info", "Show match overview, GGC rounds, and current enemies.", "Tampilkan ringkasan match, round GGC, dan enemy saat ini."},
     {"Combat", "Combat", "Combat", "Open combat visibility and battle power controls.", "Buka kontrol visibilitas combat dan battle power."},
-    {"Auto-Play", "Auto-Play", "Auto-Play", "Configure the bounded Auto-Play controller.", "Atur controller Auto-Play yang dibatasi."},
     {"Shop", "Shop", "Shop", "Configure shop buying, refreshing, and hero targets.", "Atur pembelian shop, refresh, dan target hero."},
     {"Arena", "Arena", "Arena", "Open arena helpers for heroes, items, cards, rounds, and battle power.", "Buka helper arena untuk hero, item, card, round, dan battle power."},
     {"Appearance", "Appearance", "Tampilan", "Adjust theme, font, and menu language.", "Atur theme, font, dan bahasa menu."},
@@ -625,23 +548,6 @@ static const MenuI18nEntry kMenuI18nEntries[] = {
     {"Language", "Language", "Bahasa", "Select the overlay menu language.", "Pilih bahasa menu overlay."},
     {"Theme", "Theme", "Theme", "Select the overlay color theme.", "Pilih theme warna overlay."},
     {"Font", "Font", "Font", "Select the overlay font.", "Pilih font overlay."},
-    {"Auto-play", "Auto-play", "Auto-play", "Enable the Auto-Play controller.", "Aktifkan controller Auto-Play."},
-    {"Adaptive strategy", "Adaptive strategy", "Strategi adaptif", "Let Auto-Play change strategy from live pressure.", "Izinkan Auto-Play mengubah strategi dari tekanan live."},
-    {"Use built-in battle AI", "Use built-in battle AI", "Gunakan battle AI bawaan", "Coordinate the game's built-in AI only during safe phases.", "Koordinasikan AI bawaan game hanya pada fase aman."},
-    {"Manage shop", "Manage shop", "Kelola shop", "Allow Auto-Play to own shop buying and refresh assists.", "Izinkan Auto-Play mengelola assist beli dan refresh shop."},
-    {"Manage economy and level", "Manage economy and level", "Kelola economy dan level", "Allow Auto-Play to level up and set economy assists from its gold plan.", "Izinkan Auto-Play level up dan mengatur assist economy dari rencana gold."},
-    {"Manage combat power", "Manage combat power", "Kelola combat power", "Allow Auto-Play to coordinate Combat battle power assists.", "Izinkan Auto-Play mengoordinasikan assist Combat battle power."},
-    {"Use arena assists", "Use arena assists", "Gunakan assist arena", "Allow Auto-Play to coordinate selected Arena assists.", "Izinkan Auto-Play mengoordinasikan assist Arena tertentu."},
-    {"Use smart formation", "Use smart formation", "Gunakan formasi pintar", "Allow bounded role-aware board repositioning.", "Izinkan reposition board role-aware yang dibatasi."},
-    {"Use auction scoring", "Use auction scoring", "Gunakan scoring auction", "Allow Auto-Play to score auction slots and bid on the best option.", "Izinkan Auto-Play menilai slot auction dan menawar opsi terbaik."},
-    {"Use GogoCard scoring", "Use GogoCard scoring", "Gunakan scoring GogoCard", "Allow Auto-Play to choose Go Go Cards from runtime scoring.", "Izinkan Auto-Play memilih Go Go Card dari scoring runtime."},
-    {"AI difficulty", "AI difficulty", "Difficulty AI", "Set the difficulty passed to the built-in battle AI.", "Atur difficulty yang dikirim ke battle AI bawaan."},
-    {"Minimum reserve gold", "Minimum reserve gold", "Reserve gold minimum", "Keep this much gold before spending when the feature honors reserves.", "Simpan gold sebanyak ini sebelum spending saat fitur memakai reserve."},
-    {"Target level", "Target level", "Target level", "Set the maximum level Auto-Play should chase.", "Atur level maksimum yang dikejar Auto-Play."},
-    {"Manual strategy", "Manual strategy", "Strategi manual", "Choose a fixed strategy when adaptive strategy is disabled.", "Pilih strategi tetap saat strategi adaptif dimatikan."},
-    {"Economy", "Economy", "Ekonomi", "Favor interest and long-term gold efficiency.", "Prioritaskan interest dan efisiensi gold jangka panjang."},
-    {"Balanced", "Balanced", "Seimbang", "Balance gold preservation with board strength.", "Seimbangkan simpan gold dengan kekuatan board."},
-    {"Aggressive", "Aggressive", "Agresif", "Spend harder to stabilize or pressure opponents.", "Spend lebih keras untuk stabilisasi atau menekan opponent."},
     {"Invisible Scout - hide spectate switching", "Invisible Scout - hide spectate switching", "Invisible Scout - sembunyikan perpindahan spectate", "Hide spectator switching while scouting.", "Sembunyikan perpindahan spectate saat scouting."},
     {"Force defend win", "Force defend win", "Paksa defend menang", "Force defensive fight resolution toward a win.", "Paksa resolusi fight defensif agar menang."},
     {"Prevent self HP loss", "Prevent self HP loss", "Cegah HP sendiri berkurang", "Block local HP loss from fight resolution.", "Blokir pengurangan HP lokal dari resolusi fight."},
@@ -739,13 +645,10 @@ static const MenuI18nEntry kMenuI18nEntries[] = {
     {"Card 2", "Card 2", "Card 2", "", ""},
     {"Quality", "Quality", "Kualitas", "", ""},
     {"Current enemy", "Current enemy", "Enemy saat ini", "", ""},
-    {"Policy", "Policy", "Policy", "", ""},
-    {"Strategy", "Strategy", "Strategi", "", ""},
-    {"Learned rounds: %d  Strategy changes: %d", "Learned rounds: %d  Strategy changes: %d", "Round dipelajari: %d  Perubahan strategi: %d", "", ""},
     {"Typography", "Typography", "Tipografi", "", ""},
     {"Rounding", "Rounding", "Rounding", "", ""},
     {"Spacing", "Spacing", "Spacing", "", ""},
-    {"Saved state includes visual settings, window and HUD settings, and Auto-Play, Combat, Shop, and Arena controls.", "Saved state includes visual settings, window and HUD settings, and Auto-Play, Combat, Shop, and Arena controls.", "State tersimpan mencakup pengaturan visual, window dan HUD, serta kontrol Auto-Play, Combat, Shop, dan Arena.", "", ""},
+    {"Saved state includes visual settings, window and HUD settings, and Combat, Shop, and Arena controls.", "Saved state includes visual settings, window and HUD settings, and Combat, Shop, and Arena controls.", "State tersimpan mencakup pengaturan visual, window dan HUD, serta kontrol Combat, Shop, dan Arena.", "", ""},
     {"Recommendation Lineup", "Recommendation Lineup", "Recommendation Lineup", "", ""},
     {"Current recommendation", "Current recommendation", "Rekomendasi saat ini", "", ""},
     {"Current recommendation: Waiting", "Current recommendation: Waiting", "Rekomendasi saat ini: Menunggu", "", ""},
@@ -768,7 +671,6 @@ static const MenuI18nEntry kMenuI18nEntries[] = {
     {"Waiting for player list", "Waiting for player list", "Menunggu daftar player", "", ""},
     {"No players found", "No players found", "Player tidak ditemukan", "", ""},
     {"Waiting for spectator hook", "Waiting for spectator hook", "Menunggu hook spectator", "", ""},
-    {"Waiting for auto-play controller bindings", "Waiting for auto-play controller bindings", "Menunggu binding controller Auto-Play", "", ""},
     {"Waiting for battle power bindings", "Waiting for battle power bindings", "Menunggu binding battle power", "", ""},
     {"Waiting for Noto Sans CJK font", "Waiting for Noto Sans CJK font", "Menunggu font Noto Sans CJK", "", ""},
     {"Waiting for shop automation bindings", "Waiting for shop automation bindings", "Menunggu binding automasi shop", "", ""},
@@ -965,6 +867,10 @@ namespace Originals {
         void* instance,
         uint64_t accountId
     );
+    void* (*MCLogicBattleData_ILOGIC_GetStPlayerData)(
+        void* instance,
+        uint64_t accountId
+    );
     MCLogicHeroShopItemData (*MCLogicBattleData_ILOGIC_GetShopItemData)(
         void* instance,
         uint64_t accountId,
@@ -1061,12 +967,10 @@ namespace Originals {
     void* (*MCLogicBattleData_get_logicRoundMgr)(void* instance);
     void (*LogicRoundMgr_SetRound)(void* instance, uint32_t round);
     void (*LogicRoundMgr_NextRound)(void* instance, bool isAfterWelfare);
-    void* (*LogicRoundMgr_get_m_AuctionComp)(void* instance);
     void (*UnityEngine_Time_set_timeScale)(float value);
 
     void* (*MCComp_GetGamer)(uint64_t accountId);
     void* (*MCComp_GetGoGoCardComp)(uint64_t accountId);
-    void* (*MCLogicGoGoCardComp_get_m_CurrData)(void* instance);
 
     void* (*CData_MCHero_GetInstance)();
     MonoStructures::Dictionary<int, void*>* (*CData_MCHero_GetAll)(void* instance);
@@ -1084,27 +988,6 @@ namespace Originals {
         void* instance,
         MCLogicHeroShopItemData* itemData,
         bool* ignoreExtraRule
-    );
-    void (*MCLogicBattleManager_StartAI)(void* instance, int difficulty);
-    void (*MCLogicBattleManager_StopAI)(void* instance);
-    void (*MCLogicBattleManager_TryAutoDeploy)(void* instance);
-    bool (*MCLogicBattleManager_OnPlayerLvlUp)(void* instance);
-    int (*MCLogicBattleManager_GetLineupWorth)(void* instance);
-    int (*MCLogicBattleManager_CalcCurrentFightValue)(void* instance);
-    bool (*MCLogicBattleManager_MoveHeroToBattleField_ById)(
-        void* instance,
-        uint32_t instanceId,
-        uint8_t gridX,
-        uint8_t gridY,
-        bool byAI,
-        bool bIsAIApi
-    );
-    void (*MCLogicBattleManager_MoveHeroInBattleField)(
-        void* instance,
-        uint32_t instanceId,
-        uint8_t gridX,
-        uint8_t gridY,
-        bool bIsAi
     );
     bool (*MCLogicBattleManager_get_m_bDefendFaild)(void* instance);
     bool (*MCLogicBattleManager_get_IsHost)(void* instance);
@@ -1168,15 +1051,6 @@ namespace Originals {
     float (*MCBattleBridge_GetStdevPing)(void* instance);
     float (*MCBattleBridge_GetStdevFps)(void* instance);
     void (*MCChessPlayerData_UpdateCoin)(void* instance, int addValue, int changeType);
-    int (*MCLogicAuctionComp_get_m_CurrPhase)(void* instance);
-    bool (*MCLogicAuctionComp_Bid)(
-        void* instance,
-        void* slotInfo,
-        uint64_t accountId,
-        uint32_t bidPrice
-    );
-    void (*MCLogicAuctionComp_FixedPrice)(void* instance, void* slotInfo, uint64_t accountId);
-    int (*MCLogicAuctionComp_GetSelectItemIndexByAccId)(void* instance, uint64_t accountId);
 
     void (*MCShowSpectatorComp_SetSpectate)(void* instance, uint64_t accountId);
     bool (*MCBondUtil_CheckRelationActive_Config)(void* config, int curActiveCount, void* curBondDict);
@@ -2499,6 +2373,13 @@ void ResolveFeatureBindings() {
         {"UInt64"}
     );
     ResolveOriginal(
+        Originals::MCLogicBattleData_ILOGIC_GetStPlayerData,
+        "",
+        "MCLogicBattleData",
+        "ILOGIC_GetStPlayerData",
+        {"UInt64"}
+    );
+    ResolveOriginal(
         Originals::MCLogicBattleData_ILOGIC_GetShopItemData,
         "",
         "MCLogicBattleData",
@@ -2807,13 +2688,6 @@ void ResolveFeatureBindings() {
         {"Boolean"}
     );
     ResolveOriginal(
-        Originals::LogicRoundMgr_get_m_AuctionComp,
-        "",
-        "LogicRoundMgr",
-        "get_m_AuctionComp",
-        {}
-    );
-    ResolveOriginal(
         Originals::UnityEngine_Time_set_timeScale,
         "UnityEngine",
         "Time",
@@ -2827,13 +2701,6 @@ void ResolveFeatureBindings() {
         "MCComp",
         "GetGoGoCardComp",
         {"UInt64"}
-    );
-    ResolveOriginal(
-        Originals::MCLogicGoGoCardComp_get_m_CurrData,
-        "Battle",
-        "MCLogicGoGoCardComp",
-        "get_m_CurrData",
-        {}
     );
     ResolveOriginal(
         Originals::CData_MCHero_GetInstance,
@@ -2893,62 +2760,6 @@ void ResolveFeatureBindings() {
         "MCLogicBattleManager",
         "BuyNormalHero",
         {"MCLogicHeroShopItemData", "Boolean"}
-    );
-    ResolveOriginal(
-        Originals::MCLogicBattleManager_StartAI,
-        "",
-        "MCLogicBattleManager",
-        "StartAI",
-        {"Int32"}
-    );
-    ResolveOriginal(
-        Originals::MCLogicBattleManager_StopAI,
-        "",
-        "MCLogicBattleManager",
-        "StopAI",
-        {}
-    );
-    ResolveOriginal(
-        Originals::MCLogicBattleManager_TryAutoDeploy,
-        "",
-        "MCLogicBattleManager",
-        "TryAutoDeploy",
-        {}
-    );
-    ResolveOriginal(
-        Originals::MCLogicBattleManager_OnPlayerLvlUp,
-        "",
-        "MCLogicBattleManager",
-        "OnPlayerLvlUp",
-        {}
-    );
-    ResolveOriginal(
-        Originals::MCLogicBattleManager_GetLineupWorth,
-        "",
-        "MCLogicBattleManager",
-        "GetLineupWorth",
-        {}
-    );
-    ResolveOriginal(
-        Originals::MCLogicBattleManager_CalcCurrentFightValue,
-        "",
-        "MCLogicBattleManager",
-        "CalcCurrentFightValue",
-        {}
-    );
-    ResolveOriginal(
-        Originals::MCLogicBattleManager_MoveHeroToBattleField_ById,
-        "",
-        "MCLogicBattleManager",
-        "MoveHeroToBattleField",
-        {"UInt32", "Byte", "Byte", "Boolean", "Boolean"}
-    );
-    ResolveOriginal(
-        Originals::MCLogicBattleManager_MoveHeroInBattleField,
-        "",
-        "MCLogicBattleManager",
-        "MoveHeroInBattleField",
-        {"UInt32", "Byte", "Byte", "Boolean"}
     );
     HookResolvedMethod(
         Originals::MCLogicBattleManager_get_m_bDefendFaild,
@@ -3191,34 +3002,6 @@ void ResolveFeatureBindings() {
         "MCChessPlayerData",
         "UpdateCoin",
         {"Int32", "CoinChangeType"}
-    );
-    ResolveOriginal(
-        Originals::MCLogicAuctionComp_get_m_CurrPhase,
-        "Battle",
-        "MCLogicAuctionComp",
-        "get_m_CurrPhase",
-        {}
-    );
-    ResolveOriginal(
-        Originals::MCLogicAuctionComp_Bid,
-        "Battle",
-        "MCLogicAuctionComp",
-        "Bid",
-        {"MCLogicAuctionSlotInfo", "UInt64", "UInt32"}
-    );
-    ResolveOriginal(
-        Originals::MCLogicAuctionComp_FixedPrice,
-        "Battle",
-        "MCLogicAuctionComp",
-        "FixedPrice",
-        {"MCLogicAuctionSlotInfo", "UInt64"}
-    );
-    ResolveOriginal(
-        Originals::MCLogicAuctionComp_GetSelectItemIndexByAccId,
-        "Battle",
-        "MCLogicAuctionComp",
-        "GetSelectItemIndexByAccId",
-        {"UInt64"}
     );
 
     HookResolvedMethod(
@@ -4383,11 +4166,6 @@ void ClearTableDataCacheUnlocked() {
     FeatureState::LastRecommendLineupCheck = {};
     FeatureState::LastScavengerCheck = {};
     FeatureState::LastArenaSkipAttempt = {};
-    FeatureState::LastAutoPlayAiStartAttempt = {};
-    FeatureState::LastAutoPlayDeployAttempt = {};
-    FeatureState::LastAutoPlayFormationAttempt = {};
-    FeatureState::LastAutoPlayLevelAttempt = {};
-    FeatureState::LastAutoPlayAuctionAttempt = {};
     FeatureState::ArenaLastSkipSourceRound = 0;
     FeatureState::ArenaLastSkipTargetRound = 0;
     FeatureState::CachedGameRound = 0;
@@ -4418,11 +4196,9 @@ bool ShouldLoadTableDataForFrame(int activeMainTab) {
         return false;
     }
 
-    return activeMainTab == MainTabAutoPlay ||
-        activeMainTab == MainTabShop ||
+    return activeMainTab == MainTabShop ||
         activeMainTab == MainTabArena ||
         activeMainTab == MainTabTest ||
-        FeatureState::AutoPlayEnabled.load() ||
         FeatureState::ShopForceScavengerExpensiveHero.load() ||
         FeatureState::ShopBuyRecommendLineup.load() ||
         FeatureState::ShopStopRefreshAtRecommendLineup.load();
@@ -6145,2336 +5921,6 @@ void ApplyArenaState(uint64_t selfAccountId) {
     }
 }
 
-enum AutoPlayStrategyKind {
-    AutoPlayStrategyEconomy = 0,
-    AutoPlayStrategyBalanced = 1,
-    AutoPlayStrategyAggressive = 2
-};
-
-enum GamePhaseKind {
-    GamePhasePrepare = 1,
-    GamePhaseWelfare = 5,
-    GamePhaseForecast = 6,
-    GamePhaseRegionPick = 7,
-    GamePhaseAuction = 8
-};
-
-struct AutoPlaySnapshot {
-    uint64_t accountId = 0;
-    int round = 0;
-    int phase = -1;
-    int hp = -1;
-    int coin = -1;
-    int level = -1;
-    int currentPopulation = -1;
-    int totalPopulation = -1;
-    int spareChess = -1;
-    int battleHeroCount = -1;
-    int allHeroCount = -1;
-    int shopLevel = -1;
-    int refreshCost = -1;
-    int recommendHeroId = 0;
-    int starUpHeroId = 0;
-    int lineupWorth = -1;
-    int fightValue = -1;
-    int opponentCount = 0;
-    int currentOpponentFightValue = -1;
-    int strongestOpponentFightValue = -1;
-    int contestedTargetOwners = 0;
-    uint64_t currentOpponentId = 0;
-    bool fightSection = false;
-    bool fightResultSection = false;
-    bool monsterRound = false;
-};
-
-struct AutoPlayGoldPlan {
-    int interestTier = 0;
-    int nextInterestGold = 10;
-    int reserveGold = 20;
-    int levelReserveGold = 20;
-    int spendBudget = 0;
-    int recommendationTarget = 6;
-    int maxAuctionBid = 0;
-    bool holdForInterest = false;
-    bool forceLevel = false;
-};
-
-// Publishes auto play snapshot telemetry into atomic UI telemetry.
-void PublishAutoPlaySnapshotTelemetry(const AutoPlaySnapshot& snapshot, bool ready) {
-    FeatureState::AutoPlaySnapshotReady = ready;
-    FeatureState::AutoPlaySnapshotAccountId = ready ? snapshot.accountId : 0;
-    FeatureState::AutoPlaySnapshotRound = ready ? snapshot.round : 0;
-    FeatureState::AutoPlaySnapshotPhase = ready ? snapshot.phase : -1;
-    FeatureState::AutoPlaySnapshotHp = ready ? snapshot.hp : -1;
-    FeatureState::AutoPlaySnapshotCoin = ready ? snapshot.coin : -1;
-    FeatureState::AutoPlaySnapshotLevel = ready ? snapshot.level : -1;
-    FeatureState::AutoPlaySnapshotCurrentPopulation =
-        ready ? snapshot.currentPopulation : -1;
-    FeatureState::AutoPlaySnapshotTotalPopulation =
-        ready ? snapshot.totalPopulation : -1;
-    FeatureState::AutoPlaySnapshotLineupWorth = ready ? snapshot.lineupWorth : -1;
-    FeatureState::AutoPlaySnapshotFightValue = ready ? snapshot.fightValue : -1;
-    FeatureState::AutoPlaySnapshotRecommendHeroId =
-        ready ? snapshot.recommendHeroId : 0;
-    FeatureState::AutoPlaySnapshotStarUpHeroId =
-        ready ? snapshot.starUpHeroId : 0;
-    FeatureState::AutoPlaySnapshotCurrentOpponentFightValue =
-        ready ? snapshot.currentOpponentFightValue : -1;
-    FeatureState::AutoPlaySnapshotFightSection = ready && snapshot.fightSection;
-    FeatureState::AutoPlaySnapshotMonsterRound = ready && snapshot.monsterRound;
-
-    if (!ready) {
-        FeatureState::AutoPlayOpponentCount = 0;
-        FeatureState::AutoPlayCurrentOpponentId = 0;
-        FeatureState::AutoPlayStrongestOpponentFightValue = 0;
-        FeatureState::AutoPlayContestedTargets = 0;
-    }
-}
-
-// Returns the cached or live cached auto play snapshot value used by runtime features.
-AutoPlaySnapshot GetCachedAutoPlaySnapshot() {
-    AutoPlaySnapshot snapshot{};
-    if (!FeatureState::AutoPlaySnapshotReady.load()) {
-        return snapshot;
-    }
-
-    snapshot.accountId = FeatureState::AutoPlaySnapshotAccountId.load();
-    snapshot.round = FeatureState::AutoPlaySnapshotRound.load();
-    snapshot.phase = FeatureState::AutoPlaySnapshotPhase.load();
-    snapshot.hp = FeatureState::AutoPlaySnapshotHp.load();
-    snapshot.coin = FeatureState::AutoPlaySnapshotCoin.load();
-    snapshot.level = FeatureState::AutoPlaySnapshotLevel.load();
-    snapshot.currentPopulation = FeatureState::AutoPlaySnapshotCurrentPopulation.load();
-    snapshot.totalPopulation = FeatureState::AutoPlaySnapshotTotalPopulation.load();
-    snapshot.recommendHeroId = FeatureState::AutoPlaySnapshotRecommendHeroId.load();
-    snapshot.starUpHeroId = FeatureState::AutoPlaySnapshotStarUpHeroId.load();
-    snapshot.lineupWorth = FeatureState::AutoPlaySnapshotLineupWorth.load();
-    snapshot.fightValue = FeatureState::AutoPlaySnapshotFightValue.load();
-    snapshot.opponentCount = FeatureState::AutoPlayOpponentCount.load();
-    snapshot.currentOpponentFightValue =
-        FeatureState::AutoPlaySnapshotCurrentOpponentFightValue.load();
-    snapshot.strongestOpponentFightValue =
-        FeatureState::AutoPlayStrongestOpponentFightValue.load();
-    snapshot.contestedTargetOwners = FeatureState::AutoPlayContestedTargets.load();
-    snapshot.currentOpponentId = FeatureState::AutoPlayCurrentOpponentId.load();
-    snapshot.fightSection = FeatureState::AutoPlaySnapshotFightSection.load();
-    snapshot.monsterRound = FeatureState::AutoPlaySnapshotMonsterRound.load();
-    return snapshot;
-}
-
-// Returns the cached or live cached auto play gold plan value used by runtime features.
-AutoPlayGoldPlan GetCachedAutoPlayGoldPlan() {
-    AutoPlayGoldPlan plan{};
-    plan.interestTier = FeatureState::AutoPlayInterestTier.load();
-    plan.nextInterestGold = FeatureState::AutoPlayInterestNextGold.load();
-    plan.reserveGold = FeatureState::AutoPlayInterestReserveGold.load();
-    plan.spendBudget = FeatureState::AutoPlaySpendBudget.load();
-    plan.holdForInterest = FeatureState::AutoPlayHoldInterest.load();
-    return plan;
-}
-
-struct AutoPlayPolicyBackup {
-    bool captured = false;
-    bool shopBuyFreeHero = false;
-    bool shopBuySelectedHero = false;
-    bool shopBuyRecommendLineup = false;
-    bool shopForceScavengerExpensiveHero = false;
-    bool shopRefresh = false;
-    bool shopStopRefreshAtFreeHero = false;
-    bool shopStopRefreshAtSelectedHero = false;
-    bool shopStopRefreshAtRecommendLineup = false;
-    bool shopKeepGold = false;
-    int shopKeepGoldAt = 20;
-    int shopRecommendTargetCount = 9;
-    bool arenaForceActiveSynergy = false;
-    bool arenaForceLevel99 = false;
-    bool arenaAllEnemyHpOne = false;
-    bool combatPreventHpLoss = false;
-    bool combatBoostAttackRatio = false;
-    int combatAttackRatioPercent = 5000;
-    int combatFightValue = 999999999;
-    bool combatForceWin = false;
-    bool combatCrippleEnemies = false;
-    int combatEnemyAttackRatioPercent = 1;
-};
-
-namespace RuntimePolicy {
-    AutoPlayPolicyBackup AutoPlayBackup;
-}
-
-// Coordinates capture auto play policy backup for the overlay runtime.
-void CaptureAutoPlayPolicyBackup() {
-    if (RuntimePolicy::AutoPlayBackup.captured) {
-        return;
-    }
-
-    AutoPlayPolicyBackup backup{};
-    backup.captured = true;
-    backup.shopBuyFreeHero = FeatureState::ShopBuyFreeHero.load();
-    backup.shopBuySelectedHero = FeatureState::ShopBuySelectedHero.load();
-    backup.shopBuyRecommendLineup = FeatureState::ShopBuyRecommendLineup.load();
-    backup.shopForceScavengerExpensiveHero =
-        FeatureState::ShopForceScavengerExpensiveHero.load();
-    backup.shopRefresh = FeatureState::ShopRefresh.load();
-    backup.shopStopRefreshAtFreeHero = FeatureState::ShopStopRefreshAtFreeHero.load();
-    backup.shopStopRefreshAtSelectedHero = FeatureState::ShopStopRefreshAtSelectedHero.load();
-    backup.shopStopRefreshAtRecommendLineup =
-        FeatureState::ShopStopRefreshAtRecommendLineup.load();
-    backup.shopKeepGold = FeatureState::ShopKeepGold.load();
-    backup.shopKeepGoldAt = FeatureState::ShopKeepGoldAt.load();
-    backup.shopRecommendTargetCount = FeatureState::ShopRecommendTargetCount.load();
-    backup.arenaForceActiveSynergy = FeatureState::ArenaForceActiveSynergy.load();
-    backup.arenaForceLevel99 = FeatureState::ArenaForceLevel99.load();
-    backup.arenaAllEnemyHpOne = FeatureState::ArenaAllEnemyHpOne.load();
-    backup.combatPreventHpLoss = FeatureState::CombatPreventHpLoss.load();
-    backup.combatBoostAttackRatio = FeatureState::CombatBoostAttackRatio.load();
-    backup.combatAttackRatioPercent = FeatureState::CombatAttackRatioPercent.load();
-    backup.combatFightValue = FeatureState::CombatFightValue.load();
-    backup.combatForceWin = FeatureState::CombatForceWin.load();
-    backup.combatCrippleEnemies = FeatureState::CombatCrippleEnemies.load();
-    backup.combatEnemyAttackRatioPercent = FeatureState::CombatEnemyAttackRatioPercent.load();
-    RuntimePolicy::AutoPlayBackup = backup;
-}
-
-// Coordinates restore auto play policy backup for the overlay runtime.
-void RestoreAutoPlayPolicyBackup() {
-    if (!RuntimePolicy::AutoPlayBackup.captured) {
-        return;
-    }
-
-    const AutoPlayPolicyBackup backup = RuntimePolicy::AutoPlayBackup;
-    FeatureState::ShopBuyFreeHero = backup.shopBuyFreeHero;
-    FeatureState::ShopBuySelectedHero = backup.shopBuySelectedHero;
-    FeatureState::ShopBuyRecommendLineup = backup.shopBuyRecommendLineup;
-    FeatureState::ShopForceScavengerExpensiveHero =
-        backup.shopForceScavengerExpensiveHero;
-    FeatureState::ShopRefresh = backup.shopRefresh;
-    FeatureState::ShopStopRefreshAtFreeHero = backup.shopStopRefreshAtFreeHero;
-    FeatureState::ShopStopRefreshAtSelectedHero = backup.shopStopRefreshAtSelectedHero;
-    FeatureState::ShopStopRefreshAtRecommendLineup =
-        backup.shopStopRefreshAtRecommendLineup;
-    FeatureState::ShopKeepGold = backup.shopKeepGold;
-    FeatureState::ShopKeepGoldAt = backup.shopKeepGoldAt;
-    FeatureState::ShopRecommendTargetCount = backup.shopRecommendTargetCount;
-    FeatureState::ArenaForceActiveSynergy = backup.arenaForceActiveSynergy;
-    FeatureState::ArenaForceLevel99 = backup.arenaForceLevel99;
-    FeatureState::ArenaAllEnemyHpOne = backup.arenaAllEnemyHpOne;
-    FeatureState::CombatPreventHpLoss = backup.combatPreventHpLoss;
-    FeatureState::CombatBoostAttackRatio = backup.combatBoostAttackRatio;
-    FeatureState::CombatAttackRatioPercent = backup.combatAttackRatioPercent;
-    FeatureState::CombatFightValue = backup.combatFightValue;
-    FeatureState::CombatForceWin = backup.combatForceWin;
-    FeatureState::CombatCrippleEnemies = backup.combatCrippleEnemies;
-    FeatureState::CombatEnemyAttackRatioPercent = backup.combatEnemyAttackRatioPercent;
-    RuntimePolicy::AutoPlayBackup = AutoPlayPolicyBackup{};
-}
-
-struct AutoPlayBoardUnit {
-    void* instance = nullptr;
-    uint32_t guid = 0;
-    int heroId = 0;
-    int star = 1;
-    int quality = 0;
-    int location = 0;
-    int camp = 0;
-    AstarInt2 grid{0, 0};
-    bool reserve = false;
-    bool chessPlayer = false;
-};
-
-struct AutoPlayBoardPlan {
-    int focusGroup = 0;
-    int targetHeroId = 0;
-    int selfUnits = 0;
-    int enemyUnits = 0;
-    int contestedTargets = 0;
-    int boardScore = 0;
-};
-
-struct AutoPlayFormationStats {
-    std::array<int, 8> enemyColumnThreat{};
-    std::array<int, 8> allyColumnCount{};
-    std::array<int, 8> allyFrontlineCount{};
-    std::array<int, 8> allyBacklineCount{};
-    float enemyCenterX = -1.0f;
-    float enemyCenterY = -1.0f;
-    int enemyPositionCount = 0;
-};
-
-// Computes auto play strategy name data for the Auto-Play controller.
-const char* AutoPlayStrategyName(int strategy) {
-    switch (strategy) {
-        case AutoPlayStrategyEconomy:
-            return "Economy";
-        case AutoPlayStrategyAggressive:
-            return "Aggressive";
-        default:
-            return "Balanced";
-    }
-}
-
-// Clamps auto play strategy to the supported runtime range.
-int ClampAutoPlayStrategy(int strategy) {
-    return std::clamp(
-        strategy,
-        static_cast<int>(AutoPlayStrategyEconomy),
-        static_cast<int>(AutoPlayStrategyAggressive)
-    );
-}
-
-// Clamps auto play gold to the supported runtime range.
-int ClampAutoPlayGold(int gold, int maxGold = 999999) {
-    return std::clamp(gold, 0, maxGold);
-}
-
-// Computes auto play interest tier for gold data for the Auto-Play controller.
-int AutoPlayInterestTierForGold(int gold) {
-    return std::clamp(ClampAutoPlayGold(gold) / 10, 0, 5);
-}
-
-// Computes auto play interest floor for tier data for the Auto-Play controller.
-int AutoPlayInterestFloorForTier(int tier) {
-    return std::clamp(tier, 0, 5) * 10;
-}
-
-// Computes auto play next interest gold for gold data for the Auto-Play controller.
-int AutoPlayNextInterestGoldForGold(int gold) {
-    int tier = AutoPlayInterestTierForGold(gold);
-    return tier >= 5 ? 50 : (tier + 1) * 10;
-}
-
-// Coordinates hero has group for the overlay runtime.
-bool HeroHasGroup(const HeroTableEntry& hero, int groupId) {
-    if (groupId <= 0) {
-        return false;
-    }
-
-    return std::find(hero.groups.begin(), hero.groups.end(), groupId) != hero.groups.end();
-}
-
-// Scores a hero candidate for Auto-Play using table metadata and current targets.
-int ScoreHeroForAutoPlay(
-    int heroId,
-    int star,
-    int focusGroup,
-    int recommendHeroId,
-    int starUpHeroId
-) {
-    HeroTableEntry hero;
-    int quality = 1;
-    int score = std::max(star, 1) * std::max(star, 1) * 120;
-
-    if (TryGetHeroTableEntry(heroId, &hero)) {
-        quality = std::max(hero.quality, 1);
-        score += quality * 75;
-
-        if (hero.isTank > 0) {
-            score += 70;
-        }
-
-        if (HeroHasGroup(hero, focusGroup)) {
-            score += 180;
-        }
-    }
-
-    if (heroId > 0 && heroId == recommendHeroId) {
-        score += 260;
-    }
-
-    if (heroId > 0 && heroId == starUpHeroId) {
-        score += 220;
-    }
-
-    return score + quality;
-}
-
-// Checks the frontline hero condition before work proceeds.
-bool IsFrontlineHero(int heroId) {
-    HeroTableEntry hero;
-    if (!TryGetHeroTableEntry(heroId, &hero)) {
-        return false;
-    }
-
-    return hero.isTank > 0 ||
-        hero.heroType == 1 ||
-        hero.attackType == 1 ||
-        StringIncludesCaseInsensitive(hero.name, "tank");
-}
-
-// Checks the auto play frontline unit condition before work proceeds.
-bool IsAutoPlayFrontlineUnit(const AutoPlayBoardUnit& unit) {
-    return IsFrontlineHero(unit.heroId) || unit.star >= 3 || unit.quality >= 4;
-}
-
-// Checks the auto play carry unit condition before work proceeds.
-bool IsAutoPlayCarryUnit(const AutoPlayBoardUnit& unit) {
-    return !IsAutoPlayFrontlineUnit(unit) && (unit.star >= 2 || unit.quality >= 3);
-}
-
-// Collects auto play board units with bounded managed reads.
-std::vector<AutoPlayBoardUnit> CollectAutoPlayBoardUnits(void* battleManager) {
-    std::vector<AutoPlayBoardUnit> units;
-
-    if (!battleManager) {
-        return units;
-    }
-
-    static FieldInfo* chessListField = nullptr;
-    static FieldInfo* guidField = nullptr;
-    static FieldInfo* idField = nullptr;
-    static FieldInfo* locationField = nullptr;
-    static FieldInfo* campField = nullptr;
-    static FieldInfo* gridField = nullptr;
-    static FieldInfo* starField = nullptr;
-    static FieldInfo* reserveField = nullptr;
-    static FieldInfo* chessPlayerField = nullptr;
-
-    if (!chessListField) {
-        chessListField = GetFieldInfoFromName("", "LogicHeroContainer", "m_ChessList");
-    }
-
-    if (!guidField) {
-        guidField = GetFieldInfoFromName("Battle", "MCEntityBase", "m_uGuid");
-    }
-
-    if (!idField) {
-        idField = GetFieldInfoFromName("Battle", "MCEntityBase", "m_ID");
-    }
-
-    if (!locationField) {
-        locationField =
-            GetFieldInfoFromName("Battle", "MCEntityBase", "m_eEntityLocatoinType");
-    }
-
-    if (!campField) {
-        campField =
-            GetFieldInfoFromName("Battle", "MCEntityBase", "<m_EntityCampType>k__BackingField");
-    }
-
-    if (!gridField) {
-        gridField = GetFieldInfoFromName("Battle", "MCLogicFighter", "_gridPos");
-    }
-
-    if (!starField) {
-        starField = GetFieldInfoFromName("Battle", "MCLogicFighter", "_iStarLevel");
-    }
-
-    if (!reserveField) {
-        reserveField = GetFieldInfoFromName("Battle", "MCLogicFighter", "m_updateAtReserve");
-    }
-
-    if (!chessPlayerField) {
-        chessPlayerField = GetFieldInfoFromName("Battle", "MCEntityBase", "IsChessPlayer");
-    }
-
-    auto* chessList = GetField<MonoStructures::List<void*>*>(
-        reinterpret_cast<Il2CppObject*>(battleManager),
-        chessListField
-    );
-    void* const* fighters = nullptr;
-    int fighterCount = 0;
-
-    if (!TryGetManagedListData(chessList, &fighters, &fighterCount, 96)) {
-        return units;
-    }
-
-    units.reserve(static_cast<size_t>(std::max(fighterCount, 0)));
-
-    for (int i = 0; fighters && i < fighterCount; ++i) {
-        void* fighter = fighters[i];
-        if (!fighter) {
-            continue;
-        }
-
-        if (!TryConsumeManagedWorkUnits(8)) {
-            break;
-        }
-
-        AutoPlayBoardUnit unit{};
-        unit.instance = fighter;
-        unit.guid = GetField<uint32_t>(reinterpret_cast<Il2CppObject*>(fighter), guidField);
-        unit.heroId = GetField<int>(reinterpret_cast<Il2CppObject*>(fighter), idField);
-        unit.location = GetField<int>(reinterpret_cast<Il2CppObject*>(fighter), locationField);
-        unit.camp = GetField<int>(reinterpret_cast<Il2CppObject*>(fighter), campField);
-        unit.grid = GetField<AstarInt2>(reinterpret_cast<Il2CppObject*>(fighter), gridField);
-        unit.star = std::clamp(
-            GetField<int>(reinterpret_cast<Il2CppObject*>(fighter), starField),
-            1,
-            5
-        );
-        unit.reserve = GetField<bool>(reinterpret_cast<Il2CppObject*>(fighter), reserveField) ||
-            unit.location == 2 ||
-            unit.location == 5;
-        unit.chessPlayer =
-            GetField<bool>(reinterpret_cast<Il2CppObject*>(fighter), chessPlayerField) ||
-            unit.location == 3;
-
-        HeroTableEntry hero;
-        if (TryGetHeroTableEntry(unit.heroId, &hero)) {
-            unit.quality = hero.quality;
-        }
-
-        if (!unit.chessPlayer && IsPlausibleHeroId(unit.heroId) && unit.guid != 0) {
-            units.push_back(unit);
-        }
-    }
-
-    return units;
-}
-
-// Checks whether another live unit already occupies a board cell.
-bool IsBoardCellOccupied(
-    const std::vector<AutoPlayBoardUnit>& units,
-    int x,
-    int y,
-    uint32_t ignoreGuid = 0
-) {
-    for (const AutoPlayBoardUnit& unit : units) {
-        if (!unit.reserve &&
-            unit.guid != ignoreGuid &&
-            unit.grid.x == x &&
-            unit.grid.y == y) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-// Checks the valid auto play board cell condition before work proceeds.
-bool IsValidAutoPlayBoardCell(int x, int y) {
-    return x >= 0 && x <= 7 && y >= 0 && y <= 3;
-}
-
-// Computes auto play column value data for the Auto-Play controller.
-int AutoPlayColumnValue(const std::array<int, 8>& values, int x) {
-    if (x < 0 || x >= static_cast<int>(values.size())) {
-        return 0;
-    }
-
-    return values[static_cast<size_t>(x)];
-}
-
-// Computes auto play nearby column value data for the Auto-Play controller.
-int AutoPlayNearbyColumnValue(const std::array<int, 8>& values, int x) {
-    return AutoPlayColumnValue(values, x - 1) +
-        AutoPlayColumnValue(values, x) +
-        AutoPlayColumnValue(values, x + 1);
-}
-
-// Summarizes allied and enemy board positions used by formation scoring.
-AutoPlayFormationStats BuildAutoPlayFormationStats(
-    const std::vector<AutoPlayBoardUnit>& selfUnits,
-    const std::vector<AutoPlayBoardUnit>& enemyUnits
-) {
-    AutoPlayFormationStats stats{};
-
-    for (const AutoPlayBoardUnit& unit : selfUnits) {
-        if (unit.reserve || unit.chessPlayer || !IsValidAutoPlayBoardCell(unit.grid.x, unit.grid.y)) {
-            continue;
-        }
-
-        int x = unit.grid.x;
-        stats.allyColumnCount[static_cast<size_t>(x)]++;
-        if (IsAutoPlayFrontlineUnit(unit) || unit.grid.y <= 1) {
-            stats.allyFrontlineCount[static_cast<size_t>(x)]++;
-        } else {
-            stats.allyBacklineCount[static_cast<size_t>(x)]++;
-        }
-    }
-
-    for (const AutoPlayBoardUnit& enemy : enemyUnits) {
-        if (enemy.reserve || !IsValidAutoPlayBoardCell(enemy.grid.x, enemy.grid.y)) {
-            continue;
-        }
-
-        int x = enemy.grid.x;
-        int threat = 8 + (std::max(enemy.star, 1) * 3) + (std::max(enemy.quality, 0) * 2);
-        if (IsAutoPlayFrontlineUnit(enemy)) {
-            threat += 6;
-        }
-
-        stats.enemyColumnThreat[static_cast<size_t>(x)] += threat;
-        if (x > 0) {
-            stats.enemyColumnThreat[static_cast<size_t>(x - 1)] += threat / 2;
-        }
-        if (x < 7) {
-            stats.enemyColumnThreat[static_cast<size_t>(x + 1)] += threat / 2;
-        }
-
-        stats.enemyCenterX += enemy.grid.x;
-        stats.enemyCenterY += enemy.grid.y;
-        stats.enemyPositionCount++;
-    }
-
-    if (stats.enemyPositionCount > 0) {
-        stats.enemyCenterX =
-            (stats.enemyCenterX + 1.0f) / static_cast<float>(stats.enemyPositionCount);
-        stats.enemyCenterY =
-            (stats.enemyCenterY + 1.0f) / static_cast<float>(stats.enemyPositionCount);
-    }
-
-    return stats;
-}
-
-// Rates one destination cell for a unit using role, cover, and enemy pressure.
-int ScoreBoardCellForUnit(
-    const AutoPlayBoardUnit& unit,
-    int x,
-    int y,
-    const AutoPlayFormationStats& stats,
-    const AutoPlaySnapshot& snapshot,
-    const AutoPlayBoardPlan& plan
-) {
-    bool frontline = IsAutoPlayFrontlineUnit(unit);
-    bool carry = IsAutoPlayCarryUnit(unit);
-    int desiredY = frontline ? 0 : (carry ? 3 : 2);
-    int score = 140 - (std::abs(y - desiredY) * (frontline ? 28 : 24));
-
-    int columnThreat = AutoPlayColumnValue(stats.enemyColumnThreat, x);
-    int nearbyThreat = AutoPlayNearbyColumnValue(stats.enemyColumnThreat, x);
-    int allyColumnCount = AutoPlayColumnValue(stats.allyColumnCount, x);
-    if (!unit.reserve && IsValidAutoPlayBoardCell(unit.grid.x, unit.grid.y) && unit.grid.x == x) {
-        allyColumnCount = std::max(allyColumnCount - 1, 0);
-    }
-    int postMoveColumnCount = allyColumnCount + 1;
-
-    if (stats.enemyCenterX >= 0.0f) {
-        float distanceFromEnemyCenter = std::abs(static_cast<float>(x) - stats.enemyCenterX);
-        if (frontline) {
-            score -= static_cast<int>(distanceFromEnemyCenter * 4.0f);
-            score += columnThreat * 2;
-            score += nearbyThreat;
-        } else {
-            score += static_cast<int>(distanceFromEnemyCenter * (carry ? 4.0f : 2.0f));
-            score -= columnThreat * (carry ? 3 : 2);
-            score -= nearbyThreat;
-        }
-    }
-
-    if (frontline && stats.enemyCenterY >= 0.0f) {
-        score -= static_cast<int>(std::abs(static_cast<float>(y) - stats.enemyCenterY) * 3.0f);
-    }
-
-    if (frontline) {
-        int protectedBackline = AutoPlayNearbyColumnValue(stats.allyBacklineCount, x);
-        score += protectedBackline * 9;
-        score -= std::max(postMoveColumnCount - 2, 0) * 12;
-    } else {
-        int nearbyCover = AutoPlayNearbyColumnValue(stats.allyFrontlineCount, x);
-        score += nearbyCover * (carry ? 12 : 8);
-        score -= std::max(postMoveColumnCount - 1, 0) * (carry ? 16 : 10);
-
-        if (nearbyCover == 0 && stats.enemyPositionCount > 0) {
-            score -= carry ? 28 : 16;
-        }
-    }
-
-    score += ScoreHeroForAutoPlay(
-        unit.heroId,
-        unit.star,
-        plan.focusGroup,
-        snapshot.recommendHeroId,
-        snapshot.starUpHeroId
-    ) / 18;
-
-    if (unit.heroId == plan.targetHeroId) {
-        score += carry ? 24 : 12;
-    }
-
-    if (snapshot.currentOpponentFightValue > snapshot.fightValue && frontline) {
-        score += 18;
-    }
-
-    return score;
-}
-
-// Chooses the best bounded formation move and strategic focus for the current board.
-AutoPlayBoardPlan BuildAutoPlayBoardPlan(
-    const AutoPlaySnapshot& snapshot,
-    const std::vector<AutoPlayBoardUnit>& selfUnits,
-    const std::vector<AutoPlayBoardUnit>& enemyUnits
-) {
-    AutoPlayBoardPlan plan{};
-    plan.selfUnits = static_cast<int>(selfUnits.size());
-    plan.enemyUnits = static_cast<int>(enemyUnits.size());
-
-    std::unordered_map<int, int> groupScore;
-
-    for (const AutoPlayBoardUnit& unit : selfUnits) {
-        HeroTableEntry hero;
-        if (!TryGetHeroTableEntry(unit.heroId, &hero)) {
-            continue;
-        }
-
-        int heroScore = ScoreHeroForAutoPlay(
-            unit.heroId,
-            unit.star,
-            0,
-            snapshot.recommendHeroId,
-            snapshot.starUpHeroId
-        );
-
-        for (int groupId : hero.groups) {
-            groupScore[groupId] += heroScore;
-        }
-    }
-
-    if (snapshot.recommendHeroId > 0) {
-        HeroTableEntry hero;
-        if (TryGetHeroTableEntry(snapshot.recommendHeroId, &hero)) {
-            for (int groupId : hero.groups) {
-                groupScore[groupId] += 220;
-            }
-        }
-    }
-
-    std::unordered_map<int, int> enemyGroupCount;
-    for (const AutoPlayBoardUnit& unit : enemyUnits) {
-        HeroTableEntry hero;
-        if (!TryGetHeroTableEntry(unit.heroId, &hero)) {
-            continue;
-        }
-
-        for (int groupId : hero.groups) {
-            enemyGroupCount[groupId] += 1;
-        }
-    }
-
-    int bestGroup = 0;
-    int bestScore = -999999;
-    for (const auto& item : groupScore) {
-        int groupId = item.first;
-        int adjusted = item.second - (enemyGroupCount[groupId] * 45);
-
-        if (adjusted > bestScore) {
-            bestGroup = groupId;
-            bestScore = adjusted;
-        }
-    }
-
-    plan.focusGroup = bestGroup;
-
-    int bestHero = snapshot.starUpHeroId > 0 ? snapshot.starUpHeroId : snapshot.recommendHeroId;
-    int bestHeroScore = bestHero > 0 ?
-        ScoreHeroForAutoPlay(bestHero, 1, bestGroup, snapshot.recommendHeroId, snapshot.starUpHeroId) :
-        -1;
-
-    for (const AutoPlayBoardUnit& unit : selfUnits) {
-        int score = ScoreHeroForAutoPlay(
-            unit.heroId,
-            unit.star,
-            bestGroup,
-            snapshot.recommendHeroId,
-            snapshot.starUpHeroId
-        );
-        plan.boardScore += score;
-
-        if (score > bestHeroScore) {
-            bestHeroScore = score;
-            bestHero = unit.heroId;
-        }
-    }
-
-    plan.targetHeroId = bestHero;
-    return plan;
-}
-
-// Publishes auto play board plan into atomic UI telemetry.
-void PublishAutoPlayBoardPlan(const AutoPlayBoardPlan& plan) {
-    FeatureState::AutoPlayFocusGroup = plan.focusGroup;
-    FeatureState::AutoPlayTargetHeroId = plan.targetHeroId;
-    FeatureState::AutoPlayBoardSelfUnits = plan.selfUnits;
-    FeatureState::AutoPlayBoardEnemyUnits = plan.enemyUnits;
-    FeatureState::AutoPlayContestedTargets = plan.contestedTargets;
-}
-
-// Applies auto play shop targets to the live runtime when bindings are ready.
-void ApplyAutoPlayShopTargets(const AutoPlayBoardPlan& plan, const AutoPlaySnapshot& snapshot) {
-    if (!FeatureState::AutoPlayUseShop.load()) {
-        return;
-    }
-
-    int targetHero = plan.targetHeroId > 0 ? plan.targetHeroId : snapshot.recommendHeroId;
-    if (!IsPlausibleHeroId(targetHero)) {
-        return;
-    }
-
-    HeroAutomationState state{};
-    state.selected = true;
-    state.targetCount =
-        FeatureState::AutoPlayStrategy.load() == AutoPlayStrategyAggressive ? 9 : 6;
-    SetShopHeroTarget(targetHero, state);
-}
-
-// Verifies a board cell is valid and not occupied before attempting a move.
-bool IsLikelyFreeBoardCell(
-    const std::vector<AutoPlayBoardUnit>& selfUnits,
-    int x,
-    int y,
-    uint32_t ignoreGuid
-) {
-    if (x < 0 || x > 7 || y < 0 || y > 3) {
-        return false;
-    }
-
-    if (IsBoardCellOccupied(selfUnits, x, y, ignoreGuid)) {
-        return false;
-    }
-
-    if (Originals::AStarTileMap_ValidPos) {
-        if (!TryConsumeManagedWorkUnits()) {
-            return false;
-        }
-
-        if (!Originals::AStarTileMap_ValidPos(x, y)) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-// Attempts one high-value Auto-Play formation move when the cooldown allows it.
-bool TryAutoPlaySmartFormation(
-    const AutoPlaySnapshot& snapshot,
-    const AutoPlayBoardPlan& plan,
-    const std::vector<AutoPlayBoardUnit>& selfUnits,
-    const std::vector<AutoPlayBoardUnit>& enemyUnits,
-    std::chrono::steady_clock::time_point now
-) {
-    if (!FeatureState::AutoPlayUseFormation.load() ||
-        snapshot.fightSection ||
-        !Originals::MCLogicBattleManager_MoveHeroInBattleField ||
-        !CooldownElapsed(
-            FeatureState::LastAutoPlayFormationAttempt,
-            RuntimeConfig::AutoPlayFormationCooldownMs,
-            now
-        )) {
-        return false;
-    }
-
-    void* selfManager = GetSelfLogicBattleManager();
-    if (!selfManager || selfUnits.empty()) {
-        return false;
-    }
-
-    AutoPlayFormationStats formationStats = BuildAutoPlayFormationStats(selfUnits, enemyUnits);
-    const AutoPlayBoardUnit* bestUnit = nullptr;
-    AstarInt2 bestTarget{0, 0};
-    int bestGain = 0;
-    int bestScore = -999999;
-
-    for (const AutoPlayBoardUnit& unit : selfUnits) {
-        if (unit.reserve || unit.chessPlayer || !IsValidAutoPlayBoardCell(unit.grid.x, unit.grid.y)) {
-            continue;
-        }
-
-        int currentScore = ScoreBoardCellForUnit(
-            unit,
-            unit.grid.x,
-            unit.grid.y,
-            formationStats,
-            snapshot,
-            plan
-        );
-
-        for (int y = 0; y <= 3; ++y) {
-            for (int x = 0; x <= 7; ++x) {
-                if (!IsLikelyFreeBoardCell(selfUnits, x, y, unit.guid)) {
-                    continue;
-                }
-
-                int score = ScoreBoardCellForUnit(
-                    unit,
-                    x,
-                    y,
-                    formationStats,
-                    snapshot,
-                    plan
-                );
-                int gain = score - currentScore;
-
-                if (gain > bestGain || (gain == bestGain && score > bestScore)) {
-                    bestGain = gain;
-                    bestScore = score;
-                    bestUnit = &unit;
-                    bestTarget = {x, y};
-                }
-            }
-        }
-    }
-
-    if (!bestUnit || bestGain < 18) {
-        return false;
-    }
-
-    Originals::MCLogicBattleManager_MoveHeroInBattleField(
-        selfManager,
-        bestUnit->guid,
-        static_cast<uint8_t>(bestTarget.x),
-        static_cast<uint8_t>(bestTarget.y),
-        true
-    );
-    FeatureState::LastAutoPlayFormationAttempt = now;
-    FeatureState::AutoPlayBoardMoves =
-        std::min(FeatureState::AutoPlayBoardMoves.load() + 1, 999999);
-    FeatureState::AutoPlayLastMoveHeroId = bestUnit->heroId;
-    FeatureState::AutoPlayLastMoveGain = bestGain;
-    FeatureState::AutoPlayLastMoveX = bestTarget.x;
-    FeatureState::AutoPlayLastMoveY = bestTarget.y;
-    return true;
-}
-
-// Scores auto play card so automation can choose one best action.
-int ScoreAutoPlayCard(int cardId, const AutoPlayBoardPlan& plan, const AutoPlaySnapshot& snapshot) {
-    if (cardId <= 0) {
-        return -999999;
-    }
-
-    CardTableEntry card;
-    int score = cardId % 97;
-
-    if (TryGetCardTableEntry(cardId, &card) && !card.name.empty()) {
-        if (StringIncludesCaseInsensitive(card.name, "gold") ||
-            StringIncludesCaseInsensitive(card.name, "coin")) {
-            score += snapshot.round < 10 ? 180 : 60;
-        }
-
-        if (StringIncludesCaseInsensitive(card.name, "hero") ||
-            StringIncludesCaseInsensitive(card.name, "shop")) {
-            score += 130;
-        }
-
-        if (StringIncludesCaseInsensitive(card.name, "star") ||
-            StringIncludesCaseInsensitive(card.name, "upgrade")) {
-            score += 150;
-        }
-
-        if (StringIncludesCaseInsensitive(card.name, "bond") ||
-            StringIncludesCaseInsensitive(card.name, "relation") ||
-            StringIncludesCaseInsensitive(card.name, "synergy")) {
-            score += plan.focusGroup > 0 ? 170 : 90;
-        }
-
-        if (StringIncludesCaseInsensitive(card.name, "fight") ||
-            StringIncludesCaseInsensitive(card.name, "attack") ||
-            StringIncludesCaseInsensitive(card.name, "damage")) {
-            score += snapshot.round >= 10 ? 150 : 80;
-        }
-    }
-
-    if (snapshot.hp >= 0 && snapshot.hp <= 35) {
-        score += 120;
-    }
-
-    if (snapshot.currentOpponentFightValue > snapshot.fightValue) {
-        score += 80;
-    }
-
-    return score;
-}
-
-// Publishes the best Go Go Card choice for the current Auto-Play plan.
-void ApplyAutoPlayGoGoCardChoice(
-    const AutoPlaySnapshot& snapshot,
-    const AutoPlayBoardPlan& plan
-) {
-    if (!FeatureState::AutoPlayUseGoGoCards.load() ||
-        !Originals::MCComp_GetGoGoCardComp ||
-        !Originals::MCLogicGoGoCardComp_get_m_CurrData) {
-        return;
-    }
-
-    if (!TryConsumeManagedWorkUnits(4)) {
-        return;
-    }
-
-    void* goGoCardComp = Originals::MCComp_GetGoGoCardComp(snapshot.accountId);
-    if (!goGoCardComp) {
-        return;
-    }
-
-    static FieldInfo* cardListField = nullptr;
-
-    if (!cardListField) {
-        cardListField =
-            GetFieldInfoFromName("Battle", "MCLogicGoGoCardRoundData", "m_listCurrCard");
-    }
-
-    void* currentData = Originals::MCLogicGoGoCardComp_get_m_CurrData(goGoCardComp);
-    auto* cardList = currentData ?
-        GetField<MonoStructures::List<int>*>(
-            reinterpret_cast<Il2CppObject*>(currentData),
-            cardListField
-        ) :
-        nullptr;
-    const int* cards = nullptr;
-    int cardCount = 0;
-
-    if (!TryGetManagedListData(cardList, &cards, &cardCount, 16) || cardCount <= 0) {
-        return;
-    }
-
-    std::array<std::pair<int, int>, 16> scored{};
-    int scoredCount = 0;
-    for (int i = 0; cards && i < cardCount && scoredCount < static_cast<int>(scored.size()); ++i) {
-        int cardId = cards[i];
-        scored[scoredCount++] = {ScoreAutoPlayCard(cardId, plan, snapshot), cardId};
-    }
-
-    std::sort(scored.begin(), scored.begin() + scoredCount, [](const auto& lhs, const auto& rhs) {
-        return lhs.first > rhs.first;
-    });
-
-    if (scoredCount > 0 && scored[0].second > 0) {
-        FeatureState::ArenaGogoCardEnabled = true;
-        FeatureState::ArenaGogoCardSelected1 = scored[0].second;
-        FeatureState::AutoPlayBestCardId = scored[0].second;
-    }
-
-    if (scoredCount > 1 && scored[1].second > 0) {
-        FeatureState::ArenaGogoCardSelected2 = scored[1].second;
-    }
-}
-
-// Scores auction reward item so automation can choose one best action.
-int ScoreAuctionRewardItem(void* rewardItem, const AutoPlayBoardPlan& plan, const AutoPlaySnapshot& snapshot) {
-    if (!rewardItem) {
-        return 0;
-    }
-
-    if (!TryConsumeManagedWorkUnits(4)) {
-        return 0;
-    }
-
-    static FieldInfo* itemConfField = nullptr;
-    static FieldInfo* biddingTypeField = nullptr;
-    static FieldInfo* biddingListField = nullptr;
-    static FieldInfo* biddingChangeField = nullptr;
-
-    if (!itemConfField) {
-        itemConfField =
-            GetFieldInfoFromName("Battle", "MCLogicAuctionItemBase", "<m_ItemConf>k__BackingField");
-    }
-
-    if (!biddingTypeField) {
-        biddingTypeField = GetFieldInfoFromName("", "CData_AuctionItem_Element", "m_BiddingType");
-    }
-
-    if (!biddingListField) {
-        biddingListField = GetFieldInfoFromName("", "CData_AuctionItem_Element", "m_BiddingList");
-    }
-
-    if (!biddingChangeField) {
-        biddingChangeField =
-            GetFieldInfoFromName("", "CData_AuctionItem_Element", "m_BiddingChange");
-    }
-
-    void* itemConf = GetField<void*>(reinterpret_cast<Il2CppObject*>(rewardItem), itemConfField);
-    if (!itemConf) {
-        return 0;
-    }
-
-    int type = GetField<int>(reinterpret_cast<Il2CppObject*>(itemConf), biddingTypeField);
-    auto* biddingList = GetField<MonoStructures::Array<int>*>(
-        reinterpret_cast<Il2CppObject*>(itemConf),
-        biddingListField
-    );
-    auto* biddingChange = GetField<MonoStructures::Array<int>*>(
-        reinterpret_cast<Il2CppObject*>(itemConf),
-        biddingChangeField
-    );
-    const int* values = nullptr;
-    int valueCount = 0;
-    int score = type * 35;
-
-    if (TryGetManagedArrayData(biddingList, &values, &valueCount, 16)) {
-        for (int i = 0; values && i < valueCount; ++i) {
-            int value = values[i];
-
-            if (type == 2 && IsPlausibleHeroId(value)) {
-                score += ScoreHeroForAutoPlay(
-                    value,
-                    1,
-                    plan.focusGroup,
-                    snapshot.recommendHeroId,
-                    snapshot.starUpHeroId
-                );
-            } else if (type == 1) {
-                EquipTableEntry equip;
-                score += TryGetEquipTableEntry(value, &equip) ? 150 : 80;
-            } else {
-                score += 90;
-            }
-        }
-    }
-
-    const int* changes = nullptr;
-    int changeCount = 0;
-    if (TryGetManagedArrayData(biddingChange, &changes, &changeCount, 16)) {
-        for (int i = 0; changes && i < changeCount; ++i) {
-            if (changes[i] == 1 || changes[i] == 2) {
-                score += plan.targetHeroId > 0 ? 220 : 120;
-            } else if (changes[i] == 3 || changes[i] == 4) {
-                score += 140;
-            }
-        }
-    }
-
-    return score;
-}
-
-// Evaluates auction slots and bids only when the gold plan allows spending.
-bool TryAutoPlayAuction(
-    const AutoPlaySnapshot& snapshot,
-    const AutoPlayBoardPlan& plan,
-    const AutoPlayGoldPlan& goldPlan,
-    std::chrono::steady_clock::time_point now
-) {
-    if (!FeatureState::AutoPlayUseAuction.load() ||
-        snapshot.accountId == 0 ||
-        !Originals::MCLogicBattleData_get_logicRoundMgr ||
-        !Originals::LogicRoundMgr_get_m_AuctionComp ||
-        !Originals::MCLogicAuctionComp_get_m_CurrPhase ||
-        !Originals::MCLogicAuctionComp_Bid ||
-        !Originals::MCLogicAuctionComp_GetSelectItemIndexByAccId ||
-        !CooldownElapsed(
-            FeatureState::LastAutoPlayAuctionAttempt,
-            RuntimeConfig::AutoPlayAuctionCooldownMs,
-            now
-        )) {
-        return false;
-    }
-
-    if (!TryConsumeManagedWorkUnits(5)) {
-        return false;
-    }
-
-    void* roundMgr = Originals::MCLogicBattleData_get_logicRoundMgr(nullptr);
-    void* auctionComp = roundMgr ? Originals::LogicRoundMgr_get_m_AuctionComp(roundMgr) : nullptr;
-    if (!auctionComp) {
-        return false;
-    }
-
-    int phase = Originals::MCLogicAuctionComp_get_m_CurrPhase(auctionComp);
-    if (phase != 3) {
-        return false;
-    }
-
-    if (Originals::MCLogicAuctionComp_GetSelectItemIndexByAccId(
-            auctionComp,
-            snapshot.accountId
-        ) >= 0) {
-        return false;
-    }
-
-    static FieldInfo* auctionItemListField = nullptr;
-    static FieldInfo* indexField = nullptr;
-    static FieldInfo* nextBidField = nullptr;
-    static FieldInfo* activeField = nullptr;
-    static FieldInfo* rewardListField = nullptr;
-
-    if (!auctionItemListField) {
-        auctionItemListField =
-            GetFieldInfoFromName("Battle", "MCLogicAuctionComp", "auctionItemList");
-    }
-
-    if (!indexField) {
-        indexField =
-            GetFieldInfoFromName("Battle", "MCLogicAuctionSlotInfo", "<m_ItemIndex>k__BackingField");
-    }
-
-    if (!nextBidField) {
-        nextBidField =
-            GetFieldInfoFromName("Battle", "MCLogicAuctionSlotInfo", "<m_iBidPrice>k__BackingField");
-    }
-
-    if (!activeField) {
-        activeField =
-            GetFieldInfoFromName("Battle", "MCLogicAuctionSlotInfo", "<active>k__BackingField");
-    }
-
-    if (!rewardListField) {
-        rewardListField = GetFieldInfoFromName(
-            "Battle",
-            "MCLogicAuctionSlotInfo",
-            "m_RewardItemList"
-        );
-    }
-
-    auto* auctionItems = GetField<MonoStructures::List<void*>*>(
-        reinterpret_cast<Il2CppObject*>(auctionComp),
-        auctionItemListField
-    );
-    void* const* slots = nullptr;
-    int slotCount = 0;
-
-    if (!TryGetManagedListData(auctionItems, &slots, &slotCount, 16)) {
-        return false;
-    }
-
-    void* bestSlot = nullptr;
-    int bestIndex = -1;
-    int bestBid = 0;
-    int bestScore = -999999;
-
-    for (int i = 0; slots && i < slotCount; ++i) {
-        void* slot = slots[i];
-        if (!slot) {
-            continue;
-        }
-
-        if (!TryConsumeManagedWorkUnits(5)) {
-            break;
-        }
-
-        if (!GetField<bool>(reinterpret_cast<Il2CppObject*>(slot), activeField)) {
-            continue;
-        }
-
-        int bidPrice = GetField<int>(reinterpret_cast<Il2CppObject*>(slot), nextBidField);
-        if (snapshot.coin >= 0 && bidPrice > std::max(snapshot.coin, 0)) {
-            continue;
-        }
-
-        if (bidPrice > goldPlan.maxAuctionBid) {
-            continue;
-        }
-
-        int score = 0;
-        auto* rewardList = GetField<MonoStructures::List<void*>*>(
-            reinterpret_cast<Il2CppObject*>(slot),
-            rewardListField
-        );
-        void* const* rewards = nullptr;
-        int rewardCount = 0;
-
-        if (TryGetManagedListData(rewardList, &rewards, &rewardCount, 8)) {
-            for (int rewardIndex = 0; rewards && rewardIndex < rewardCount; ++rewardIndex) {
-                score += ScoreAuctionRewardItem(rewards[rewardIndex], plan, snapshot);
-            }
-        }
-
-        score -= bidPrice * (snapshot.round < 10 ? 4 : 2);
-        if (snapshot.hp >= 0 && snapshot.hp <= 40) {
-            score += 100;
-        }
-
-        if (score > bestScore) {
-            bestScore = score;
-            bestSlot = slot;
-            bestIndex = GetField<int>(reinterpret_cast<Il2CppObject*>(slot), indexField);
-            bestBid = bidPrice;
-        }
-    }
-
-    if (!bestSlot || bestScore < 120) {
-        return false;
-    }
-
-    if (!TryConsumeManagedWorkUnits()) {
-        return false;
-    }
-
-    bool bidAccepted = Originals::MCLogicAuctionComp_Bid(
-        auctionComp,
-        bestSlot,
-        snapshot.accountId,
-        static_cast<uint32_t>(std::max(bestBid, 0))
-    );
-    FeatureState::LastAutoPlayAuctionAttempt = now;
-    if (!bidAccepted) {
-        return false;
-    }
-
-    FeatureState::AutoPlayBestAuctionIndex = bestIndex;
-    FeatureState::AutoPlayBestAuctionScore = bestScore;
-    return true;
-}
-
-// Reads auto play snapshot into a bounded native snapshot.
-AutoPlaySnapshot ReadAutoPlaySnapshot(uint64_t selfAccountId) {
-    AutoPlaySnapshot snapshot{};
-    snapshot.accountId = selfAccountId;
-
-    if (!IsIl2CppRuntimeReady() || selfAccountId == 0) {
-        PublishAutoPlaySnapshotTelemetry(snapshot, false);
-        return snapshot;
-    }
-
-    if (!TryConsumeManagedWorkUnits(20)) {
-        PublishAutoPlaySnapshotTelemetry(snapshot, false);
-        return snapshot;
-    }
-
-    if (Originals::MCLogicBattleData_ILOGIC_GetGameRound) {
-        snapshot.round =
-            static_cast<int>(Originals::MCLogicBattleData_ILOGIC_GetGameRound(nullptr));
-    }
-
-    if (Originals::MCLogicBattleData_ILOGIC_GetGamePhase) {
-        snapshot.phase = Originals::MCLogicBattleData_ILOGIC_GetGamePhase(nullptr);
-    }
-
-    if (Originals::MCLogicBattleData_ILOGIC_GetPlayerHP) {
-        snapshot.hp = Originals::MCLogicBattleData_ILOGIC_GetPlayerHP(nullptr, selfAccountId);
-    }
-
-    if (Originals::MCLogicBattleData_ILOGIC_GetPlayerCoin) {
-        snapshot.coin =
-            Originals::MCLogicBattleData_ILOGIC_GetPlayerCoin(nullptr, selfAccountId);
-    }
-
-    if (Originals::MCLogicBattleData_ILOGIC_GetPlayerLevel) {
-        snapshot.level =
-            Originals::MCLogicBattleData_ILOGIC_GetPlayerLevel(nullptr, selfAccountId);
-    }
-
-    if (Originals::MCLogicBattleData_ILOGIC_SelfCurPopulation) {
-        snapshot.currentPopulation =
-            Originals::MCLogicBattleData_ILOGIC_SelfCurPopulation(nullptr);
-    }
-
-    if (Originals::MCLogicBattleData_ILOGIC_SelfTotalPopulation) {
-        snapshot.totalPopulation =
-            Originals::MCLogicBattleData_ILOGIC_SelfTotalPopulation(nullptr);
-    }
-
-    if (Originals::MCLogicBattleData_ILOGIC_GetSpareChessNum) {
-        snapshot.spareChess =
-            Originals::MCLogicBattleData_ILOGIC_GetSpareChessNum(nullptr);
-    }
-
-    if (Originals::MCLogicBattleData_ILOGIC_GetBattleHeroNum) {
-        snapshot.battleHeroCount =
-            Originals::MCLogicBattleData_ILOGIC_GetBattleHeroNum(nullptr, selfAccountId);
-    }
-
-    if (Originals::MCLogicBattleData_ILOGIC_GetAllHeroNum) {
-        snapshot.allHeroCount =
-            Originals::MCLogicBattleData_ILOGIC_GetAllHeroNum(nullptr, selfAccountId);
-    }
-
-    if (Originals::MCLogicBattleData_ILOGIC_GetCurRefreshShopLevel) {
-        snapshot.shopLevel =
-            Originals::MCLogicBattleData_ILOGIC_GetCurRefreshShopLevel(nullptr, selfAccountId);
-    }
-
-    if (Originals::MCLogicBattleData_ILOGIC_GetRefreshCost) {
-        snapshot.refreshCost =
-            Originals::MCLogicBattleData_ILOGIC_GetRefreshCost(nullptr, selfAccountId);
-    }
-
-    if (Originals::MCLogicBattleData_ILOGIC_GetHeroByRecommendLineup) {
-        snapshot.recommendHeroId =
-            Originals::MCLogicBattleData_ILOGIC_GetHeroByRecommendLineup(nullptr);
-    }
-
-    if (Originals::MCLogicBattleData_ILOGIC_GetHeroByStarUp) {
-        snapshot.starUpHeroId =
-            Originals::MCLogicBattleData_ILOGIC_GetHeroByStarUp(nullptr);
-    }
-
-    if (Originals::MCLogicBattleData_ILOGIC_IsFightSection) {
-        snapshot.fightSection =
-            Originals::MCLogicBattleData_ILOGIC_IsFightSection(nullptr);
-    }
-
-    if (Originals::MCLogicBattleData_ILOGIC_IsFightResultSection) {
-        snapshot.fightResultSection =
-            Originals::MCLogicBattleData_ILOGIC_IsFightResultSection(nullptr);
-    }
-
-    if (Originals::MCLogicBattleData_ILOGIC_GetIsMonsterRound) {
-        snapshot.monsterRound =
-            Originals::MCLogicBattleData_ILOGIC_GetIsMonsterRound(nullptr);
-    }
-
-    void* selfManager = GetSelfLogicBattleManager();
-    if (selfManager && Originals::MCLogicBattleManager_GetLineupWorth) {
-        snapshot.lineupWorth = Originals::MCLogicBattleManager_GetLineupWorth(selfManager);
-    }
-
-    if (selfManager && Originals::MCLogicBattleManager_CalcCurrentFightValue) {
-        snapshot.fightValue =
-            Originals::MCLogicBattleManager_CalcCurrentFightValue(selfManager);
-    }
-
-    if (Originals::MCLogicBattleData_ILOGIC_GetCurrentOpponentAccountID) {
-        snapshot.currentOpponentId =
-            Originals::MCLogicBattleData_ILOGIC_GetCurrentOpponentAccountID(
-                nullptr,
-                selfAccountId
-            );
-    }
-
-    if (Originals::MCLogicBattleData_ILOGIC_GetAllBattleMgr) {
-        auto* battleManagers = Originals::MCLogicBattleData_ILOGIC_GetAllBattleMgr(nullptr);
-
-        for (const auto& item : CopyDictionaryEntries(battleManagers, 16)) {
-            uint64_t accountId = item.first;
-            void* manager = item.second;
-
-            if (accountId == 0 || accountId == selfAccountId || !manager) {
-                continue;
-            }
-
-            if (!TryConsumeManagedWorkUnits(4)) {
-                break;
-            }
-
-            snapshot.opponentCount++;
-
-            int opponentFightValue = Originals::MCLogicBattleManager_CalcCurrentFightValue ?
-                Originals::MCLogicBattleManager_CalcCurrentFightValue(manager) :
-                -1;
-
-            if (opponentFightValue > snapshot.strongestOpponentFightValue) {
-                snapshot.strongestOpponentFightValue = opponentFightValue;
-            }
-
-            if (accountId == snapshot.currentOpponentId) {
-                snapshot.currentOpponentFightValue = opponentFightValue;
-            }
-
-            if (Originals::MCLogicBattleData_ILogic_HeroOwnCount) {
-                bool ownsTarget = false;
-
-                if (snapshot.recommendHeroId > 0 &&
-                    Originals::MCLogicBattleData_ILogic_HeroOwnCount(
-                        nullptr,
-                        accountId,
-                        snapshot.recommendHeroId
-                    ) > 0) {
-                    ownsTarget = true;
-                }
-
-                if (snapshot.starUpHeroId > 0 &&
-                    snapshot.starUpHeroId != snapshot.recommendHeroId &&
-                    Originals::MCLogicBattleData_ILogic_HeroOwnCount(
-                        nullptr,
-                        accountId,
-                        snapshot.starUpHeroId
-                    ) > 0) {
-                    ownsTarget = true;
-                }
-
-                if (ownsTarget) {
-                    snapshot.contestedTargetOwners++;
-                }
-            }
-        }
-    }
-
-    FeatureState::AutoPlayOpponentCount = snapshot.opponentCount;
-    FeatureState::AutoPlayCurrentOpponentId = snapshot.currentOpponentId;
-    FeatureState::AutoPlayStrongestOpponentFightValue =
-        std::max(snapshot.strongestOpponentFightValue, 0);
-    FeatureState::AutoPlayContestedTargets = snapshot.contestedTargetOwners;
-    PublishAutoPlaySnapshotTelemetry(snapshot, snapshot.round > 0);
-
-    return snapshot;
-}
-
-// Coordinates update auto play learning for the overlay runtime.
-int UpdateAutoPlayLearning(const AutoPlaySnapshot& snapshot) {
-    int pressure = std::clamp(FeatureState::AutoPlayPressure.load(), 0, 100);
-
-    if (snapshot.accountId == 0 || snapshot.round <= 0) {
-        FeatureState::AutoPlayPressure = pressure;
-        return pressure;
-    }
-
-    int lastRound = FeatureState::AutoPlayLastRound.load();
-    int lastHp = FeatureState::AutoPlayLastHp.load();
-
-    if (lastRound != snapshot.round) {
-        if (lastRound > 0 && lastHp >= 0 && snapshot.hp >= 0) {
-            int hpDelta = lastHp - snapshot.hp;
-            pressure += hpDelta > 0 ? std::clamp(10 + hpDelta, 10, 35) : -4;
-        }
-
-        if (snapshot.hp >= 0 && snapshot.hp <= 30) {
-            pressure += 20;
-        }
-
-        if (snapshot.round >= 15) {
-            pressure += 8;
-        }
-
-        if (snapshot.currentOpponentFightValue > 0 &&
-            snapshot.fightValue > 0 &&
-            snapshot.currentOpponentFightValue > snapshot.fightValue) {
-            pressure += 10;
-        }
-
-        if (snapshot.strongestOpponentFightValue > 0 &&
-            snapshot.fightValue > 0 &&
-            snapshot.strongestOpponentFightValue > snapshot.fightValue + 1000) {
-            pressure += 8;
-        }
-
-        if (snapshot.coin >= 50 && snapshot.hp >= 50 && snapshot.round < 12) {
-            pressure -= 8;
-        }
-
-        FeatureState::AutoPlayLastRound = snapshot.round;
-        FeatureState::AutoPlayLastHp = snapshot.hp;
-        FeatureState::AutoPlayLearnedRounds =
-            std::min(FeatureState::AutoPlayLearnedRounds.load() + 1, 999999);
-    } else if (snapshot.hp >= 0) {
-        FeatureState::AutoPlayLastHp = snapshot.hp;
-    }
-
-    pressure = std::clamp(pressure, 0, 100);
-    FeatureState::AutoPlayPressure = pressure;
-    return pressure;
-}
-
-// Selects auto play strategy from the current safe runtime options.
-int SelectAutoPlayStrategy(const AutoPlaySnapshot& snapshot, int pressure) {
-    int strategy = ClampAutoPlayStrategy(FeatureState::AutoPlayStrategy.load());
-
-    if (FeatureState::AutoPlayAdaptive.load()) {
-        if (pressure >= 55 ||
-            (snapshot.hp >= 0 && snapshot.hp <= 35) ||
-            (snapshot.currentOpponentFightValue > 0 &&
-             snapshot.fightValue > 0 &&
-             snapshot.currentOpponentFightValue > snapshot.fightValue) ||
-            snapshot.round >= 16) {
-            strategy = AutoPlayStrategyAggressive;
-        } else if (pressure <= 20 &&
-                   snapshot.round > 0 &&
-                   snapshot.round < 10 &&
-                   snapshot.coin >= 50 &&
-                   (snapshot.hp < 0 || snapshot.hp >= 60)) {
-            strategy = AutoPlayStrategyEconomy;
-        } else {
-            strategy = AutoPlayStrategyBalanced;
-        }
-    }
-
-    int previousStrategy = ClampAutoPlayStrategy(FeatureState::AutoPlayStrategy.load());
-    if (strategy != previousStrategy) {
-        FeatureState::AutoPlayStrategyChanges =
-            std::min(FeatureState::AutoPlayStrategyChanges.load() + 1, 999999);
-    }
-
-    FeatureState::AutoPlayStrategy = strategy;
-    return strategy;
-}
-
-// Converts combat pressure into economy pressure so gold plans can protect
-// interest tiers until survival or population needs justify spending down.
-int EstimateAutoPlayGoldThreat(const AutoPlaySnapshot& snapshot, int pressure) {
-    int threat = std::clamp(pressure, 0, 100);
-
-    if (snapshot.hp >= 0) {
-        if (snapshot.hp <= 25) {
-            threat += 35;
-        } else if (snapshot.hp <= 40) {
-            threat += 22;
-        } else if (snapshot.hp <= 55) {
-            threat += 10;
-        }
-    }
-
-    int opponentValue = std::max(
-        snapshot.currentOpponentFightValue,
-        snapshot.strongestOpponentFightValue
-    );
-    if (opponentValue > 0 && snapshot.fightValue > 0 && opponentValue > snapshot.fightValue) {
-        int deficit = std::min(opponentValue - snapshot.fightValue, 50000);
-        threat += std::clamp(deficit / 700, 6, 28);
-    }
-
-    if (snapshot.round >= 18) {
-        threat += 22;
-    } else if (snapshot.round >= 14) {
-        threat += 12;
-    } else if (snapshot.round > 0 && snapshot.round <= 8) {
-        threat -= 8;
-    }
-
-    return std::clamp(threat, 0, 100);
-}
-
-// Computes auto play needs population gold data for the Auto-Play controller.
-bool AutoPlayNeedsPopulationGold(const AutoPlaySnapshot& snapshot) {
-    if (snapshot.currentPopulation < 0 || snapshot.totalPopulation <= 0) {
-        return false;
-    }
-
-    if (snapshot.currentPopulation >= snapshot.totalPopulation) {
-        return true;
-    }
-
-    return snapshot.spareChess > 2 &&
-        snapshot.currentPopulation + 1 >= snapshot.totalPopulation;
-}
-
-// Builds one bounded economy plan for shop, auction, arena assists, and level-up
-// actions so they do not fight over gold interest breakpoints independently.
-AutoPlayGoldPlan BuildAutoPlayGoldPlan(
-    const AutoPlaySnapshot& snapshot,
-    int strategy,
-    int pressure
-) {
-    AutoPlayGoldPlan plan{};
-    strategy = ClampAutoPlayStrategy(strategy);
-
-    int configuredReserve =
-        std::clamp(FeatureState::AutoPlayMinReserveGold.load(), 0, 999999);
-    bool hasCoin = snapshot.coin >= 0;
-    int coin = hasCoin ? ClampAutoPlayGold(snapshot.coin, 999999999) : configuredReserve;
-    int threat = EstimateAutoPlayGoldThreat(snapshot, pressure);
-    int tier = AutoPlayInterestTierForGold(coin);
-    int currentInterestFloor = AutoPlayInterestFloorForTier(tier);
-    int nextInterestGold = AutoPlayNextInterestGoldForGold(coin);
-    int nextInterestGap = hasCoin ? nextInterestGold - coin : 999999;
-    bool earlyOrMidGame = snapshot.round <= 0 || snapshot.round <= 14;
-    bool healthyEnough = snapshot.hp < 0 || snapshot.hp >= 45;
-    bool canBank =
-        strategy != AutoPlayStrategyAggressive &&
-        earlyOrMidGame &&
-        healthyEnough &&
-        threat < (strategy == AutoPlayStrategyEconomy ? 72 : 54);
-    int reserve = configuredReserve;
-    int levelReserve = configuredReserve;
-
-    if (strategy == AutoPlayStrategyEconomy) {
-        reserve = std::max(reserve, 40);
-        if (canBank) {
-            reserve = std::max(reserve, 50);
-        }
-    } else if (strategy == AutoPlayStrategyAggressive) {
-        reserve = std::min(reserve, threat >= 70 ? 0 : 8);
-    } else {
-        reserve = std::max(reserve, snapshot.round >= 12 ? 10 : 20);
-    }
-
-    if (canBank) {
-        int chaseWindow = strategy == AutoPlayStrategyEconomy ? 8 : 4;
-        if (tier < 5 && nextInterestGap > 0 && nextInterestGap <= chaseWindow) {
-            reserve = std::max(reserve, nextInterestGold);
-            plan.holdForInterest = true;
-        } else if (tier > 0) {
-            reserve = std::max(reserve, currentInterestFloor);
-        }
-    }
-
-    if (threat >= 80) {
-        reserve = std::min(reserve, configuredReserve);
-    } else if (threat >= 65) {
-        reserve = std::min(reserve, std::max(configuredReserve, currentInterestFloor - 10));
-    } else if (threat >= 50 && strategy != AutoPlayStrategyEconomy) {
-        reserve = std::min(reserve, std::max(configuredReserve, currentInterestFloor));
-    }
-
-    reserve = std::clamp(reserve, 0, 999999);
-    if (hasCoin && coin < reserve) {
-        plan.holdForInterest = true;
-    }
-
-    bool populationPressure = AutoPlayNeedsPopulationGold(snapshot);
-    levelReserve = reserve;
-    if (populationPressure || snapshot.round >= 12) {
-        levelReserve = std::min(levelReserve, currentInterestFloor);
-    }
-    if (strategy == AutoPlayStrategyAggressive || threat >= 75) {
-        levelReserve = 0;
-    }
-    levelReserve = std::clamp(levelReserve, 0, 999999);
-
-    int auctionReserve = reserve;
-    if (snapshot.round >= 14 || threat >= 65) {
-        auctionReserve = std::min(auctionReserve, levelReserve);
-    }
-    if (strategy == AutoPlayStrategyAggressive || threat >= 80) {
-        auctionReserve = 0;
-    }
-
-    int spendBudget = hasCoin ? std::max(coin - reserve, 0) : 0;
-    int maxAuctionBid = hasCoin ? std::max(coin - auctionReserve, 0) : 999999;
-    int recommendationTarget = 6;
-    bool critical = threat >= 75 || (snapshot.hp >= 0 && snapshot.hp <= 35);
-
-    if (strategy == AutoPlayStrategyEconomy) {
-        recommendationTarget = 6;
-    } else if (strategy == AutoPlayStrategyAggressive) {
-        recommendationTarget = 9;
-    } else {
-        recommendationTarget = (critical || snapshot.round >= 10) ? 9 : 6;
-    }
-
-    plan.interestTier = tier;
-    plan.nextInterestGold = nextInterestGold;
-    plan.reserveGold = reserve;
-    plan.levelReserveGold = levelReserve;
-    plan.spendBudget = spendBudget;
-    plan.recommendationTarget = std::clamp(recommendationTarget, 1, 99);
-    plan.maxAuctionBid = std::clamp(maxAuctionBid, 0, 999999999);
-    plan.forceLevel =
-        strategy == AutoPlayStrategyAggressive ||
-        critical ||
-        populationPressure ||
-        snapshot.round >= 12;
-
-    return plan;
-}
-
-// Publishes auto play gold plan into atomic UI telemetry.
-void PublishAutoPlayGoldPlan(const AutoPlayGoldPlan& plan) {
-    FeatureState::AutoPlayInterestTier = plan.interestTier;
-    FeatureState::AutoPlayInterestNextGold = plan.nextInterestGold;
-    FeatureState::AutoPlayInterestReserveGold = plan.reserveGold;
-    FeatureState::AutoPlaySpendBudget = plan.spendBudget;
-    FeatureState::AutoPlayHoldInterest = plan.holdForInterest;
-}
-
-// Applies Auto-Play ownership of Shop, Combat, and Arena assist toggles.
-void ApplyAutoPlayPolicy(
-    const AutoPlaySnapshot& snapshot,
-    int strategy,
-    const AutoPlayGoldPlan& goldPlan
-) {
-    CaptureAutoPlayPolicyBackup();
-
-    int reserve = goldPlan.reserveGold;
-    int recommendationTarget = goldPlan.recommendationTarget;
-
-    if (FeatureState::AutoPlayUseShop.load()) {
-        FeatureState::ShopBuyFreeHero = true;
-        FeatureState::ShopBuySelectedHero = true;
-        FeatureState::ShopBuyRecommendLineup = true;
-        FeatureState::ShopRefresh = true;
-        FeatureState::ShopStopRefreshAtFreeHero = true;
-        FeatureState::ShopStopRefreshAtSelectedHero = true;
-        FeatureState::ShopStopRefreshAtRecommendLineup = true;
-        FeatureState::ShopKeepGold = true;
-        FeatureState::ShopKeepGoldAt = reserve;
-        FeatureState::ShopRecommendTargetCount = recommendationTarget;
-    }
-
-    if (FeatureState::AutoPlayUseArenaAssist.load()) {
-        FeatureState::ArenaForceActiveSynergy = true;
-        FeatureState::ArenaForceLevel99 =
-            FeatureState::AutoPlayUseEconomy.load() &&
-            goldPlan.forceLevel;
-        FeatureState::ArenaAllEnemyHpOne =
-            strategy == AutoPlayStrategyAggressive ||
-            (snapshot.hp >= 0 && snapshot.hp <= 35);
-    }
-
-    if (FeatureState::AutoPlayUseCombat.load()) {
-        FeatureState::CombatPreventHpLoss = true;
-        FeatureState::CombatBoostAttackRatio = true;
-        FeatureState::CombatAttackRatioPercent =
-            strategy == AutoPlayStrategyAggressive ? 10000 : 5000;
-        FeatureState::CombatFightValue =
-            strategy == AutoPlayStrategyAggressive ? 999999999 : 500000000;
-        FeatureState::CombatForceWin =
-            strategy == AutoPlayStrategyAggressive ||
-            snapshot.round >= 8 ||
-            (snapshot.hp >= 0 && snapshot.hp <= 60);
-        FeatureState::CombatCrippleEnemies =
-            strategy == AutoPlayStrategyAggressive ||
-            (snapshot.hp >= 0 && snapshot.hp <= 45);
-        FeatureState::CombatEnemyAttackRatioPercent =
-            strategy == AutoPlayStrategyAggressive ? 0 : 1;
-    }
-}
-
-// Stops built in auto play ai and restores owned runtime state.
-void StopBuiltInAutoPlayAI(uint64_t selfAccountId) {
-    void* selfManager =
-        selfAccountId != 0 ? GetBattleManagerByAccountId(selfAccountId) : GetSelfLogicBattleManager();
-
-    if (FeatureState::AutoPlayBuiltInAiRunning.load() &&
-        selfManager &&
-        Originals::MCLogicBattleManager_StopAI) {
-        Originals::MCLogicBattleManager_StopAI(selfManager);
-    }
-
-    FeatureState::AutoPlayBuiltInAiRunning = false;
-    FeatureState::AutoPlayLastAiStartAccountId = 0;
-}
-
-// Stops auto play runtime and restores owned runtime state.
-void StopAutoPlayRuntime(uint64_t selfAccountId) {
-    StopBuiltInAutoPlayAI(selfAccountId);
-    RestoreAutoPlayPolicyBackup();
-    FeatureState::AutoPlayWasRunning = false;
-}
-
-// Checks whether it is safe to call the game's built-in AI entry points.
-bool IsAutoPlayBuiltInAiSafePhase(const AutoPlaySnapshot& snapshot) {
-    if (snapshot.fightSection || snapshot.fightResultSection || snapshot.monsterRound) {
-        return false;
-    }
-
-    if (snapshot.phase < 0) {
-        return true;
-    }
-
-    return snapshot.phase == GamePhasePrepare ||
-        snapshot.phase == GamePhaseWelfare ||
-        snapshot.phase == GamePhaseForecast ||
-        snapshot.phase == GamePhaseRegionPick ||
-        snapshot.phase == GamePhaseAuction;
-}
-
-// Starts or refreshes the built-in AI on cooldown without replaying it every tick.
-void RunBuiltInAutoPlayAI(
-    uint64_t selfAccountId,
-    const AutoPlaySnapshot& snapshot,
-    std::chrono::steady_clock::time_point now
-) {
-    if (!FeatureState::AutoPlayUseBuiltInAI.load()) {
-        StopBuiltInAutoPlayAI(selfAccountId);
-        return;
-    }
-
-    void* selfManager = GetSelfLogicBattleManager();
-    if (!selfManager) {
-        return;
-    }
-
-    if (!IsAutoPlayBuiltInAiSafePhase(snapshot)) {
-        return;
-    }
-
-    uint64_t lastAiAccountId = FeatureState::AutoPlayLastAiStartAccountId.load();
-    bool aiRunningForAccount =
-        FeatureState::AutoPlayBuiltInAiRunning.load() &&
-        lastAiAccountId == selfAccountId;
-    bool needsStart = !aiRunningForAccount;
-    bool startCooldownElapsed = CooldownElapsed(
-        FeatureState::LastAutoPlayAiStartAttempt,
-        RuntimeConfig::AutoPlayAiStartCooldownMs,
-        now
-    );
-    bool refreshCooldownElapsed = CooldownElapsed(
-        FeatureState::LastAutoPlayAiStartAttempt,
-        RuntimeConfig::AutoPlayAiRefreshMs,
-        now
-    );
-
-    if (Originals::MCLogicBattleManager_StartAI &&
-        ((needsStart && startCooldownElapsed) ||
-         (!needsStart && refreshCooldownElapsed))) {
-        if (!TryConsumeManagedWorkUnits()) {
-            return;
-        }
-
-        int difficulty = std::clamp(FeatureState::AutoPlayAiDifficulty.load(), 1, 10);
-        FeatureState::AutoPlayAiDifficulty = difficulty;
-        Originals::MCLogicBattleManager_StartAI(selfManager, difficulty);
-        FeatureState::AutoPlayBuiltInAiRunning = true;
-        FeatureState::AutoPlayLastAiStartAccountId = selfAccountId;
-        FeatureState::LastAutoPlayAiStartAttempt = now;
-    }
-
-    if (!snapshot.fightSection &&
-        Originals::MCLogicBattleManager_TryAutoDeploy &&
-        CooldownElapsed(
-            FeatureState::LastAutoPlayDeployAttempt,
-            RuntimeConfig::AutoPlayDeployCooldownMs,
-            now
-        )) {
-        if (!TryConsumeManagedWorkUnits()) {
-            return;
-        }
-
-        Originals::MCLogicBattleManager_TryAutoDeploy(selfManager);
-        FeatureState::LastAutoPlayDeployAttempt = now;
-    }
-}
-
-// Triggers a level-up only when population pressure, budget, and cooldown all allow it.
-void TryAutoPlayLevelUp(
-    const AutoPlaySnapshot& snapshot,
-    const AutoPlayGoldPlan& goldPlan,
-    std::chrono::steady_clock::time_point now
-) {
-    if (!FeatureState::AutoPlayUseEconomy.load() ||
-        FeatureState::ArenaForceLevel99.load() ||
-        snapshot.fightSection ||
-        snapshot.accountId == 0 ||
-        snapshot.level <= 0 ||
-        snapshot.coin < 0 ||
-        !Originals::MCLogicBattleManager_OnPlayerLvlUp ||
-        !Originals::MCLogicBattleData_ILOGIC_GetUpgradeCost ||
-        !Originals::MCLogicBattleData_ILOGIC_CanUpgrade ||
-        !CooldownElapsed(
-            FeatureState::LastAutoPlayLevelAttempt,
-            RuntimeConfig::AutoPlayLevelCooldownMs,
-            now
-        )) {
-        return;
-    }
-
-    int targetLevel = std::clamp(FeatureState::AutoPlayTargetLevel.load(), 1, 99);
-    FeatureState::AutoPlayTargetLevel = targetLevel;
-
-    if (snapshot.level >= targetLevel) {
-        return;
-    }
-
-    if (!TryConsumeManagedWorkUnits(3)) {
-        return;
-    }
-
-    int upgradeCost =
-        Originals::MCLogicBattleData_ILOGIC_GetUpgradeCost(nullptr, snapshot.accountId);
-
-    if (upgradeCost < 0 || snapshot.coin < upgradeCost) {
-        return;
-    }
-
-    if (!Originals::MCLogicBattleData_ILOGIC_CanUpgrade(
-            nullptr,
-            snapshot.accountId,
-            snapshot.coin
-        )) {
-        return;
-    }
-
-    if (snapshot.coin - upgradeCost < goldPlan.levelReserveGold) {
-        return;
-    }
-
-    void* selfManager = GetSelfLogicBattleManager();
-    if (!selfManager) {
-        return;
-    }
-
-    Originals::MCLogicBattleManager_OnPlayerLvlUp(selfManager);
-    FeatureState::LastAutoPlayLevelAttempt = now;
-}
-
-// Checks whether the Auto-Play snapshot has enough live battle data to act on.
-bool IsAutoPlaySnapshotActionable(const AutoPlaySnapshot& snapshot) {
-    return snapshot.accountId != 0 &&
-        snapshot.round > 0 &&
-        snapshot.hp > 0 &&
-        snapshot.coin >= 0 &&
-        snapshot.level > 0;
-}
-
-// Runs one Auto-Play controller tick and defers lower-priority work on busy frames.
-void RunAutoPlay(
-    uint64_t selfAccountId,
-    std::chrono::steady_clock::time_point now,
-    std::chrono::steady_clock::time_point frameStart = {}
-) {
-    if (!FeatureState::AutoPlayEnabled.load()) {
-        if (FeatureState::AutoPlayWasRunning.load()) {
-            StopAutoPlayRuntime(selfAccountId);
-        }
-        return;
-    }
-
-    if (!IsIl2CppRuntimeReady()) {
-        return;
-    }
-
-    if (selfAccountId == 0) {
-        if (FeatureState::AutoPlayWasRunning.load()) {
-            StopAutoPlayRuntime(0);
-        }
-        return;
-    }
-
-    auto budgetExceeded = [&frameStart]() {
-        return frameStart.time_since_epoch().count() != 0 &&
-            FeatureWorkBudgetExceeded(frameStart);
-    };
-
-    if (budgetExceeded()) {
-        return;
-    }
-
-    AutoPlaySnapshot snapshot = ReadAutoPlaySnapshot(selfAccountId);
-    if (!IsAutoPlaySnapshotActionable(snapshot)) {
-        StopAutoPlayRuntime(selfAccountId);
-        return;
-    }
-
-    if (budgetExceeded()) {
-        return;
-    }
-
-    int pressure = UpdateAutoPlayLearning(snapshot);
-    int strategy = SelectAutoPlayStrategy(snapshot, pressure);
-    AutoPlayGoldPlan goldPlan = BuildAutoPlayGoldPlan(snapshot, strategy, pressure);
-    std::vector<AutoPlayBoardUnit> selfUnits = CollectAutoPlayBoardUnits(GetSelfLogicBattleManager());
-    std::vector<AutoPlayBoardUnit> enemyUnits;
-
-    if (budgetExceeded()) {
-        return;
-    }
-
-    if (snapshot.currentOpponentId != 0) {
-        enemyUnits = CollectAutoPlayBoardUnits(
-            GetBattleManagerByAccountId(snapshot.currentOpponentId)
-        );
-    }
-
-    if (budgetExceeded()) {
-        return;
-    }
-
-    if (enemyUnits.empty() && Originals::MCLogicBattleData_ILOGIC_GetAllBattleMgr) {
-        auto* battleManagers = Originals::MCLogicBattleData_ILOGIC_GetAllBattleMgr(nullptr);
-        int scannedFallbackManagers = 0;
-        for (const auto& item : CopyDictionaryEntries(battleManagers, 16)) {
-            if (item.first == 0 || item.first == selfAccountId || !item.second) {
-                continue;
-            }
-
-            std::vector<AutoPlayBoardUnit> units = CollectAutoPlayBoardUnits(item.second);
-            enemyUnits.insert(enemyUnits.end(), units.begin(), units.end());
-            ++scannedFallbackManagers;
-
-            if (scannedFallbackManagers >= RuntimeConfig::MaxAutoPlayFallbackEnemyManagers ||
-                budgetExceeded()) {
-                break;
-            }
-        }
-    }
-
-    if (budgetExceeded()) {
-        return;
-    }
-
-    AutoPlayBoardPlan plan = BuildAutoPlayBoardPlan(snapshot, selfUnits, enemyUnits);
-    plan.contestedTargets = snapshot.contestedTargetOwners;
-    PublishAutoPlayBoardPlan(plan);
-    PublishAutoPlayGoldPlan(goldPlan);
-
-    ApplyAutoPlayPolicy(snapshot, strategy, goldPlan);
-    FeatureState::AutoPlayWasRunning = true;
-
-    ApplyAutoPlayShopTargets(plan, snapshot);
-    if (budgetExceeded()) {
-        return;
-    }
-
-    ApplyAutoPlayGoGoCardChoice(snapshot, plan);
-    if (budgetExceeded()) {
-        return;
-    }
-
-    TryAutoPlayAuction(snapshot, plan, goldPlan, now);
-    if (budgetExceeded()) {
-        return;
-    }
-
-    RunBuiltInAutoPlayAI(selfAccountId, snapshot, now);
-    if (budgetExceeded()) {
-        return;
-    }
-
-    TryAutoPlaySmartFormation(snapshot, plan, selfUnits, enemyUnits, now);
-    if (budgetExceeded()) {
-        return;
-    }
-
-    TryAutoPlayLevelUp(snapshot, goldPlan, now);
-}
-
-// Runs shop automation for one bounded feature tick.
-void RunShopAutomation(uint64_t selfAccountId) {
-    if (!IsIl2CppRuntimeReady()) {
-        return;
-    }
-
-    bool regularShopAutomation =
-        FeatureState::ShopBuyFreeHero ||
-        FeatureState::ShopBuySelectedHero ||
-        FeatureState::ShopBuyRecommendLineup ||
-        FeatureState::ShopRefresh ||
-        FeatureState::ShopStopRefreshAtFreeHero ||
-        FeatureState::ShopStopRefreshAtSelectedHero ||
-        FeatureState::ShopStopRefreshAtRecommendLineup;
-    bool anyShopAutomation =
-        regularShopAutomation ||
-        FeatureState::ShopForceScavengerExpensiveHero;
-
-    if (!anyShopAutomation || selfAccountId == 0) {
-        return;
-    }
-
-    if (!Originals::MCLogicBattleData_ILOGIC_GetShopItemData ||
-        !Originals::MCLogicBattleData_ILOGIC_GetPlayerCoin) {
-        return;
-    }
-
-    auto now = std::chrono::steady_clock::now();
-
-    if (FeatureState::ShopScavengerAutoRefreshPending.load()) {
-        if (RunScavengerShopCleanup(selfAccountId, now, true)) {
-            FeatureState::ShopScavengerAutoRefreshPending = false;
-        }
-        return;
-    }
-
-    if (!regularShopAutomation) {
-        return;
-    }
-
-    if (!CooldownElapsed(
-            FeatureState::LastShopAction,
-            RuntimeConfig::ShopActionCooldownMs,
-            now
-        )) {
-        return;
-    }
-
-    bool hasBuyAction =
-        FeatureState::ShopBuyFreeHero ||
-        FeatureState::ShopBuySelectedHero ||
-        FeatureState::ShopBuyRecommendLineup;
-    bool hasRefreshAction = FeatureState::ShopRefresh.load();
-    if ((hasBuyAction || hasRefreshAction) && !IsShopPanelReadyForAutomation()) {
-        return;
-    }
-
-    bool needRefreshShop = true;
-    int cachedCoin = -1;
-    bool useSelectedTargets =
-        FeatureState::ShopBuySelectedHero ||
-        FeatureState::ShopStopRefreshAtSelectedHero;
-    bool useRecommendLineup =
-        FeatureState::ShopBuyRecommendLineup ||
-        FeatureState::ShopStopRefreshAtRecommendLineup;
-    int recommendHeroId = useRecommendLineup ? GetRecommendLineupHeroId(now) : 0;
-    std::vector<std::pair<int, int>> recommendTargets =
-        useRecommendLineup ?
-            GetRecommendLineupTargetsSnapshot() :
-            std::vector<std::pair<int, int>>{};
-    std::unordered_map<int, HeroAutomationState> shopTargets =
-        useSelectedTargets ?
-            GetShopHeroTargetsSnapshot() :
-            std::unordered_map<int, HeroAutomationState>{};
-
-    auto getCoin = [&]() {
-        if (cachedCoin < 0) {
-            if (!TryConsumeManagedWorkUnits()) {
-                return -1;
-            }
-
-            cachedCoin =
-                Originals::MCLogicBattleData_ILOGIC_GetPlayerCoin(nullptr, selfAccountId);
-        }
-
-        return cachedCoin;
-    };
-
-    for (int slot = 0; slot < 5; ++slot) {
-        if (!TryConsumeManagedWorkUnits(4)) {
-            break;
-        }
-
-        bool needFx = false;
-        bool isFreeBuy = false;
-
-        if (Originals::MCLogicBattleData_ILOGIC_IsCurrFreeBuy &&
-            (FeatureState::ShopBuyFreeHero || FeatureState::ShopStopRefreshAtFreeHero)) {
-            isFreeBuy = Originals::MCLogicBattleData_ILOGIC_IsCurrFreeBuy(
-                nullptr,
-                selfAccountId,
-                slot,
-                &needFx
-            );
-        }
-
-        MCLogicHeroShopItemData shopData =
-            Originals::MCLogicBattleData_ILOGIC_GetShopItemData(
-                nullptr,
-                selfAccountId,
-                slot
-            );
-
-        if (!IsValidShopItemData(shopData, slot)) {
-            continue;
-        }
-
-        int heroId = shopData.m_iHeroId;
-        auto selectedIt = shopTargets.find(heroId);
-        bool isSelected =
-            useSelectedTargets &&
-            selectedIt != shopTargets.end() &&
-            selectedIt->second.selected;
-        auto recommendIt = std::find_if(
-            recommendTargets.begin(),
-            recommendTargets.end(),
-            [heroId](const std::pair<int, int>& item) {
-                return item.first == heroId;
-            }
-        );
-        bool isRecommend =
-            recommendIt != recommendTargets.end() ||
-            (useRecommendLineup && IsRecommendLineupHero(heroId, recommendHeroId));
-        int selectedTargetCount =
-            isSelected ?
-                ClampShopTargetCount(selectedIt->second.targetCount) :
-                0;
-        int recommendTargetCount = isRecommend ?
-            (recommendIt != recommendTargets.end() ?
-                recommendIt->second :
-                GetRecommendLineupTargetCountForHero(heroId)) :
-            0;
-        int ownCount = -1;
-        int poolCount = 1;
-        bool needsOwnCount =
-            (isSelected &&
-             (FeatureState::ShopStopRefreshAtSelectedHero ||
-              FeatureState::ShopBuySelectedHero)) ||
-            (isRecommend &&
-             (FeatureState::ShopStopRefreshAtRecommendLineup ||
-              FeatureState::ShopBuyRecommendLineup));
-
-        if (needsOwnCount && Originals::MCLogicBattleData_ILogic_HeroOwnCount) {
-            if (!TryConsumeManagedWorkUnits()) {
-                break;
-            }
-
-            ownCount = Originals::MCLogicBattleData_ILogic_HeroOwnCount(
-                nullptr,
-                selfAccountId,
-                heroId
-            );
-        }
-
-        if (needsOwnCount && Originals::MCLogicBattleData_ILogic_HeroCountInPool) {
-            if (!TryConsumeManagedWorkUnits()) {
-                break;
-            }
-
-            poolCount = Originals::MCLogicBattleData_ILogic_HeroCountInPool(nullptr, heroId);
-        }
-
-        bool selectedNeedsCopies =
-            isSelected &&
-            ownCount >= 0 &&
-            ownCount < selectedTargetCount &&
-            poolCount > 0;
-        bool recommendNeedsCopies =
-            isRecommend &&
-            ownCount >= 0 &&
-            ownCount < recommendTargetCount &&
-            poolCount > 0;
-
-        if (FeatureState::ShopStopRefreshAtSelectedHero &&
-            selectedNeedsCopies) {
-            needRefreshShop = false;
-        }
-
-        if (FeatureState::ShopStopRefreshAtRecommendLineup &&
-            recommendNeedsCopies) {
-            needRefreshShop = false;
-        }
-
-        if (FeatureState::ShopStopRefreshAtFreeHero && isFreeBuy) {
-            needRefreshShop = false;
-        }
-
-        if (FeatureState::ShopBuyFreeHero && isFreeBuy) {
-            if (!CanAttemptShopBuy(selfAccountId, slot, shopData, ownCount, true, now)) {
-                continue;
-            }
-
-            if (SelectShopSlot(slot)) {
-                MarkShopBuyAttempt(selfAccountId, slot, shopData, ownCount, true, now);
-                return;
-            }
-        }
-
-        bool canBuySelected = FeatureState::ShopBuySelectedHero && isSelected;
-        bool canBuyRecommend = FeatureState::ShopBuyRecommendLineup && isRecommend;
-
-        if (!canBuySelected && !canBuyRecommend) {
-            continue;
-        }
-
-        int targetCount = std::max(
-            canBuySelected ? selectedTargetCount : 0,
-            canBuyRecommend ? recommendTargetCount : 0
-        );
-
-        if (targetCount <= 0 || ownCount < 0) {
-            continue;
-        }
-
-        if (ownCount >= 0 && ownCount >= targetCount) {
-            continue;
-        }
-
-        if (poolCount <= 0) {
-            continue;
-        }
-
-        int coin = getCoin();
-
-        if (coin < shopData.m_iPrice) {
-            continue;
-        }
-
-        if (FeatureState::ShopKeepGold &&
-            coin - shopData.m_iPrice < FeatureState::ShopKeepGoldAt) {
-            continue;
-        }
-
-        if (!CanAttemptShopBuy(selfAccountId, slot, shopData, ownCount, false, now)) {
-            continue;
-        }
-
-        if (SelectShopSlot(slot)) {
-            MarkShopBuyAttempt(selfAccountId, slot, shopData, ownCount, false, now);
-            return;
-        }
-    }
-
-    if (!FeatureState::ShopRefresh ||
-        !needRefreshShop ||
-        !Originals::UIPanelBattleHeroShop_KeyBoardRefreshShop) {
-        return;
-    }
-
-    void* heroShopPanel = FeatureState::HeroShopPanel.load();
-    if (!heroShopPanel || !IsShopPanelReadyForAutomation()) {
-        return;
-    }
-
-    if (!HasWorthwhileShopTarget(selfAccountId, now) ||
-        !CanAttemptShopRefresh(now)) {
-        return;
-    }
-
-    int refreshCost = Originals::MCLogicBattleData_ILOGIC_GetRefreshCost &&
-            TryConsumeManagedWorkUnits() ?
-        Originals::MCLogicBattleData_ILOGIC_GetRefreshCost(nullptr, selfAccountId) :
-        0;
-    bool isFreeRefresh =
-        Originals::MCLogicBattleData_ILOGIC_IsRefreshFree &&
-         TryConsumeManagedWorkUnits() &&
-         Originals::MCLogicBattleData_ILOGIC_IsRefreshFree(nullptr, selfAccountId);
-    int coin = getCoin();
-    bool canRefresh =
-        isFreeRefresh ||
-        (coin >= refreshCost &&
-         (!FeatureState::ShopKeepGold ||
-          coin - refreshCost >= FeatureState::ShopKeepGoldAt));
-
-    if (canRefresh) {
-        Originals::UIPanelBattleHeroShop_KeyBoardRefreshShop(heroShopPanel);
-        MarkShopRefreshAttempt(now);
-    }
-}
-
 // Advances features on its scheduled feature cadence.
 void TickFeatures() {
     if (!IsIl2CppRuntimeReady()) {
@@ -8516,10 +5962,6 @@ void TickFeatures() {
         }
     }
 
-    if (selfAccountId == 0) {
-        PublishAutoPlaySnapshotTelemetry(AutoPlaySnapshot{}, false);
-    }
-
     if (activeMainTab == MainTabInfo) {
         RefreshGgcInfo(false);
         RefreshInfoPlayerRows(false);
@@ -8527,8 +5969,7 @@ void TickFeatures() {
 
     if (activeMainTab == MainTabShop ||
         FeatureState::ShopBuyRecommendLineup.load() ||
-        FeatureState::ShopStopRefreshAtRecommendLineup.load() ||
-        (FeatureState::AutoPlayEnabled.load() && FeatureState::AutoPlayUseShop.load())) {
+        FeatureState::ShopStopRefreshAtRecommendLineup.load()) {
         GetRecommendLineupHeroId(now);
     }
 
@@ -8542,8 +5983,7 @@ void TickFeatures() {
 
     if (Originals::MCLogicBattleData_ILOGIC_GetGameRound &&
         (activeMainTab == MainTabArena ||
-         FeatureState::ArenaSkipRound.load() ||
-         FeatureState::AutoPlayEnabled.load())) {
+         FeatureState::ArenaSkipRound.load())) {
         if (TryConsumeManagedWorkUnits()) {
             FeatureState::CachedGameRound =
                 Originals::MCLogicBattleData_ILOGIC_GetGameRound(nullptr);
@@ -8566,13 +6006,6 @@ void TickFeatures() {
 
     if (UiState::ShowNextEnemyHud.load()) {
         RefreshNextEnemyHudText(selfAccountId);
-        if (FeatureWorkBudgetExceeded(frameStart)) {
-            return;
-        }
-    }
-
-    if (IntervalElapsed(FeatureState::LastAutoPlayTick, RuntimeConfig::AutoPlayTickMs, now)) {
-        RunAutoPlay(selfAccountId, now, frameStart);
         if (FeatureWorkBudgetExceeded(frameStart)) {
             return;
         }
@@ -9396,7 +6829,7 @@ float ParseConfigFloat(const std::string& value, float fallback) {
 
 // Clamps configurable state to the supported runtime range.
 void ClampConfigurableState() {
-    UiState::MainTabIndex = std::clamp(UiState::MainTabIndex.load(), 0, 7);
+    UiState::MainTabIndex = std::clamp(UiState::MainTabIndex.load(), 0, static_cast<int>(MainTabTest));
     UiState::ThemeIndex =
         std::clamp(UiState::ThemeIndex.load(), 0, kAppearanceThemeCount - 1);
     UiState::FontIndex = std::clamp(UiState::FontIndex.load(), 0, 1);
@@ -9437,17 +6870,6 @@ void ClampConfigurableState() {
     FeatureState::ArenaSkipTargetRound =
         std::clamp(FeatureState::ArenaSkipTargetRound.load(), 1, 99);
     FeatureState::ArenaTimeScale = ClampArenaTimeScale(FeatureState::ArenaTimeScale.load());
-    FeatureState::AutoPlayAiDifficulty =
-        std::clamp(FeatureState::AutoPlayAiDifficulty.load(), 1, 10);
-    FeatureState::AutoPlayMinReserveGold =
-        std::clamp(FeatureState::AutoPlayMinReserveGold.load(), 0, 999999);
-    FeatureState::AutoPlayTargetLevel =
-        std::clamp(FeatureState::AutoPlayTargetLevel.load(), 1, 99);
-    FeatureState::AutoPlayPressure =
-        std::clamp(FeatureState::AutoPlayPressure.load(), 0, 100);
-    FeatureState::AutoPlayStrategy =
-        ClampAutoPlayStrategy(FeatureState::AutoPlayStrategy.load());
-
     {
         std::lock_guard<std::mutex> lock(RuntimeMutex::FeatureMutex);
 
@@ -9496,71 +6918,6 @@ void ResetVisualSettings() {
 
 // Resets feature settings back to safe default values.
 void ResetFeatureSettings() {
-    uint64_t selfAccountId = IsIl2CppRuntimeReady() ? GetSelfAccountId() : 0;
-    StopAutoPlayRuntime(selfAccountId);
-    FeatureState::AutoPlayEnabled = false;
-    FeatureState::AutoPlayAdaptive = true;
-    FeatureState::AutoPlayUseBuiltInAI = false;
-    FeatureState::AutoPlayUseShop = true;
-    FeatureState::AutoPlayUseEconomy = true;
-    FeatureState::AutoPlayUseCombat = true;
-    FeatureState::AutoPlayUseArenaAssist = true;
-    FeatureState::AutoPlayUseFormation = true;
-    FeatureState::AutoPlayUseAuction = true;
-    FeatureState::AutoPlayUseGoGoCards = true;
-    FeatureState::AutoPlayAiDifficulty = 3;
-    FeatureState::AutoPlayMinReserveGold = 20;
-    FeatureState::AutoPlayTargetLevel = 9;
-    FeatureState::AutoPlayPressure = 25;
-    FeatureState::AutoPlayStrategy = AutoPlayStrategyBalanced;
-    FeatureState::AutoPlayLearnedRounds = 0;
-    FeatureState::AutoPlayStrategyChanges = 0;
-    FeatureState::AutoPlayLastRound = 0;
-    FeatureState::AutoPlayLastHp = -1;
-    FeatureState::AutoPlayBuiltInAiRunning = false;
-    FeatureState::AutoPlayLastAiStartAccountId = 0;
-    FeatureState::LastAutoPlayAiStartAttempt = {};
-    FeatureState::LastAutoPlayDeployAttempt = {};
-    FeatureState::LastAutoPlayFormationAttempt = {};
-    FeatureState::LastAutoPlayLevelAttempt = {};
-    FeatureState::LastAutoPlayAuctionAttempt = {};
-    FeatureState::AutoPlayFocusGroup = 0;
-    FeatureState::AutoPlayTargetHeroId = 0;
-    FeatureState::AutoPlayBestCardId = 0;
-    FeatureState::AutoPlayBestAuctionIndex = -1;
-    FeatureState::AutoPlayBestAuctionScore = 0;
-    FeatureState::AutoPlayBoardSelfUnits = 0;
-    FeatureState::AutoPlayBoardEnemyUnits = 0;
-    FeatureState::AutoPlayBoardMoves = 0;
-    FeatureState::AutoPlayLastMoveHeroId = 0;
-    FeatureState::AutoPlayLastMoveGain = 0;
-    FeatureState::AutoPlayLastMoveX = -1;
-    FeatureState::AutoPlayLastMoveY = -1;
-    FeatureState::AutoPlayOpponentCount = 0;
-    FeatureState::AutoPlayContestedTargets = 0;
-    FeatureState::AutoPlayStrongestOpponentFightValue = 0;
-    FeatureState::AutoPlayCurrentOpponentId = 0;
-    FeatureState::AutoPlayInterestTier = 0;
-    FeatureState::AutoPlayInterestNextGold = 10;
-    FeatureState::AutoPlayInterestReserveGold = 20;
-    FeatureState::AutoPlaySpendBudget = 0;
-    FeatureState::AutoPlayHoldInterest = false;
-    FeatureState::AutoPlaySnapshotReady = false;
-    FeatureState::AutoPlaySnapshotAccountId = 0;
-    FeatureState::AutoPlaySnapshotRound = 0;
-    FeatureState::AutoPlaySnapshotPhase = -1;
-    FeatureState::AutoPlaySnapshotHp = -1;
-    FeatureState::AutoPlaySnapshotCoin = -1;
-    FeatureState::AutoPlaySnapshotLevel = -1;
-    FeatureState::AutoPlaySnapshotCurrentPopulation = -1;
-    FeatureState::AutoPlaySnapshotTotalPopulation = -1;
-    FeatureState::AutoPlaySnapshotLineupWorth = -1;
-    FeatureState::AutoPlaySnapshotFightValue = -1;
-    FeatureState::AutoPlaySnapshotRecommendHeroId = 0;
-    FeatureState::AutoPlaySnapshotStarUpHeroId = 0;
-    FeatureState::AutoPlaySnapshotCurrentOpponentFightValue = -1;
-    FeatureState::AutoPlaySnapshotFightSection = false;
-    FeatureState::AutoPlaySnapshotMonsterRound = false;
     FeatureState::CombatInvisibleScout = false;
     FeatureState::CombatForceWin = false;
     FeatureState::CombatPreventHpLoss = false;
@@ -9817,21 +7174,6 @@ void ApplyConfigValue(const std::string& key, const std::string& value) {
     else if (key == "itemSpacingX") UiState::ItemSpacingX = ParseConfigFloat(value, UiState::ItemSpacingX);
     else if (key == "itemSpacingY") UiState::ItemSpacingY = ParseConfigFloat(value, UiState::ItemSpacingY);
     else if (key == "indentSpacing") UiState::IndentSpacing = ParseConfigFloat(value, UiState::IndentSpacing);
-    else if (key == "autoPlayEnabled") FeatureState::AutoPlayEnabled = ParseConfigBool(value, FeatureState::AutoPlayEnabled);
-    else if (key == "autoPlayAdaptive") FeatureState::AutoPlayAdaptive = ParseConfigBool(value, FeatureState::AutoPlayAdaptive);
-    else if (key == "autoPlayUseBuiltInAI") FeatureState::AutoPlayUseBuiltInAI = ParseConfigBool(value, FeatureState::AutoPlayUseBuiltInAI);
-    else if (key == "autoPlayUseShop") FeatureState::AutoPlayUseShop = ParseConfigBool(value, FeatureState::AutoPlayUseShop);
-    else if (key == "autoPlayUseEconomy") FeatureState::AutoPlayUseEconomy = ParseConfigBool(value, FeatureState::AutoPlayUseEconomy);
-    else if (key == "autoPlayUseCombat") FeatureState::AutoPlayUseCombat = ParseConfigBool(value, FeatureState::AutoPlayUseCombat);
-    else if (key == "autoPlayUseArenaAssist") FeatureState::AutoPlayUseArenaAssist = ParseConfigBool(value, FeatureState::AutoPlayUseArenaAssist);
-    else if (key == "autoPlayUseFormation") FeatureState::AutoPlayUseFormation = ParseConfigBool(value, FeatureState::AutoPlayUseFormation);
-    else if (key == "autoPlayUseAuction") FeatureState::AutoPlayUseAuction = ParseConfigBool(value, FeatureState::AutoPlayUseAuction);
-    else if (key == "autoPlayUseGoGoCards") FeatureState::AutoPlayUseGoGoCards = ParseConfigBool(value, FeatureState::AutoPlayUseGoGoCards);
-    else if (key == "autoPlayAiDifficulty") FeatureState::AutoPlayAiDifficulty = ParseConfigInt(value, FeatureState::AutoPlayAiDifficulty);
-    else if (key == "autoPlayMinReserveGold") FeatureState::AutoPlayMinReserveGold = ParseConfigInt(value, FeatureState::AutoPlayMinReserveGold);
-    else if (key == "autoPlayTargetLevel") FeatureState::AutoPlayTargetLevel = ParseConfigInt(value, FeatureState::AutoPlayTargetLevel);
-    else if (key == "autoPlayPressure") FeatureState::AutoPlayPressure = ParseConfigInt(value, FeatureState::AutoPlayPressure);
-    else if (key == "autoPlayStrategy") FeatureState::AutoPlayStrategy = ParseConfigInt(value, FeatureState::AutoPlayStrategy);
     else if (key == "combatInvisibleScout") FeatureState::CombatInvisibleScout = ParseConfigBool(value, FeatureState::CombatInvisibleScout);
     else if (key == "combatForceWin") FeatureState::CombatForceWin = ParseConfigBool(value, FeatureState::CombatForceWin);
     else if (key == "combatPreventHpLoss") FeatureState::CombatPreventHpLoss = ParseConfigBool(value, FeatureState::CombatPreventHpLoss);
@@ -9920,21 +7262,6 @@ bool SaveConfigToFile(const std::string& path) {
     WriteConfigFloat(file, "itemSpacingX", UiState::ItemSpacingX);
     WriteConfigFloat(file, "itemSpacingY", UiState::ItemSpacingY);
     WriteConfigFloat(file, "indentSpacing", UiState::IndentSpacing);
-    WriteConfigBool(file, "autoPlayEnabled", FeatureState::AutoPlayEnabled);
-    WriteConfigBool(file, "autoPlayAdaptive", FeatureState::AutoPlayAdaptive);
-    WriteConfigBool(file, "autoPlayUseBuiltInAI", FeatureState::AutoPlayUseBuiltInAI);
-    WriteConfigBool(file, "autoPlayUseShop", FeatureState::AutoPlayUseShop);
-    WriteConfigBool(file, "autoPlayUseEconomy", FeatureState::AutoPlayUseEconomy);
-    WriteConfigBool(file, "autoPlayUseCombat", FeatureState::AutoPlayUseCombat);
-    WriteConfigBool(file, "autoPlayUseArenaAssist", FeatureState::AutoPlayUseArenaAssist);
-    WriteConfigBool(file, "autoPlayUseFormation", FeatureState::AutoPlayUseFormation);
-    WriteConfigBool(file, "autoPlayUseAuction", FeatureState::AutoPlayUseAuction);
-    WriteConfigBool(file, "autoPlayUseGoGoCards", FeatureState::AutoPlayUseGoGoCards);
-    WriteConfigInt(file, "autoPlayAiDifficulty", FeatureState::AutoPlayAiDifficulty);
-    WriteConfigInt(file, "autoPlayMinReserveGold", FeatureState::AutoPlayMinReserveGold);
-    WriteConfigInt(file, "autoPlayTargetLevel", FeatureState::AutoPlayTargetLevel);
-    WriteConfigInt(file, "autoPlayPressure", FeatureState::AutoPlayPressure);
-    WriteConfigInt(file, "autoPlayStrategy", FeatureState::AutoPlayStrategy);
     WriteConfigBool(file, "combatInvisibleScout", FeatureState::CombatInvisibleScout);
     WriteConfigBool(file, "combatForceWin", FeatureState::CombatForceWin);
     WriteConfigBool(file, "combatPreventHpLoss", FeatureState::CombatPreventHpLoss);
@@ -10454,12 +7781,12 @@ bool HasArenaRoundSkipBindings();
 bool HasArenaSpeedHackBindings();
 bool HasArenaAchievementBindings();
 bool HasBattleTestBindings();
-bool HasAutoPlayBindings();
 std::string GetBattlePlayerName(uint64_t accountId);
 
 struct PlayerInfoRow {
     uint64_t accountId = 0;
     bool isSelf = false;
+    bool isBot = false;
     std::string playerName;
     std::string sortName;
     std::string enemyName;
@@ -10495,6 +7822,54 @@ std::string NormalizeDisplayName(const std::string& value) {
         }
     );
     return output;
+}
+
+// Reads the original RoomData bot flag for an account when battle player data is available.
+bool IsBattlePlayerBot(uint64_t accountId) {
+    if (!IsIl2CppRuntimeReady() ||
+        accountId == 0 ||
+        !Originals::MCLogicBattleData_ILOGIC_GetStPlayerData) {
+        return false;
+    }
+
+    static FieldInfo* roomDataField = nullptr;
+    static FieldInfo* roomDataBotField = nullptr;
+
+    if (!roomDataField) {
+        roomDataField = GetFieldInfoFromName("Battle", "MCFightPlayerData", "_RoomData");
+    }
+
+    if (!roomDataBotField) {
+        roomDataBotField = GetFieldInfoFromName("SystemData", "RoomData", "bRobot");
+    }
+
+    if (!roomDataField || !roomDataBotField || !TryConsumeManagedWorkUnits()) {
+        return false;
+    }
+
+    void* fightPlayerData =
+        Originals::MCLogicBattleData_ILOGIC_GetStPlayerData(nullptr, accountId);
+    void* roomData = fightPlayerData ?
+        GetField<void*>(reinterpret_cast<Il2CppObject*>(fightPlayerData), roomDataField) :
+        nullptr;
+
+    return roomData &&
+        GetField<bool>(reinterpret_cast<Il2CppObject*>(roomData), roomDataBotField);
+}
+
+// Builds the Info tab player label with local and bot suffixes.
+std::string FormatInfoPlayerName(const PlayerInfoRow& row) {
+    std::string playerDisplay = row.playerName.empty() ? "-" : row.playerName;
+
+    if (row.isSelf) {
+        playerDisplay += " (Self)";
+    }
+
+    if (row.isBot) {
+        playerDisplay += " (Bot)";
+    }
+
+    return playerDisplay;
 }
 
 // Checks whether a GGC quality value is one shown by the overlay.
@@ -10627,10 +8002,12 @@ void RefreshInfoPlayerRows(bool force = false) {
         );
         std::string playerName = getPlayerName(accountId);
         std::string enemyName = enemyId != 0 ? getPlayerName(enemyId) : "";
+        bool isBot = IsBattlePlayerBot(accountId);
 
         UiCache::InfoPlayerRows.push_back({
             accountId,
             selfAccountId != 0 && accountId == selfAccountId,
+            isBot,
             playerName,
             NormalizeDisplayName(playerName),
             enemyName
@@ -10715,7 +8092,6 @@ void DrawRuntimeStatus() {
         DrawStatusRow("Arena round skip", HasArenaRoundSkipBindings());
         DrawStatusRow("Arena speedhack", HasArenaSpeedHackBindings());
         DrawStatusRow("Arena achievements", HasArenaAchievementBindings());
-        DrawStatusRow("Auto-play controller", HasAutoPlayBindings());
         DrawStatusRow("Battle tests", HasBattleTestBindings());
         DrawStatusRow("Spectator hook", Originals::MCShowSpectatorComp_SetSpectate);
         DrawStatusRow(
@@ -11009,34 +8385,6 @@ bool HasBattleTestBindings() {
         Originals::MCLogicBattleManager_get_m_bDefendFaild;
 }
 
-// Checks the auto play bindings condition before work proceeds.
-bool HasAutoPlayBindings() {
-    bool builtInAiReady =
-        !FeatureState::AutoPlayUseBuiltInAI.load() ||
-        (Originals::MCLogicBattleManager_StartAI &&
-         Originals::MCLogicBattleManager_TryAutoDeploy);
-
-    return IsIl2CppRuntimeReady() &&
-        Originals::MCLogicBattleData_ILOGIC_GetGameRound &&
-        Originals::MCLogicBattleData_ILOGIC_GetPlayerHP &&
-        Originals::MCLogicBattleData_ILOGIC_GetPlayerCoin &&
-        Originals::MCLogicBattleData_ILOGIC_GetPlayerLevel &&
-        builtInAiReady &&
-        Originals::MCLogicBattleManager_OnPlayerLvlUp &&
-        Originals::MCLogicBattleManager_CalcCurrentFightValue &&
-        Originals::MCLogicBattleManager_MoveHeroInBattleField &&
-        Originals::MCLogicBattleData_ILOGIC_GetAllBattleMgr &&
-        Originals::MCLogicBattleData_ILOGIC_GetCurrentOpponentAccountID &&
-        Originals::MCLogicBattleData_ILOGIC_GetUpgradeCost &&
-        Originals::MCLogicBattleData_ILOGIC_CanUpgrade &&
-        HasArenaGoldBindings() &&
-        HasCombatPowerBindings() &&
-        Originals::MCLogicBattleData_ILOGIC_GetShopItemData &&
-        Originals::MCLogicBattleData_ILogic_HeroOwnCount &&
-        HasShopSelectBinding() &&
-        HasShopRecommendLineupBindings();
-}
-
 // Draws the ggc info overlay section without changing game state.
 void DrawGgcInfo() {
     DrawMenuSeparatorText("GGC");
@@ -11136,13 +8484,8 @@ void DrawInfoPlayersTable() {
         ImGui::TableNextRow();
 
         ImGui::TableSetColumnIndex(0);
-        if (row.isSelf) {
-            std::string playerDisplay = row.playerName.empty() ? "-" : row.playerName;
-            playerDisplay += " (Self)";
-            ImGui::TextUnformatted(playerDisplay.c_str());
-        } else {
-            ImGui::TextUnformatted(row.playerName.empty() ? "-" : row.playerName.c_str());
-        }
+        std::string playerDisplay = FormatInfoPlayerName(row);
+        ImGui::TextUnformatted(playerDisplay.c_str());
 
         ImGui::TableSetColumnIndex(1);
         ImGui::TextUnformatted(row.enemyName.empty() ? "-" : row.enemyName.c_str());
@@ -11173,181 +8516,6 @@ void DrawCombatTab() {
         "Invisible Scout - hide spectate switching",
         FeatureState::CombatInvisibleScout
     );
-}
-
-// Draws the auto play tab overlay section without changing game state.
-void DrawAutoPlayTab() {
-    if (!HasAutoPlayBindings()) {
-        DrawWaitingText("Waiting for auto-play controller bindings");
-    }
-
-    DrawAtomicCheckbox("Auto-play", FeatureState::AutoPlayEnabled);
-    DrawAtomicCheckbox("Adaptive strategy", FeatureState::AutoPlayAdaptive);
-    DrawAtomicCheckbox("Use built-in battle AI", FeatureState::AutoPlayUseBuiltInAI);
-    DrawAtomicCheckbox("Manage shop", FeatureState::AutoPlayUseShop);
-    DrawAtomicCheckbox("Manage economy and level", FeatureState::AutoPlayUseEconomy);
-    DrawAtomicCheckbox("Manage combat power", FeatureState::AutoPlayUseCombat);
-    DrawAtomicCheckbox("Use arena assists", FeatureState::AutoPlayUseArenaAssist);
-    DrawAtomicCheckbox("Use smart formation", FeatureState::AutoPlayUseFormation);
-    DrawAtomicCheckbox("Use auction scoring", FeatureState::AutoPlayUseAuction);
-    DrawAtomicCheckbox("Use GogoCard scoring", FeatureState::AutoPlayUseGoGoCards);
-
-    DrawMenuSeparatorText("Policy");
-    ImGui::SetNextItemWidth(120.0f);
-    DrawAtomicInputInt("AI difficulty", FeatureState::AutoPlayAiDifficulty);
-    FeatureState::AutoPlayAiDifficulty =
-        std::clamp(FeatureState::AutoPlayAiDifficulty.load(), 1, 10);
-
-    ImGui::SetNextItemWidth(120.0f);
-    DrawAtomicInputInt("Minimum reserve gold", FeatureState::AutoPlayMinReserveGold);
-    FeatureState::AutoPlayMinReserveGold =
-        std::clamp(FeatureState::AutoPlayMinReserveGold.load(), 0, 999999);
-
-    ImGui::SetNextItemWidth(120.0f);
-    DrawAtomicInputInt("Target level", FeatureState::AutoPlayTargetLevel);
-    FeatureState::AutoPlayTargetLevel =
-        std::clamp(FeatureState::AutoPlayTargetLevel.load(), 1, 99);
-
-    const char* strategies[] = {
-        "Economy",
-        "Balanced",
-        "Aggressive"
-    };
-
-    ImGui::BeginDisabled(FeatureState::AutoPlayAdaptive.load());
-    ImGui::SetNextItemWidth(180.0f);
-    if (DrawAtomicCombo(
-            "Manual strategy",
-            FeatureState::AutoPlayStrategy,
-            strategies,
-            IM_ARRAYSIZE(strategies)
-        )) {
-        FeatureState::AutoPlayStrategy =
-            ClampAutoPlayStrategy(FeatureState::AutoPlayStrategy.load());
-    }
-    ImGui::EndDisabled();
-
-    DrawMenuSeparatorText("Runtime");
-    bool telemetryReady = FeatureState::AutoPlaySnapshotReady.load();
-    AutoPlaySnapshot snapshot = GetCachedAutoPlaySnapshot();
-    int pressureValue = std::clamp(FeatureState::AutoPlayPressure.load(), 0, 100);
-    float pressure = static_cast<float>(pressureValue) / 100.0f;
-    AutoPlayGoldPlan goldPlan = GetCachedAutoPlayGoldPlan();
-
-    ImGui::Text(
-        "%s: %s",
-        MenuText("Strategy"),
-        MenuText(AutoPlayStrategyName(FeatureState::AutoPlayStrategy.load()))
-    );
-    ImGui::Text(
-        MenuText("Learned rounds: %d  Strategy changes: %d"),
-        FeatureState::AutoPlayLearnedRounds.load(),
-        FeatureState::AutoPlayStrategyChanges.load()
-    );
-    ImGui::ProgressBar(pressure, ImVec2(-1.0f, 0.0f));
-
-    if (ImGui::BeginTable(
-        "##AutoPlaySnapshotTable",
-        2,
-        ImGuiTableFlags_Borders |
-            ImGuiTableFlags_RowBg |
-            ImGuiTableFlags_SizingStretchProp
-    )) {
-        ImGui::TableSetupColumn(MenuText("Signal"));
-        ImGui::TableSetupColumn(MenuText("Value"), ImGuiTableColumnFlags_WidthFixed, 150.0f);
-        ImGui::TableHeadersRow();
-        DrawValueRow("Round", telemetryReady && snapshot.round > 0 ? FormatInt(snapshot.round) : "Waiting");
-        DrawValueRow("Phase", telemetryReady && snapshot.phase >= 0 ? FormatInt(snapshot.phase) : "Waiting");
-        DrawValueRow("HP", telemetryReady && snapshot.hp >= 0 ? FormatInt(snapshot.hp) : "Waiting");
-        DrawValueRow("Gold", telemetryReady && snapshot.coin >= 0 ? FormatInt(snapshot.coin) : "Waiting");
-        DrawValueRow(
-            "Interest tier",
-            telemetryReady && snapshot.coin >= 0 ? FormatInt(goldPlan.interestTier) + "/5" : "Waiting"
-        );
-        DrawValueRow(
-            "Next interest",
-            telemetryReady && snapshot.coin >= 0 ? FormatInt(goldPlan.nextInterestGold) : "Waiting"
-        );
-        DrawValueRow(
-            "Gold reserve",
-            telemetryReady && snapshot.coin >= 0 ? FormatInt(goldPlan.reserveGold) : "Waiting"
-        );
-        DrawValueRow(
-            "Spend budget",
-            telemetryReady && snapshot.coin >= 0 ? FormatInt(goldPlan.spendBudget) : "Waiting"
-        );
-        DrawValueRow(
-            "Banking interest",
-            telemetryReady && snapshot.coin >= 0 ? FormatBool(goldPlan.holdForInterest) : "Waiting"
-        );
-        DrawValueRow("Level", telemetryReady && snapshot.level >= 0 ? FormatInt(snapshot.level) : "Waiting");
-        DrawValueRow(
-            "Population",
-            telemetryReady && snapshot.currentPopulation >= 0 && snapshot.totalPopulation >= 0 ?
-                FormatInt(snapshot.currentPopulation) + "/" + FormatInt(snapshot.totalPopulation) :
-                "Waiting"
-        );
-        DrawValueRow(
-            "Lineup worth",
-            telemetryReady && snapshot.lineupWorth >= 0 ? FormatInt(snapshot.lineupWorth) : "Waiting"
-        );
-        DrawValueRow(
-            "Fight value",
-            telemetryReady && snapshot.fightValue >= 0 ? FormatInt(snapshot.fightValue) : "Waiting"
-        );
-        DrawValueRow("Recommendation", telemetryReady ? FormatHeroLabel(snapshot.recommendHeroId) : "Waiting");
-        DrawValueRow("Star-up", telemetryReady ? FormatHeroLabel(snapshot.starUpHeroId) : "Waiting");
-        DrawValueRow(
-            "Current opponent",
-            telemetryReady && snapshot.currentOpponentId != 0 ?
-                FormatUInt64(snapshot.currentOpponentId) :
-                "Waiting"
-        );
-        DrawValueRow(
-            "Opponent fight value",
-            telemetryReady && snapshot.currentOpponentFightValue >= 0 ?
-                FormatInt(snapshot.currentOpponentFightValue) :
-                "Waiting"
-        );
-        DrawValueRow(
-            "Strongest opponent",
-            telemetryReady && snapshot.strongestOpponentFightValue >= 0 ?
-                FormatInt(snapshot.strongestOpponentFightValue) :
-                "Waiting"
-        );
-        DrawValueRow(
-            "Opponent count",
-            telemetryReady ? FormatInt(FeatureState::AutoPlayOpponentCount.load()) : "Waiting"
-        );
-        DrawValueRow(
-            "Contested targets",
-            telemetryReady ? FormatInt(FeatureState::AutoPlayContestedTargets.load()) : "Waiting"
-        );
-        DrawValueRow("Focus synergy", FormatInt(FeatureState::AutoPlayFocusGroup.load()));
-        DrawValueRow("Target hero", FormatHeroLabel(FeatureState::AutoPlayTargetHeroId.load()));
-        DrawValueRow("Best GogoCard", FormatInt(FeatureState::AutoPlayBestCardId.load()));
-        DrawValueRow("Auction index", FormatInt(FeatureState::AutoPlayBestAuctionIndex.load()));
-        DrawValueRow("Auction score", FormatInt(FeatureState::AutoPlayBestAuctionScore.load()));
-        DrawValueRow(
-            "Board units",
-            FormatInt(FeatureState::AutoPlayBoardSelfUnits.load()) +
-                "/" +
-                FormatInt(FeatureState::AutoPlayBoardEnemyUnits.load())
-        );
-        DrawValueRow("Board moves", FormatInt(FeatureState::AutoPlayBoardMoves.load()));
-        DrawValueRow("Last moved hero", FormatHeroLabel(FeatureState::AutoPlayLastMoveHeroId.load()));
-        DrawValueRow("Last move gain", FormatInt(FeatureState::AutoPlayLastMoveGain.load()));
-        DrawValueRow(
-            "Last move cell",
-            FeatureState::AutoPlayLastMoveX.load() >= 0 &&
-                    FeatureState::AutoPlayLastMoveY.load() >= 0 ?
-                FormatInt(FeatureState::AutoPlayLastMoveX.load()) +
-                    "," +
-                    FormatInt(FeatureState::AutoPlayLastMoveY.load()) :
-                "Waiting"
-        );
-        ImGui::EndTable();
-    }
 }
 
 // Draws the arena battle power controls overlay section without changing game state.
@@ -11471,7 +8639,7 @@ void DrawSettingsTab() {
             ImGui::Spacing();
             ImGui::TextUnformatted(
                 MenuText(
-                    "Saved state includes visual settings, window and HUD settings, and Auto-Play, Combat, Shop, and Arena controls."
+                    "Saved state includes visual settings, window and HUD settings, and Combat, Shop, and Arena controls."
                 )
             );
 
@@ -11677,12 +8845,6 @@ void DrawTestBindingRows() {
     DrawStatusRow("Player rank", Originals::MCLogicBattleData_ILOGIC_GetRank);
     DrawStatusRow("Player level", Originals::MCLogicBattleData_ILOGIC_GetPlayerLevel);
     DrawStatusRow("Population", Originals::MCLogicBattleData_ILOGIC_SelfCurPopulation);
-    DrawStatusRow("Auto-play AI", Originals::MCLogicBattleManager_StartAI);
-    DrawStatusRow("Auto deploy", Originals::MCLogicBattleManager_TryAutoDeploy);
-    DrawStatusRow("Auto level up", Originals::MCLogicBattleManager_OnPlayerLvlUp);
-    DrawStatusRow("Lineup scoring", Originals::MCLogicBattleManager_GetLineupWorth);
-    DrawStatusRow("Smart formation", Originals::MCLogicBattleManager_MoveHeroInBattleField);
-    DrawStatusRow("Auction scoring", Originals::MCLogicAuctionComp_Bid);
     DrawStatusRow("Shop diagnostics", HasShopDiagnosticBindings());
     DrawStatusRow("Hero counts", Originals::MCLogicBattleData_ILOGIC_GetBattleHeroNum);
     DrawStatusRow("Result history", Originals::MCLogicBattleData_ILOGIC_GetBattleResultHistory);
@@ -14771,7 +11933,6 @@ void DrawMainMenu() {
     static const MainMenuTab tabs[] = {
         {"Info", DrawInfoTab},
         {"Combat", DrawCombatTab},
-        {"Auto-Play", DrawAutoPlayTab},
         {"Shop", DrawShopTab},
         {"Arena", DrawArenaTab},
         {"Appearance", DrawAppearanceTab},

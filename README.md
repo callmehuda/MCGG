@@ -61,8 +61,7 @@ The default supported target is:
 - Build system: `ndk-build`
 - C++ standard: `c++26`
 - Primary branch: `master`
-- Current overlay tabs: Info, Combat, Auto-Play, Shop, Arena, Appearance,
-  Settings, and Test
+- Current overlay tabs: Info, Combat, Shop, Arena, Appearance, Settings, and Test
 
 ## Dump Reference
 
@@ -75,19 +74,14 @@ compare it with the previous dump snapshot when one is available.
 The refreshed dump still validates the core runtime contracts used by this
 native overlay:
 
-- `MCLogicBattleManager`: `StartAI(Int32)`, `StopAI()`, `TryAutoDeploy()`,
-  `OnPlayerLvlUp()`, `CalcCurrentFightValue()`, `GetLineupWorth()`, and
-  `MoveHeroInBattleField(UInt32, Byte, Byte, Boolean)`.
 - `MCLogicBattleData`: `ILOGIC_GetAllBattleMgr()`,
   `ILOGIC_GetCurrentOpponentAccountID(UInt64)`,
-  `ILOGIC_GetCrystalQualityByRound(UInt64, Int32)`, round/phase readers,
-  economy readers, shop readers, and Recommendation Lineup readers.
-- `LogicRoundMgr`: `get_m_AuctionComp()`, `SetRound(UInt32)`, and
-  `NextRound(Boolean)`.
-- `Battle.MCLogicAuctionComp.Bid(MCLogicAuctionSlotInfo, UInt64, UInt32)`,
-  `Battle.MCLogicGoGoCardComp.get_m_CurrData()`,
-  `UnityEngine.Time.set_timeScale(Single)`, and the achievement record
-  helpers used by Arena diagnostics.
+  `ILOGIC_GetCrystalQualityByRound(UInt64, Int32)`,
+  `ILOGIC_GetStPlayerData(UInt64)`, round/phase readers, economy readers,
+  shop readers, and Recommendation Lineup readers.
+- `LogicRoundMgr`: `SetRound(UInt32)` and `NextRound(Boolean)`.
+- `SystemData.RoomData.bRobot`, `UnityEngine.Time.set_timeScale(Single)`,
+  and the achievement record helpers used by Info and Arena diagnostics.
 
 Addresses and RVAs in `dump/dump.cs` are per-build diagnostics. Native logic
 should continue to bind by class, method name, return type, parameter count,
@@ -149,50 +143,13 @@ they are backed by `dump/dump.cs` and live runtime verification.
 ### Info
 
 - Player and next-enemy table sorted with the local player first.
+- Player names append ` (Bot)` when `SystemData.RoomData.bRobot` is true.
 - Automatic GGC quality readout for every detected GGC round.
 - Overlay status indicators for delayed or unavailable bindings.
 
 ### Combat
 
 - Invisible Scout toggle.
-
-### Auto-Play
-
-- Binary-side controller that reads the current round, phase, HP, gold, level,
-  population, lineup worth, fight value, Recommendation Lineup signal, star-up
-  target, and current opponent.
-- Adaptive strategy pressure model that shifts between Economy, Balanced, and
-  Aggressive based on round progression, HP loss, gold state, own fight value,
-  current opponent fight value, and strongest observed opponent.
-- Gold-interest planner that evaluates 10-gold interest tiers, next interest
-  breakpoints, configured reserve, spend budget, population pressure, HP
-  pressure, fight-value deficits, and strategy before allowing shop spending,
-  auction bids, or level-up actions.
-- Opponent-aware scan across battle managers to count opponents, detect target
-  contesting, track the current opponent, and compare the local board against
-  the strongest board.
-- Advanced formation scorer that reads live managed chess units from
-  `LogicHeroContainer.m_ChessList`, evaluates hero ID, star, grid position,
-  tank/carry role metadata, synergy groups, enemy centroid, enemy column threat,
-  ally frontline cover, backline protection, and column crowding, then performs
-  bounded one-move-per-cooldown battlefield repositioning.
-- Shop target selection that promotes the current best hero or star-up target
-  into selected shop targets while preserving existing buy/refresh throttles.
-- GogoCard scoring that prefers resource, EXP/economy, hero/shop, star-up,
-  synergy, equipment, and combat cards according to round, HP pressure, focus
-  synergy, and opponent strength.
-- Auction scoring that reads auction phase, slot state, bid price, reward item
-  data, hero/equipment rewards, and special upgrade effects before placing a
-  bounded bid on the highest-value option.
-- Built-in AI startup is opt-in, safe-phase, stateful, and cooldown-gated:
-  `StartAI` is not replayed continuously for the same account, it is skipped
-  during fight, fight-result, and monster phases, a long-gated refresh can
-  restart dropped internal AI state, and `StopAI` is called when Auto-Play is
-  disabled or the live battle snapshot is no longer actionable.
-- Built-in deployment and smart formation use separate cooldown clocks so board
-  movement cannot starve `TryAutoDeploy`.
-- Optional controls for built-in battle AI, shop, economy, combat power, arena
-  assists, smart formation, auction scoring, and GogoCard scoring.
 
 ### Appearance
 
@@ -212,7 +169,7 @@ they are backed by `dump/dump.cs` and live runtime verification.
 - Menu size, optional fixed position, mobile-friendly tab navigation, and window interaction controls.
 - Optional next-enemy HUD text rendered near the bottom center of the screen.
 - Font scale, opacity, rounding, border, padding, spacing, scrollbar, and indentation controls.
-- Save and load for visual, language, window, HUD, Auto-Play, Combat, Shop, and Arena controls.
+- Save and load for visual, language, window, HUD, Combat, Shop, and Arena controls.
 - Default config path under the running game package, resolved as `/data/data/<game-package>/files/mcgg_config.ini`.
 - Library update indicator and collapsible `Updates / Changelog` view backed by
   GitHub Releases. It shows the embedded local version, commit/ref, latest
@@ -329,8 +286,7 @@ At a high level, the project contains:
   writes, with raw IL2CPP fallbacks and static fields kept on static IL2CPP
   accessors.
 - Snapshot helpers for hero, equipment, GogoCard, selected shop target,
-  opponent, board-unit, auction, and strategy data used by the overlay and
-  throttled feature ticks.
+  opponent, and shop target data used by the overlay and throttled feature ticks.
 - Local reference artifacts used for method, field, and type signature validation.
 - Function-level comments are kept on project-owned runtime functions in
   `jni/Main.cpp` and shared layout helpers in `jni/structures/Structures.hpp`
@@ -348,24 +304,13 @@ are stored as `std::atomic` values. Code that reads complex collections should
 use the existing snapshot or access helpers and should not hold `FeatureMutex`
 while calling managed IL2CPP APIs.
 
-Auto-Play uses the same bounded tick model as the other runtime features. It
-gathers local snapshots first, builds one gold-interest plan, scores
-strategy/formation/shop/card/auction options from local data, publishes only
-compact counters and selected targets under `FeatureMutex`, and avoids holding
-project locks while calling managed IL2CPP APIs. Built-in deploy and smart
-formation use separate cooldowns inside the 250 ms tick. The built-in AI bridge
-is disabled by default, stays stateful when explicitly enabled, and only calls
-`StartAI` from safe non-fight/non-result phases with a long refresh interval for
-recovery.
-
 Frame-time feature work has a small render budget. If binding retries, managed
 reference refresh, table loading, HUD refresh, or automation work has already
 spent the budget for the current frame, lower-priority ticks defer to the next
 frame. A separate managed-work unit budget caps how many IL2CPP, Unity, or game
 readers a single render frame can issue; when that cap is reached, diagnostics
 show `Waiting` and lower-priority automation waits for the next scheduled tick.
-Table cache loading is demand-driven and runs only for table-backed tabs or
-active Auto-Play.
+Table cache loading is demand-driven and runs only for table-backed tabs or active shop automation.
 
 The current runtime cadence is intentionally split by responsibility:
 
@@ -377,14 +322,9 @@ The current runtime cadence is intentionally split by responsibility:
 - Arena feature tick: 100 ms.
 - Shop automation tick: 100 ms.
 - Combat power tick: 250 ms.
-- Auto-Play tick: 250 ms.
 - Feature frame budget: 12 ms.
 - Feature managed-work budget: 256 units per render frame; all-or-nothing table
   loading may use up to 2048 units before deferring.
-- Auto-Play AI start retry: 2000 ms.
-- Auto-Play AI refresh: 8000 ms.
-- Auto-Play built-in deploy cooldown: 750 ms.
-- Auto-Play smart formation cooldown: 1000 ms.
 - Opponent prediction history tick: 500 ms.
 - Next-enemy HUD text refresh: 500 ms while the HUD is enabled.
 - Cached opponent prediction row refresh: 500 ms while the Test tab or
@@ -651,13 +591,8 @@ At load time and during frame presentation, `jni/Main.cpp` performs the followin
 9. `TickFeatures()` retries missing bindings, refreshes battle bridge and shop
    panel references through pinned GC handles while a match is active, refreshes
    match state, and retries table cache loading.
-10. Active Info, Shop, Arena, Auto-Play, Settings HUD, and Test diagnostics
-    refresh only the runtime data they need.
-11. Auto-Play, Arena, Shop, Combat, and opponent-history work run on their own
-    bounded ticks rather than in every render pass; Auto-Play keeps built-in
-    deploy, smart formation, AI refresh, level-up, and auction cooldowns
-    independent. Busy frames defer lower-priority feature ticks instead of
-    running all pending managed work at once.
+10. Active Info, Shop, Arena, Settings HUD, and Test diagnostics refresh only the runtime data they need.
+11. Arena, Shop, Combat, and opponent-history work run on their own bounded ticks rather than in every render pass. Busy frames defer lower-priority feature ticks instead of running all pending managed work at once.
 12. Unity touch input is forwarded into ImGui mouse input through the hooked
     `GetTouch` path.
 13. When the match state transitions to ended, all pinned managed-object handles
@@ -675,151 +610,40 @@ Recent code review of `jni/Main.cpp`, `jni/structures/Structures.hpp`,
 `jni/Android.mk`, `.github/workflows/build.yml`, and `dump/dump.cs` highlights
 the following bug-prone areas:
 
-- The render hook is installed before `liblogic.so` and IL2CPP are ready.
-  Frame-time code must tolerate a non-ready managed runtime and should not call
-  IL2CPP APIs unless `AttachRenderIl2CppThread()` succeeded.
-- Startup waits should remain in the detached setup thread, not the constructor,
-  so loading the native library does not block Unity startup longer than needed.
-- Render-frame work is budgeted. Binding retries, table loads, prediction HUD
-  refreshes, and heavier Auto-Play board/opponent scans may defer later
-  automation ticks to the next frame, but those ticks remain retryable.
-- Managed IL2CPP, Unity, and game calls are also counted per frame. Do not
-  bypass the managed-work budget in hot loops or Test diagnostics just to avoid
-  changing the existing tick delays.
-- Persistent managed-object references are published only after they are pinned
-  with `il2cpp_gchandle_new(obj, true)`. The handle registry is match-scoped:
-  handles stay alive through object refreshes and are released only when the
-  active match has ended, so transient reference changes do not leave cached raw
-  objects vulnerable to GC movement or collection.
-- Auto-Play action groups after planning are also budget-gated. Card scoring,
-  auction bids, built-in AI, smart formation, and level-up work should not all
-  stack into one render pass when the frame budget is already spent.
-- Method lookup caches successful method vectors as reusable results and stores
-  empty scans behind a short miss backoff. Field lookup also caches misses only
-  behind the binding retry backoff. Do not turn these into permanent failures.
-- Method matching uses class name, method name, parameter count, and
-  case-insensitive parameter-name containment. Any new overload-sensitive
-  binding needs a dump-backed signature check, not just a successful compile.
-- Table cache publication is all-or-nothing for hero, equipment, and GogoCard
-  data. If one table is unavailable after a game update, dependent UI should
-  keep showing `Waiting for ...` rather than assuming an empty game table.
-- Shop automation depends on live UI operability, not only battle-data methods.
-  Buy and refresh actions should continue to require a non-delayed,
-  non-spectate shop panel accepted by `CanOperate(Boolean)`.
-- Scavenger expensive-hero forcing is tied to `MCBattleBridge.OnRefreshShop`
-  automatic regular-shop refreshes. It resolves the Scavenger/Shadow Mercenary
-  relation from relation-tip metadata, requires active count 2 or higher, then
-  buys lower-priced shop slots while respecting affordability and keep-gold
-  settings.
-- Auto-Play temporarily owns selected Shop, Arena, and Combat assists through a
-  captured policy backup. User edits to those assist toggles while Auto-Play is
-  active can be restored to the pre-Auto-Play backup when Auto-Play stops.
-- Built-in AI coordination is opt-in. Keep direct `StartAI` calls out of fight,
-  fight-result, and monster phases, and preserve the default-disabled setting so
-  enabling Auto-Play itself does not immediately invoke the game's AI entry
-  point.
-- Opponent prediction combines exact pair data, invasion manager state,
-  dump-backed invader order, learned recent cycles, the bounded seven-round
-  cycle-pattern signal, round-robin fallback, recent-cycle distance, and recent
-  meeting history. Only the exact local current opponent should be shown as
-  `100%`.
-- SpeedHack changes global Unity time scale. It must continue to reset to
-  `1.0x` when disabled, when the active battle state is gone, or when feature
-  state is reset.
-- Force Complete Achievements Task depends on
-  `MCLogicAchievementRecordComp.AchievementDataBase.GetResult`,
-  `canRecordAchievementData`, `JudgeFinalRelation`,
-  `JudgeReachCondition(List<MCLogicPlayer>)`,
-  `MCLogicAchievementRecordComp.AchievementRoundData.GetResult`,
-  `AchievementRoundData.RefreshData`, and the round counter fields
-  `m_roundAchievementCount`/`m_roundSuccessCount`. Verify these against
-  `dump/dump.cs` before changing achievement hooks or counter writes.
-- The update checker is informational only. Keep it asynchronous, keep release
-  metadata cached behind `RuntimeMutex::UpdateMutex`, keep retries throttled,
-  and do not add automatic download, deployment, forced update, bypass, or
-  gameplay-data upload behavior. The current request disables libcurl peer and
-  host certificate verification, so do not reuse it for sensitive payloads or
-  broader network features without restoring certificate validation.
-- Function comments now cover all project-owned native function definitions in
-  `jni/Main.cpp` and `jni/structures/Structures.hpp`; new helpers should keep
-  that coverage intact rather than relying on section-level comments alone.
+- The render hook is installed before `liblogic.so` and IL2CPP are ready, so
+  frame-time code must tolerate a non-ready managed runtime.
+- Binding retries, table loads, prediction HUD refreshes, and diagnostics are
+  budgeted. Delayed work should retry later instead of piling managed calls into
+  one render pass.
+- Persistent managed-object references must be pinned with
+  `il2cpp_gchandle_new(obj, true)` and released only at match end.
+- Table cache publication stays all-or-nothing for heroes, equipment, and
+  GogoCards. Dependent UI should keep showing `Waiting for ...` while required
+  tables are unavailable.
+- Shop automation depends on live UI operability, including delay, spectate,
+  and `CanOperate(Boolean)` checks when those bindings are available.
+- Info bot labels come from `SystemData.RoomData.bRobot` through
+  `ILOGIC_GetStPlayerData(UInt64)` and should degrade to ordinary player names
+  while that binding or field metadata is unavailable.
+- Opponent prediction should combine exact pair data first, then invader order,
+  recent-cycle learning, seven-round cycle-pattern history, round-robin
+  fallback, and per-player history. Only the exact local current opponent should
+  be shown as `100%`.
+- SpeedHack must reset Unity time scale to `1.0x` on disable, inactive battle
+  state, and feature reset.
 
 ## Development Notes
 
-- Keep native changes focused and easy to review.
-- Validate class names, method names, parameter counts, return types, and field layouts against local reference artifacts before adding IL2CPP calls.
-- Use the shared typed field helpers for regular instance fields so hot paths
-  benefit from offset access, and keep raw IL2CPP/static helpers for static
-  fields or runtime-managed setter behavior.
-- Keep feature runtime code in `jni/Main.cpp` unless a refactor is explicitly requested.
-- Use clear local sections and keep the concise function comments current,
-  especially around risky IL2CPP calls, hooks, value-type layouts, and timing
-  boundaries.
-- Preserve the current boot order: process gate, setup thread, early
-  `eglSwapBuffers` hook, `liblogic.so` wait, IL2CPP export resolution, setup
-  thread attach, `GetTouch` hook, then render-thread overlay initialization.
-- Keep constructor work non-blocking: process gate, launch setup thread, return.
-- Use the Test tab, including its Runtime Status section, when validating new
-  bindings or investigating delayed runtime state.
-- For Arena Skip Round changes, verify `MCLogicBattleData.get_logicRoundMgr`,
-  `LogicRoundMgr.SetRound(UInt32)`, and `LogicRoundMgr.NextRound(Boolean)`
-  against `dump/dump.cs`; keep missing pieces visible as `Waiting for ...`.
-- For Arena SpeedHack changes, verify `UnityEngine.Time.set_timeScale(Single)`
-  against `dump/dump.cs` and reset the scale to normal when the feature is disabled.
-- For GGC Info changes, verify
-  `MCLogicBattleData.ILOGIC_GetCrystalQualityByRound(UInt64, Int32)` against
-  `dump/dump.cs`, keep the round scan bounded, and keep the readout on its
-  throttled refresh cadence.
-- Opponent prediction should prefer dump-backed runtime state such as
-  `LogicInvasionMgr`, `LogicRealPlayerInvader.lbmList`,
-  `PairGenRoundTable`/`PairGenTwoPlayerMode`, `lastRoundEnemy`, and
-  `prevRealPlayerEnemy` before falling back to heuristic ordering.
-- The seven-round cycle-pattern signal comes from completed per-player history
-  learned from `../MCGG_Predictor`; keep it below exact pair and invader-order
-  evidence and ignore current-round entries so predictions do not leak live
-  observations as completed history.
-- Public scouting and positioning guides support recent-cycle and board-read
-  heuristics, but they should not override exact runtime current-opponent data.
-- Keep Test diagnostics read-only unless a task explicitly requests an action,
-  and verify each added binding against `dump/dump.cs`.
-- Keep the main overlay accessible on mobile displays while preserving the
-  primary TabBar navigation.
-- Keep Settings persistence scoped to project-owned config files rather than enabling ImGui `.ini` persistence.
-- Preserve retryable binding behavior. Do not permanently cache unresolved methods or fields as missing.
-- Preserve separate 100 ms ticks for shop automation and arena effects, the
-  250 ms ticks for Combat and Auto-Play, and the 500 ms GGC Info,
-  opponent-history, and HUD refresh cadences unless timing changes are part of
-  the task.
-- Keep burst control inside those cadences. Use the managed-work budget and
-  frame deferral for expensive IL2CPP/game readers instead of stretching the
-  existing delays.
-- Preserve built-in AI as an opt-in Auto-Play assist that is phase-gated and
-  stateful; do not make enabling Auto-Play itself call `StartAI` immediately.
-- Preserve shop automation throttles for buy, repeat-buy, refresh, target-worth, and Recommendation Lineup checks.
-- Keep table cache loading demand-driven and clip long data tables so table UI
-  does not walk every row every frame.
-- Keep hero table rows filtered for invalid IDs, commanders, and known
-  placeholder names before publishing table caches.
-- Guard direct access to `FeatureState::Heroes`, `FeatureState::Equips`,
-  `FeatureState::Cards`, `FeatureState::ShopSelectedHeroes`, recommendation
-  lineup target counts, and cached recommendation lineup hero IDs with
-  `RuntimeMutex::FeatureMutex` or the existing snapshot/access helpers.
-- Avoid holding `RuntimeMutex::FeatureMutex` across managed IL2CPP calls.
-  Collect local data first, then publish the result under the lock.
-- Keep method and field cache changes under `RuntimeMutex::CacheMutex`, and
-  guard UI/config strings with `RuntimeMutex::UiMutex`. Update-check release
-  metadata belongs under `RuntimeMutex::UpdateMutex`.
-- Keep shop selected-target scans bounded and snapshot-based.
-- Keep Appearance theme names and palette entries aligned when adding themes.
-  Existing configs expect Catppuccin Mocha to remain theme index `1`.
-- Keep the default ABI as `arm64-v8a`.
-- Keep Unity compatibility aligned with `2019.4.33f1`.
-- Keep the native language mode aligned with `c++26` unless the build configuration changes intentionally.
-- Keep the curl, libpsl `0.21.5`, and OpenSSL submodules pinned and rebuild
-  `obj/openssl-install/`, `obj/libpsl-install/`, and `obj/curl-install/` with
-  `jni/build-curl-android.sh` before running `ndk-build`.
-- Do not commit generated `obj/` or `libs/` output.
-- Avoid adding runtime deployment or abuse-oriented instructions to project documentation.
+- Keep feature work scoped to `jni/Main.cpp` unless a task explicitly asks for
+  a multi-file refactor.
+- Verify new IL2CPP methods, hook signatures, value types, and fields against
+  `dump/dump.cs`; dump RVAs are diagnostics, not binding contracts.
+- Preserve retryable method and field lookup behavior. Missing metadata should
+  back off briefly and resolve later when runtime state is ready.
+- Keep long table UIs clipped and demand-load table caches only for table-backed
+  tabs or active automation that consumes table metadata.
+- Run `git diff --check` for native or mixed changes. This repository has no
+  dedicated unit test framework.
 
 ## Troubleshooting
 

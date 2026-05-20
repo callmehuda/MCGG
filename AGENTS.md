@@ -10,8 +10,7 @@ event, collection, and string layouts are kept in
 
 `jni/Main.cpp` contains the process gate, setup thread, IL2CPP helpers, feature
 binding resolver, runtime caches, GitHub release update checker, Dobby hooks,
-ImGui rendering, and feature logic. It also owns the Info, Combat, Auto-Play,
-Shop, Arena, Appearance, Settings, and Test overlay tabs. Keep feature work in
+ImGui rendering, and feature logic. It also owns the Info, Combat, Shop, Arena, Appearance, Settings, and Test overlay tabs. Keep feature work in
 this file unless the user explicitly requests a multi-file refactor.
 
 The current boot order is process gate, detached setup thread, early
@@ -161,7 +160,7 @@ must be allowed to resolve later. Field misses may be cached only with a short
 retry backoff so hot feature paths do not rescan metadata every frame. Method
 resolution is name, parameter-count, and parameter-name-shape based; verify
 overload-sensitive changes against `dump/dump.cs`. Preserve the separate 100 ms
-shop and arena ticks, 250 ms Combat and Auto-Play ticks, and 500 ms GGC Info,
+shop and arena ticks, 250 ms Combat tick, and 500 ms GGC Info,
 opponent history, and HUD cadences unless the task explicitly changes timing.
 Frame-time feature work is guarded by a small render budget; when a frame is
 already busy, lower-priority ticks should defer to the next frame instead of
@@ -219,26 +218,6 @@ checks when those bindings are available. Do not add unbounded scans or
 immediate retry loops to the shop hot path unless the task explicitly changes
 that design.
 
-Auto-Play automation is intentionally snapshot-based and throttled on a separate
-250 ms tick. Preserve the bounded built-in AI startup, deployment/formation,
-level-up, and auction cooldowns. The controller should read runtime state through
-`ReadAutoPlaySnapshot()`, build shared interest-aware spend decisions through
-`BuildAutoPlayGoldPlan()`, collect board units through
-`CollectAutoPlayBoardUnits()`, score strategy and formation with
-`BuildAutoPlayBoardPlan()`, and publish selected shop targets through the
-existing target helpers. Keep opponent scans bounded to the battle manager
-dictionary limit, keep built-in deploy and smart formation on separate cooldowns,
-keep battlefield movement to one chosen action per formation cooldown,
-keep shop, auction, and level-up decisions aligned
-with the shared gold plan, keep built-in AI startup opt-in, stateful, and limited
-to safe non-fight/non-result phases instead of replaying `StartAI` on every tick,
-allow only a long-gated `StartAI` refresh to recover from dropped internal AI
-state, keep SpeedHack as an explicit Arena-only control, and do not hold
-`FeatureMutex` while calling managed IL2CPP APIs. Managed Auto-Play action groups
-after planning should keep checking the frame and managed-work budgets so card,
-auction, AI, formation, and level-up work do not stack into one overloaded
-render pass.
-
 Large table-backed UI surfaces such as Shop hero targets and Arena hero, item,
 and GogoCard lists should render through clipping or another visible-row pattern
 so scrolling a loaded table does not process every row every frame. Table cache
@@ -250,12 +229,6 @@ path. Reuse the 500 ms prediction tick, keep live current-opponent observations
 highest priority, then combine invader order, recent opponent cycle learning,
 the completed-history seven-round cycle-pattern signal, cycle-gap distance,
 round-robin fallback, and per-player history as weaker signals.
-
-Auto-Play temporarily owns selected Shop, Arena, and Combat assists through its
-policy backup while enabled. If a change touches those assist toggles or the
-Recommendation Lineup target defaults, preserve the capture/restore behavior and
-make it clear in user-facing docs when manual edits made during Auto-Play can be
-restored to the pre-Auto-Play values.
 
 ## Testing Guidelines
 
@@ -277,21 +250,6 @@ fields.
 When changing Recommendation Lineup automation, verify the related
 `MCLogicBattleData` and `MCBattleBridge` signatures against `dump/dump.cs` and
 keep the overlay in a `Waiting for ...` state while runtime data is unavailable.
-
-When changing Auto-Play automation, verify the related
-`MCLogicBattleManager.StartAI`, `StopAI`, `TryAutoDeploy`, `OnPlayerLvlUp`,
-`GetLineupWorth`, `CalcCurrentFightValue`,
-`MoveHeroInBattleField(UInt32, Byte, Byte, Boolean)`,
-`MCLogicBattleData.ILOGIC_GetAllBattleMgr`,
-`MCLogicBattleData.ILOGIC_GetCurrentOpponentAccountID`,
-`LogicRoundMgr.get_m_AuctionComp`,
-`MCLogicAuctionComp.Bid(MCLogicAuctionSlotInfo, UInt64, UInt32)`, and
-`MCLogicGoGoCardComp.get_m_CurrData` signatures against `dump/dump.cs`. Keep
-the overlay in a `Waiting for ...` state while required runtime data is
-unavailable.
-The 2026-05-20 dump refresh still exposes these signatures with the same
-parameter shapes; re-check them again before changing native function pointer
-types because future dumps can drift independently of public game context.
 
 When changing Arena Skip Round automation, verify
 `MCLogicBattleData.get_logicRoundMgr`, `LogicRoundMgr.SetRound(UInt32)`, and
@@ -338,7 +296,6 @@ All commit messages follow the [Conventional Commits](https://www.conventionalco
 ```text
 feat: add enemy predictor and project documentation
 docs: update contribution guide
-fix(autoplay): add freeze safeguards
 perf(shop): throttle automation actions
 refactor: stabilize MCGG feature runtime
 ```
@@ -358,66 +315,26 @@ Keep changes scoped. Do not modify vendored directories such as
 `jni/Il2CppVersions/`, `jni/imgui/`, or `jni/xDL/` unless explicitly requested.
 Do not revert unrelated local changes in the working tree.
 
-Current user-facing feature areas are Info, Combat, Auto-Play, Shop, Arena,
-Appearance, Settings, and Test. If a feature binding or update-check state is
-missing at runtime, the overlay should show a `Waiting for ...` or explicit
-failure state rather than failing silently.
-Info includes the player/enemy table and automatic GGC quality readout for every
-detected GGC round.
-Auto-Play includes adaptive strategy pressure, opt-in built-in AI coordination,
-opponent-aware board analysis, advanced role-aware formation moves, selected
-shop target promotion, GogoCard scoring, auction scoring, gold-interest economy
-decisions, and optional coordination of Combat and Arena assists. Shop currently
-includes free-hero buying, selected target buying, Recommendation Lineup buying
-with per-hero target counts, Scavenger expensive-hero forcing, auto-refresh pause
-conditions, keep-gold reserve, and target counts. Combat includes Invisible Scout. Arena includes
-hero/item/card granting, Battle Power controls
-for force-win, HP-loss prevention, attack-ratio boosting, fight-value boosting,
-and enemy-board crippling, active synergy forcing, level/population forcing,
-enemy HP pressure, achievement task forcing, Skip Round, and SpeedHack. Use
-the Test tab's Runtime Status
-section and diagnostics when checking binding readiness, managed references,
-round state, round-manager state, timeScale binding readiness, achievement
-binding readiness, player
-economy/rank/shop state, battle manager fields, battle bridge state, shop panel
-state, shop diagnostic reader readiness, behavior API state, Recommendation
-Lineup state, Auto-Play state, auction state, GogoCard state, board formation
-state, or opponent prediction logic. Test
-diagnostics should stay read-only unless the task explicitly requests an action.
-Shop diagnostics are considered available when at least one core shop diagnostic
-reader has resolved; individual Test rows should keep showing `Waiting` for
-missing readers.
-In the Test prediction table, `Will fight` is the local player's opponent
-probability and `Current enemy` is the observed opponent for that row. Only the
-exact local current opponent should be forced to `100%`; do not mark every row
-as `100%` just because that row has a known current enemy. Preserve per-player
-enemy history collection, completed-cycle pattern reads, and dump-backed invader
-order reads so prediction weights can account for recent meetings, the
-seven-round learned pattern, and the game's pairing list.
-Appearance currently includes ImGui Dark, Catppuccin Mocha, and additional
-palettes inspired by Dear ImGui issue #707. Keep `kAppearanceThemes` and
-`Issue707ThemePalette` entries aligned, and preserve Catppuccin Mocha at theme
-index `1` for existing configs. Appearance also owns the menu language selector
-and localized menu tooltips; keep Catppuccin and language config compatibility
-stable when changing visual settings. Keep mobile accessibility changes
-compatible with the main ImGui TabBar. Helper buttons may select tabs, but the
-TabBar should remain visible and authoritative.
-Settings includes a persisted next-enemy HUD toggle that draws bottom-center
-foreground text above the lower screen edge, plus the `Updates / Changelog`
-section for release status and cached GitHub release notes. Keep HUD work
-lightweight and throttle prediction refreshes instead of rebuilding predictions
-every render frame.
-Settings config should default to the running game package directory as
-`/data/data/<game-package>/files/mcgg_config.ini`.
+Current user-facing feature areas are Info, Combat, Shop, Arena, Appearance,
+Settings, and Test. Info includes the player/enemy table, `(Bot)` labels from
+`SystemData.RoomData.bRobot`, and automatic GGC quality readout for every
+detected GGC round. Combat includes Invisible Scout. Shop includes free-hero
+buying, selected target buying, Recommendation Lineup buying with per-hero
+target counts, Scavenger expensive-hero forcing, auto-refresh pause conditions,
+keep-gold reserve, and target counts. Arena includes hero/item/card granting,
+Battle Power controls, active synergy forcing, level/population forcing, enemy
+HP pressure, achievement task forcing, Skip Round, and SpeedHack. Appearance
+owns themes, fonts, language selection, and localized tooltips. Settings owns
+menu size/position/style, next-enemy HUD, config save/load, and update status.
+Test diagnostics should remain read-only unless the task explicitly requests an
+action.
 
 Known audit hotspots are early-render readiness, dump-backed signature drift,
 match-scoped pinned managed-object handles, table cache all-or-nothing
 publication with hero rows filtered for valid IDs, commanders, and placeholder
-names, shop panel operability before buy or refresh, grouped shop
-diagnostic readiness, Auto-Play policy ownership of assist toggles, opt-in
-safe-phase built-in AI startup, separate Auto-Play deploy/formation cooldowns,
-render-frame budget deferral between Auto-Play action groups, method-miss
-backoff, guarded binding resolution, update-check thread/cache/backoff behavior,
-clipped long tables, exact-opponent-only `100%` prediction rows,
-completed-history seven-round prediction patterns, bounded GGC round scans, and
-Unity timeScale reset paths.
+names, shop panel operability before buy or refresh, grouped shop diagnostic
+readiness, retryable method and field misses, guarded binding resolution,
+update-check thread/cache/backoff behavior, clipped long tables,
+exact-opponent-only `100%` prediction rows, completed-history seven-round
+prediction patterns, bounded GGC round scans, Unity timeScale reset paths, and
+Info bot labels sourced from `SystemData.RoomData.bRobot`.

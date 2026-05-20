@@ -42,219 +42,18 @@ bash jni/build-curl-android.sh
 
 ## Development Guidelines
 
-- Keep source changes focused on the requested feature or fix.
-- Use `dump/dump.cs` to verify IL2CPP class names, method signatures, return
-  types, and fields before changing native calls.
-- Treat `dump/dump.cs` as a Git LFS-managed source artifact. A dump refresh may
-  appear in Git as only a pointer object ID and size change, so inspect the full
-  local file and compare against the previous dump snapshot when one is
-  available. Do not commit old dump backup files unless the task explicitly asks
-  for a checked-in historical reference.
-- The current dump refresh was checked locally on 2026-05-20 and is 605,385
-  lines. It still exposes the main contracts used by native runtime features:
-  `MCLogicBattleManager.StartAI(Int32)`, `StopAI()`, `TryAutoDeploy()`,
-  `OnPlayerLvlUp()`, `CalcCurrentFightValue()`, `GetLineupWorth()`,
-  `MoveHeroInBattleField(UInt32, Byte, Byte, Boolean)`,
-  `MCLogicBattleData.ILOGIC_GetAllBattleMgr()`,
-  `ILOGIC_GetCurrentOpponentAccountID(UInt64)`,
-  `ILOGIC_GetCrystalQualityByRound(UInt64, Int32)`,
-  `LogicRoundMgr.get_m_AuctionComp()`, `SetRound(UInt32)`,
-  `NextRound(Boolean)`, `MCLogicAuctionComp.Bid(...)`,
-  `MCLogicGoGoCardComp.get_m_CurrData()`, and
-  `UnityEngine.Time.set_timeScale(Single)`.
-- Treat dump addresses and RVAs as per-build diagnostics. Native bindings should
-  continue to use class names, method names, return types, parameter counts, and
-  parameter-name shape instead of address literals.
-- Regular instance field helpers should use resolved field offsets for hot
-  typed reads and non-pointer writes, while retaining raw IL2CPP fallbacks.
-  Keep static fields on the IL2CPP static APIs and preserve write barriers for
-  managed-object pointer writes.
-- Keep the default target `arm64-v8a`.
-- Keep Unity compatibility aligned with `2019.4.33f1`.
-- Keep native language mode aligned with `c++26` unless the build configuration
-  intentionally changes.
-- Keep the curl, libpsl `0.21.5`, and OpenSSL submodules pinned and use
-  `jni/build-curl-android.sh` to generate `obj/curl-install/lib/libcurl.a`,
-  `obj/libpsl-install/lib/libpsl.a`, `obj/openssl-install/lib/libssl.a`, and
-  `obj/openssl-install/lib/libcrypto.a` before native builds. Curl should be
-  configured with the pinned OpenSSL `4.0.0` TLS backend, pinned libpsl
-  `0.21.5` support from
-  `https://github.com/rockdaboot/libpsl/releases/tag/0.21.5`, and without curl
-  feature-disabling flags.
-- Keep build metadata embedded through `MCGG_BUILD_REPOSITORY`,
-  `MCGG_BUILD_VERSION`, `MCGG_BUILD_COMMIT`, and `MCGG_BUILD_REF`. CI prepares
-  the release version before compiling and passes those constants into
-  `ndk-build`; local builds should keep the Git-derived fallbacks usable.
-- Keep `jni/Application.mk` app-wide stability flags aligned with the current
-  release profile: stack protector, fortify, conservative alias/overflow/null
-  check behavior, unwind tables, hidden inline visibility, RELRO, immediate
-  binding, and `--as-needed`.
-- When using internet, video, or guide research for game context, record durable
-  mechanics rather than seasonal tier claims. Current public references describe
-  MCGG as an 8-player auto-battler with hero recruitment/upgrades, Commander
-  skills, Go Go Cards, economy/interest decisions, synergies, equipment,
-  auctions, board placement, and round-specific supplies. Public context was
-  last checked on 2026-05-19; Google Play showed 10M+ downloads, a May 9, 2026
-  store update, S6 Dawnlight Celebration event context, Commander Ruby, Gold
-  Rush mode, City Hero draw, and the Neolight Wheel event in the checked web
-  region, while MOONTON Season 5 news documented Go Go Plaza, GOGO MOBA, Golden
-  Month content, new synergies, GO1 esports momentum, and a 30M-download
-  milestone after global launch. Treat those public details as product context
-  rather than native binding assumptions.
-- Prediction research should treat public scouting and positioning advice as
-  weak heuristics. Runtime current-opponent data, invader order, recent-cycle
-  learning, the completed-history seven-round cycle model adapted from
-  `../MCGG_Predictor`, cycle-gap distance, and local history should drive
-  predictions before any generic internet or video-derived assumption.
-- Preserve the current startup order: process gate, setup thread, early
-  `eglSwapBuffers` hook, `liblogic.so` wait, IL2CPP export resolution, setup
-  thread attach, `UnityEngine.Input.GetTouch` hook, then lazy render-thread
-  ImGui initialization.
-- Keep startup waits inside the detached setup thread. The library constructor
-  should only gate the process and launch setup so it does not freeze process
-  loading.
-- The render hook can run before IL2CPP is ready. Frame-time managed work must
-  stay behind readiness checks and successful render-thread IL2CPP attachment.
-- Keep frame-time managed work within the feature frame budget. If a frame is
-  already busy, defer noncritical ticks to the next frame instead of stacking
-  every automation path into one render pass. Heavy Auto-Play fallback opponent
-  scans should also yield to the budget and retry on a later tick.
-- Persistent managed-object references must be pinned before publication with
-  `il2cpp_gchandle_new(obj, true)`. Keep those handles match-scoped, retain
-  replaced objects until the active match has ended, and release all accumulated
-  handles only from the match-ended cleanup path.
-- Use the Test tab, including its Runtime Status section, to validate binding
-  readiness, update-check status, managed references, round state, player
-  economy/rank/shop state, battle manager fields, battle bridge state, shop
-  panel state, shop diagnostic reader readiness, behavior API state, Auto-Play
-  state, auction state, GogoCard state, board formation state, and opponent
-  prediction behavior after feature changes.
-- Route new user-facing overlay menu labels through the native i18n table in
-  `jni/Main.cpp`. Add both English and Indonesian copy for new menu controls,
-  preserve hidden ImGui ID suffixes such as `##id`, and attach a tooltip for
-  each interactive menu item by using the existing localized menu wrappers.
-  Runtime data, table row values, and diagnostics may fall back to English when
-  they are dynamic or dump-derived.
-- In the Test prediction table, `Will fight` is the local player's opponent
-  probability. Only the exact local current opponent should be forced to
-  `100%`; other rows should stay weighted even when their `Current enemy`
-  value is known. `Recent` is derived from the per-player opponent history.
-- Opponent prediction should use dump-backed runtime state first. Prefer
-  `LogicInvasionMgr`, `LogicRealPlayerInvader.lbmList`,
-  `PairGenRoundTable`/`PairGenTwoPlayerMode`, `lastRoundEnemy`, and
-  `prevRealPlayerEnemy` before falling back to heuristic account ordering.
-  The seven-round cycle-pattern signal learned from `../MCGG_Predictor` should
-  use only completed current-cycle history: unknown pattern can tentatively
-  predict R4 from local R1, classic pattern predicts R4/R5 from local R1/R3,
-  and shifted pattern predicts R5/R6/R7 from the local R1 opponent's R4/R2/R3
-  matchups. Recent-cycle distance and cycle-pattern signals may bias
-  probabilities, but they must stay weaker than exact current-opponent or
-  reverse-pair reads.
-- For Shop changes, preserve the existing throttled automation model: buy,
-  repeat-buy, refresh, target-worth, and Recommendation Lineup checks must stay
-  bounded, snapshot-based, and retryable. Buy and refresh UI actions should also
-  wait for a non-delayed, non-spectate, operable shop panel when those panel
-  bindings are available.
-- For Scavenger shop forcing, keep the trigger tied to automatic regular-shop
-  refreshes, require Scavenger/Shadow Mercenary active count 2 or higher, and
-  respect affordability plus keep-gold settings while clearing only lower-priced
-  shop slots.
-- For Auto-Play changes, preserve the 250 ms tick and bounded action model:
-  built-in AI startup, deployment/formation moves, level-up actions, and auction
-  bids must stay cooldown-based. Use runtime snapshots, table metadata, current
-  opponent data, board-unit scans, and selected-target helpers instead of
-  unbounded searches or long lock holds. Keep gold-interest decisions centralized
-  in the Auto-Play gold plan so shop spending, auction bids, and level-up
-  actions share the same reserve logic.
-  Built-in AI startup should be opt-in, limited to safe non-fight/non-result
-  phases, and stateful so `StartAI` is not replayed continuously for the same
-  account, with only a long-gated refresh to recover dropped internal AI state.
-  Keep built-in deployment and smart formation on separate cooldowns so formation
-  movement cannot starve `TryAutoDeploy`, and keep budget checks between
-  card/auction/AI/formation/level-up action groups after planning.
-  Auto-Play should not enable or disable Arena SpeedHack; SpeedHack remains an
-  explicit Arena control.
-- Auto-Play depends on dump-backed bindings for
-  `MCLogicBattleManager.StartAI`, `TryAutoDeploy`, `OnPlayerLvlUp`,
-  `GetLineupWorth`, `CalcCurrentFightValue`,
-  `MoveHeroInBattleField(UInt32, Byte, Byte, Boolean)`,
-  `MCLogicBattleData.ILOGIC_GetAllBattleMgr`,
-  `MCLogicBattleData.ILOGIC_GetCurrentOpponentAccountID`,
-  `LogicRoundMgr.get_m_AuctionComp`,
-  `MCLogicAuctionComp.Bid(MCLogicAuctionSlotInfo, UInt64, UInt32)`, and
-  `MCLogicGoGoCardComp.get_m_CurrData`. Verify these against `dump/dump.cs`
-  before changing related function pointers or field reads.
-- Recommendation Lineup automation depends on both `MCLogicBattleData` and
-  `MCBattleBridge` bindings. Verify signatures against `dump/dump.cs` before
-  changing related method pointers.
-- Arena Skip Round depends on `MCLogicBattleData.get_logicRoundMgr`,
-  `LogicRoundMgr.SetRound(UInt32)`, and `LogicRoundMgr.NextRound(Boolean)`.
-  Keep the UI in a `Waiting for ...` state while those bindings are missing.
-  Automatic skip should avoid fight/result phases and suppress repeated
-  requests for the same source round and target round.
-- Arena SpeedHack depends on `UnityEngine.Time.set_timeScale(Single)`. Reset
-  the time scale when disabling the feature, leaving active battle state, or
-  resetting feature state.
-- Arena achievement forcing depends on
-  `MCLogicAchievementRecordComp.AchievementDataBase.GetResult`,
-  `canRecordAchievementData`, `JudgeFinalRelation`,
-  `JudgeReachCondition(List<MCLogicPlayer>)`,
-  `MCLogicAchievementRecordComp.AchievementRoundData.GetResult`,
-  `AchievementRoundData.RefreshData`, and
-  `m_roundAchievementCount`/`m_roundSuccessCount`. Verify these against
-  `dump/dump.cs` before changing achievement hooks or counter writes.
-- GGC Info depends on
-  `MCLogicBattleData.ILOGIC_GetCrystalQualityByRound(UInt64, Int32)`. Verify it
-  against `dump/dump.cs`, keep the round scan bounded, and keep the readout on
-  its throttled refresh cadence.
-- Settings includes a persisted next-enemy HUD toggle. Keep the HUD as
-  lightweight bottom-center foreground text and throttle current-opponent or
-  prediction refreshes instead of doing prediction work every render frame.
-- Keep Settings save/load behavior scoped to the project config file under the
-  running game package directory, normally
-  `/data/data/<game-package>/files/mcgg_config.ini`.
-- Settings also includes an informational `Updates / Changelog` section. Keep
-  GitHub Releases checks asynchronous, cached in memory under
-  `RuntimeMutex::UpdateMutex`, throttled to the 6-hour refresh cadence with
-  bounded retry backoff, and limited to public release metadata. Do not send
-  gameplay state, account data, device identifiers, credentials, or private
-  runtime data, and do not add automatic download, deployment, forced update,
-  bypass, or evasion behavior. The current native request disables libcurl peer
-  and host certificate verification and does not configure Android's system CA
-  path, so keep that compatibility tradeoff limited to public release metadata
-  unless certificate validation is restored.
-- Do not commit generated `libs/` or `obj/` output, including curl/libpsl/OpenSSL
-  build output under `obj/curl-*`, `obj/libpsl-*`, `obj/openssl-*`, and related
-  install dirs.
-- Do not edit vendored directories such as `jni/Il2CppVersions/`, `jni/imgui/`,
-  `jni/xDL/`, `jni/curl/`, `jni/libpsl/`, or `jni/openssl/` unless the change
-  explicitly requires it.
-
-Current user-facing overlay areas are Info, Combat, Auto-Play, Shop, Arena,
-Appearance, Settings, and Test. Info includes the player/enemy table and
-automatic GGC quality readout for every detected GGC round. Auto-Play includes
-adaptive strategy pressure, opponent-aware board analysis, advanced role-aware
-formation moves, selected shop target promotion, GogoCard scoring, auction
-scoring, gold-interest economy decisions, and optional coordination of Combat
-and Arena assists. Shop currently includes free-hero buying, manual target
-buying, Recommendation Lineup buying with per-hero target counts, Scavenger
-expensive-hero forcing, auto-refresh pause conditions, keep-gold reserve, and
-target counts. Combat
-includes Invisible Scout. Arena includes hero/item/card granting, Battle Power
-controls for force-win, HP-loss
-prevention, attack-ratio boosting, fight-value boosting, and enemy-board
-crippling, active synergy forcing, level/population forcing, enemy HP pressure,
-achievement task forcing, Skip Round, and SpeedHack.
-Appearance includes ImGui
-Dark, Catppuccin Mocha, and additional palettes inspired by Dear ImGui issue #707.
-Settings includes the optional next-enemy HUD and GitHub release update status
-alongside menu size, position, style, and save/load controls.
-Test diagnostics are split into tabbed sections for prediction, bindings, round
-state, player data, battle managers, battle bridge, shop UI, behavior API, and
-all-manager views. New user-facing controls should report delayed runtime
-dependencies with a clear `Waiting for ...` state where practical.
-Shop diagnostics use grouped readiness over core shop diagnostic readers; each
-individual row should still show `Waiting` while its specific reader is missing.
+- Keep changes scoped to the requested feature area and follow the existing
+  large-file organization in `jni/Main.cpp`.
+- Verify new IL2CPP methods, fields, hook signatures, and value-type layouts
+  against `dump/dump.cs` before changing native function pointer types or field
+  reads.
+- Preserve retryable binding behavior. Missing metadata should back off and
+  resolve later, not become a one-shot failure.
+- Keep frame-time managed work behind IL2CPP readiness, render-thread attach,
+  and the existing managed-work budget.
+- Info player bot labels should read `SystemData.RoomData.bRobot` through
+  `ILOGIC_GetStPlayerData(UInt64)` and degrade to ordinary names when runtime
+  data is unavailable.
 
 ## Threading and Shared State
 
@@ -284,97 +83,32 @@ individual row should still show `Waiting` while its specific reader is missing.
 
 Follow the existing C++ style in `jni/Main.cpp`:
 
-- Use 4-space indentation.
-- Prefer explicit pointer types.
-- Keep helper code small and direct.
-- Keep the existing short comment above each project-owned native function in
-  `jni/Main.cpp` and `jni/structures/Structures.hpp`; add extra block comments
-  only where risky IL2CPP calls, hooks, value-type layouts, or timing-sensitive
-  behavior need more context.
-- Keep existing UI element names, method names, and hook names stable unless a
-  rename is part of the requested change.
-- Keep appearance changes local to the existing theme/font setup unless a
-  broader UI refactor is part of the requested change.
-- When adding Appearance themes, keep `kAppearanceThemes` and
-  `Issue707ThemePalette` entries aligned and preserve Catppuccin Mocha at theme
-  index `1` for existing configs.
-- Keep mobile menu accessibility changes compatible with the main ImGui TabBar;
-  helper controls may select tabs, but the TabBar should remain the primary
-  navigation surface.
-- Keep config parsing simple, bounded, and compatible with the existing
-  key-value Settings file format.
-- Keep retryable IL2CPP field misses throttled instead of permanently failed or
-  repeatedly rescanned from hot feature paths.
-- Keep offset-based field access bounded and fallback-capable. A missing or
-  invalid offset should degrade to the IL2CPP raw access path, not to a
-  one-shot failure.
-- Keep runtime cadence split by responsibility: 100 ms for Shop and Arena,
-  250 ms for Combat and Auto-Play, and 500 ms for GGC Info, opponent prediction
-  history, and the next-enemy HUD refresh.
-- Keep burst control separate from those cadences. Hot loops and Test
-  diagnostics should consume the managed-work budget and defer remaining
-  IL2CPP/Unity/game reads to later frames instead of increasing tick delays.
-- Preserve Auto-Play's sub-cooldowns inside that 250 ms tick: stateful
-  opt-in `StartAI`, long-gated AI refresh, built-in deploy, separate smart
-  formation, level-up, and auction actions should not share one retry clock.
-- Confirm built-in AI remains default-disabled and phase-gated so enabling
-  Auto-Play itself does not immediately invoke `MCLogicBattleManager.StartAI`.
-- Keep table cache loading demand-driven. Unrelated tabs should not repeatedly
-  perform heavy table scans, and long Shop/Arena table views should use visible
-  row clipping.
-- Keep opponent prediction table rows cached on the 500 ms prediction cadence.
-  Drawing the Test tab or next-enemy HUD should reuse cached rows instead of
-  rebuilding managed prediction state every render frame.
+- Use 4-space indentation and explicit pointer types.
+- Keep helper functions small, local, and named after the runtime contract they
+  protect.
+- Add short contract comments above project-owned native functions when adding
+  or changing function definitions.
+- Route user-facing overlay labels through the native i18n table, including
+  English and Indonesian text for interactive controls.
+- Keep long ImGui table views clipped and avoid per-frame scans of every loaded
+  row.
 
 ## Runtime Audit Checklist
 
 Use this checklist when looking for hidden bugs or logic flaws:
 
-- Separate stable game systems from volatile public meta. Guides and videos are
-  useful for UI flow and terminology, but native bindings must still be verified
-  through `dump/dump.cs` and runtime diagnostics.
-- Confirm every new IL2CPP method pointer, hook signature, value type, and field
-  read against `dump/dump.cs`, especially overloaded methods where runtime
-  resolution only checks method name, parameter count, and parameter-name shape.
-- Confirm regular instance field offset use against the target Unity API. Static
-  fields and managed-object pointer writes should continue through IL2CPP APIs
-  when runtime setter behavior matters.
-- Keep early-frame paths safe when `eglSwapBuffers` is hooked but IL2CPP is not
-  ready or the render thread has not attached.
-- Confirm render-frame budget checks still let delayed work retry on later
-  frames and do not turn retryable runtime state into a one-shot failure.
-- Confirm managed-work budget checks cover any new loop that can issue many
-  IL2CPP, Unity, or game function/field reads in one frame, including Test
-  diagnostics and table-backed automation.
-- Confirm prediction changes preserve the source priority: exact live pair,
-  reverse live pair, invader-order read, recent-cycle queue, seven-round
-  cycle-pattern signal from completed history, round-robin fallback,
-  recent-cycle distance, and only then generic history weighting.
-- Keep method misses and field misses backed off rather than permanently cached
-  as unavailable, and keep feature binding resolution single-flight so setup and
-  render retries do not scan IL2CPP metadata at the same time.
-- Treat table caches as all-or-nothing for heroes, equipment, and GogoCards.
-  UI and automation should show `Waiting for ...` while any required table is
-  unavailable.
-- Keep hero table publication filtered to valid IDs, non-commanders, and known
-  non-hero placeholder names.
-- Keep shop buy and refresh actions gated on the live shop panel being
-  non-delayed, non-spectate, and accepted by `CanOperate(Boolean)`.
-- Keep shop diagnostics tied to grouped reader readiness instead of a single
-  shop stat binding, and keep per-value Test rows individually retryable.
-- Keep long table UIs clipped and demand-load table caches only for table-backed
-  tabs or active automation that consumes table metadata.
-- Preserve Auto-Play policy backup and restore behavior for Shop, Arena, and
-  Combat assist toggles, including Recommendation Lineup target defaults.
-- Keep opponent prediction exactness narrow: only the local player's exact
-  current opponent should be forced to `100%`.
-- Keep GGC Info bounded: scan only the configured round range, ignore unknown
-  quality values, and refresh on its 500 ms cadence rather than every render
-  frame.
-- Reset Unity time scale to `1.0x` on every SpeedHack disable, inactive-battle,
-  and feature-reset path.
-- For repository-wide documentation refreshes, update top-level Markdown only
-  and leave `goal.md` plus submodule Markdown untouched.
+- Confirm early-frame paths do not call managed APIs before IL2CPP is ready.
+- Confirm new method and field bindings are dump-backed and retryable.
+- Confirm cached managed references are pinned and released only after the
+  active match ends.
+- Confirm Info bot labels use `SystemData.RoomData.bRobot` and do not block the
+  player list when that optional reader is missing.
+- Confirm shop buy and refresh actions still require an operable shop panel.
+- Confirm table caches are demand-loaded and published only after required
+  hero, equipment, and GogoCard data is available.
+- Confirm opponent prediction keeps exact current-opponent evidence above
+  heuristics and only locks the local exact opponent to `100%`.
+- Confirm SpeedHack reset paths restore Unity time scale to `1.0x`.
 
 ## Build Verification
 
@@ -443,7 +177,7 @@ Accepted commit types:
 - `revert`: revert of a previous commit
 - `test`: test diagnostics or test-tab improvements
 
-Scope is optional but recommended for clarity. Common scopes include `main`, `ui`, `shop`, `arena`, `autoplay`, `hud`, `appearance`, `test`, and `readme`.
+Scope is optional but recommended for clarity. Common scopes include `main`, `ui`, `shop`, `arena`, `hud`, `appearance`, `test`, and `readme`.
 
 ## Pull Requests
 

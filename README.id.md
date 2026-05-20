@@ -61,8 +61,7 @@ Target default yang didukung:
 - Build system: `ndk-build`
 - Standar C++: `c++26`
 - Branch utama: `master`
-- Tab overlay saat ini: Info, Combat, Auto-Play, Shop, Arena, Appearance,
-  Settings, dan Test
+- Tab overlay saat ini: Info, Combat, Shop, Arena, Appearance, Settings, dan Test
 
 ## Referensi Dump
 
@@ -75,19 +74,14 @@ bandingkan dengan snapshot dump sebelumnya jika tersedia.
 Dump yang sudah di-refresh masih memvalidasi kontrak runtime inti yang dipakai
 overlay native ini:
 
-- `MCLogicBattleManager`: `StartAI(Int32)`, `StopAI()`, `TryAutoDeploy()`,
-  `OnPlayerLvlUp()`, `CalcCurrentFightValue()`, `GetLineupWorth()`, dan
-  `MoveHeroInBattleField(UInt32, Byte, Byte, Boolean)`.
 - `MCLogicBattleData`: `ILOGIC_GetAllBattleMgr()`,
   `ILOGIC_GetCurrentOpponentAccountID(UInt64)`,
-  `ILOGIC_GetCrystalQualityByRound(UInt64, Int32)`, reader round/phase, reader
-  economy, reader shop, dan reader Recommendation Lineup.
-- `LogicRoundMgr`: `get_m_AuctionComp()`, `SetRound(UInt32)`, dan
-  `NextRound(Boolean)`.
-- `Battle.MCLogicAuctionComp.Bid(MCLogicAuctionSlotInfo, UInt64, UInt32)`,
-  `Battle.MCLogicGoGoCardComp.get_m_CurrData()`,
-  `UnityEngine.Time.set_timeScale(Single)`, dan helper achievement record yang
-  dipakai diagnostik Arena.
+  `ILOGIC_GetCrystalQualityByRound(UInt64, Int32)`,
+  `ILOGIC_GetStPlayerData(UInt64)`, reader round/phase, reader economy,
+  reader shop, dan reader Recommendation Lineup.
+- `LogicRoundMgr`: `SetRound(UInt32)` dan `NextRound(Boolean)`.
+- `SystemData.RoomData.bRobot`, `UnityEngine.Time.set_timeScale(Single)`,
+  dan helper achievement record yang dipakai diagnostik Info dan Arena.
 
 Alamat dan RVA di `dump/dump.cs` adalah diagnostik per-build. Logic native
 harus tetap melakukan binding berdasarkan class, nama method, return type,
@@ -150,53 +144,13 @@ behavior kecuali sudah didukung oleh `dump/dump.cs` dan verifikasi runtime live.
 ### Info
 
 - Tabel player dan next-enemy yang diurutkan dengan player lokal di posisi pertama.
+- Nama player menambahkan ` (Bot)` saat `SystemData.RoomData.bRobot` bernilai true.
 - Readout kualitas GGC otomatis untuk setiap round GGC yang terdeteksi.
 - Indikator status overlay untuk binding yang terlambat atau belum tersedia.
 
 ### Combat
 
 - Toggle Invisible Scout.
-
-### Auto-Play
-
-- Controller di sisi binary yang membaca round, phase, HP, gold, level,
-  population, lineup worth, fight value, sinyal Recommendation Lineup, target
-  star-up, dan opponent saat ini.
-- Model tekanan strategi adaptif yang berpindah antara Economy, Balanced, dan
-  Aggressive berdasarkan progress round, kehilangan HP, kondisi gold, fight
-  value sendiri, fight value opponent saat ini, dan opponent terkuat yang
-  terdeteksi.
-- Planner gold interest yang mengevaluasi tier interest per 10 gold, breakpoint
-  interest berikutnya, reserve terkonfigurasi, spend budget, tekanan population,
-  tekanan HP, defisit fight value, dan strategi sebelum mengizinkan spending
-  shop, bid auction, atau aksi level-up.
-- Scan semua battle manager untuk menghitung opponent, mendeteksi perebutan
-  target, melacak opponent saat ini, dan membandingkan board lokal dengan board
-  terkuat.
-- Advanced formation scorer yang membaca unit chess managed dari
-  `LogicHeroContainer.m_ChessList`, mengevaluasi hero ID, star, grid position,
-  metadata tank/carry role, synergy group, centroid enemy, threat kolom enemy,
-  cover frontline ally, proteksi backline, dan crowding kolom, lalu melakukan
-  reposition battlefield terbatas satu langkah per cooldown.
-- Pemilihan target shop yang mempromosikan hero terbaik saat ini atau target
-  star-up ke selected shop target sambil tetap memakai throttle buy/refresh
-  yang sudah ada.
-- Scoring GogoCard yang memprioritaskan resource, EXP/economy, hero/shop,
-  star-up, synergy, equipment, dan combat card sesuai round, tekanan HP, focus
-  synergy, dan kekuatan opponent.
-- Scoring auction yang membaca phase auction, state slot, bid price, reward
-  item, reward hero/equipment, dan special upgrade effect sebelum menawar opsi
-  bernilai tertinggi secara terbatas.
-- Startup built-in AI bersifat opt-in, safe-phase, stateful, dan memakai
-  cooldown: `StartAI` tidak dipanggil terus-menerus untuk account yang sama,
-  dilewati saat fase fight, fight-result, dan monster, refresh dengan interval
-  panjang dapat memulai ulang state AI internal yang terlepas, dan `StopAI`
-  dipanggil saat Auto-Play dimatikan atau snapshot battle live belum dapat
-  dipakai.
-- Built-in deploy dan smart formation memakai cooldown terpisah sehingga
-  movement board tidak dapat menahan `TryAutoDeploy`.
-- Kontrol opsional untuk built-in battle AI, shop, economy, combat power, arena
-  assist, smart formation, auction scoring, dan GogoCard scoring.
 
 ### Appearance
 
@@ -217,7 +171,7 @@ behavior kecuali sudah didukung oleh `dump/dump.cs` dan verifikasi runtime live.
   perangkat mobile, dan interaksi window.
 - HUD teks next-enemy opsional yang ditampilkan di dekat tengah bawah layar.
 - Kontrol font scale, opacity, rounding, border, padding, spacing, scrollbar, dan indentation.
-- Save dan load untuk kontrol visual, bahasa, window, HUD, Auto-Play, Combat, Shop, dan Arena.
+- Save dan load untuk kontrol visual, bahasa, window, HUD, Combat, Shop, dan Arena.
 - Path config default berada di package game yang sedang berjalan, di-resolve sebagai `/data/data/<game-package>/files/mcgg_config.ini`.
 - Indikator update library dan view collapsible `Updates / Changelog` berbasis
   GitHub Releases. Bagian ini menampilkan versi lokal embedded, commit/ref,
@@ -353,16 +307,6 @@ disimpan sebagai nilai `std::atomic`. Kode yang membaca koleksi kompleks
 sebaiknya memakai helper snapshot atau access yang sudah ada dan tidak menahan
 `FeatureMutex` saat memanggil API IL2CPP managed.
 
-Auto-Play memakai model tick terbatas yang sama dengan fitur runtime lain. Fitur
-ini mengumpulkan snapshot lokal terlebih dahulu, membangun satu gold-interest
-plan, menilai opsi strategy/formation/shop/card/auction dari data lokal, hanya
-mem-publish counter ringkas dan selected target di bawah `FeatureMutex`, dan
-menghindari lock proyek saat memanggil API IL2CPP managed. Built-in deploy dan
-smart formation memakai cooldown terpisah di dalam tick 250 ms. Bridge built-in
-AI default-nya nonaktif, tetap stateful saat diaktifkan eksplisit, dan hanya
-memanggil `StartAI` dari fase non-fight/non-result yang aman dengan refresh
-interval panjang untuk recovery.
-
 Pekerjaan fitur pada frame-time memiliki budget render kecil. Jika retry
 binding, refresh managed reference, loading tabel, refresh HUD, atau automation
 sudah memakai budget frame saat ini, tick prioritas lebih rendah ditunda ke
@@ -370,33 +314,9 @@ frame berikutnya. Budget unit managed-work yang terpisah membatasi jumlah
 reader IL2CPP, Unity, atau game yang boleh dipanggil dalam satu render frame;
 saat cap ini tercapai, diagnostik menampilkan `Waiting` dan automation prioritas
 lebih rendah menunggu tick terjadwal berikutnya. Loading table cache bersifat
-demand-driven dan hanya berjalan untuk tab berbasis tabel atau Auto-Play aktif.
+demand-driven dan hanya berjalan untuk tab berbasis tabel atau automasi shop aktif.
 
 Cadence runtime saat ini sengaja dipisah berdasarkan tanggung jawab:
-
-- Retry binding: 2000 ms.
-- Refresh managed reference: 100 ms.
-- Refresh Info GGC: 500 ms.
-- Check state match: 500 ms.
-- Retry reload tabel: 2000 ms.
-- Tick fitur Arena: 100 ms.
-- Tick automation Shop: 100 ms.
-- Tick Combat power: 250 ms.
-- Tick Auto-Play: 250 ms.
-- Budget frame fitur: 12 ms.
-- Budget managed-work fitur: 256 unit per render frame; loading tabel
-  all-or-nothing dapat memakai hingga 2048 unit sebelum ditunda.
-- Retry start AI Auto-Play: 2000 ms.
-- Refresh AI Auto-Play: 8000 ms.
-- Cooldown built-in deploy Auto-Play: 750 ms.
-- Cooldown smart formation Auto-Play: 1000 ms.
-- Tick riwayat prediksi opponent: 500 ms.
-- Refresh teks HUD next-enemy: 500 ms saat HUD aktif.
-- Refresh cache row prediksi opponent: 500 ms saat tab Test atau HUD next-enemy
-  membutuhkan data prediksi.
-- Update check GitHub Releases: sekali per sesi overlay, lalu maksimal setiap
-  6 jam kecuali user menekan refresh. Kegagalan network atau metadata dicoba
-  ulang dengan exponential backoff terbatas dari 5 menit sampai 60 menit.
 
 Miss metadata field juga dicoba ulang dengan backoff singkat. Ini menjaga
 metadata Unity yang terlambat tetap retryable tanpa membiarkan lookup field yang
@@ -637,37 +557,36 @@ menerapkan asset rilis secara otomatis.
 
 Pada saat load dan selama frame presentation, `jni/Main.cpp` menjalankan urutan berikut:
 
-1. Constructor mengonfirmasi command line process berisi `:UnityKillsMe`.
-2. Setup thread detached dimulai setelah process gate tanpa sleep di constructor.
-3. Setup thread menangani startup wait, lalu me-resolve dan melakukan hook
-   `eglSwapBuffers` terlebih dahulu, sehingga rendering menjadi frame loop
-   jangka panjang.
-4. Setup thread menunggu `liblogic.so`, me-resolve export API IL2CPP Unity
-   `2019.4.33f1` dari deklarasi API bundled, lalu attach ke IL2CPP domain.
-5. Setup thread me-resolve dan melakukan hook `UnityEngine.Input.GetTouch` saat
-   metadata method tersedia.
-6. `RuntimeState::Il2CppReady` diset, setup thread menjalankan pass pertama
-   feature binding yang guarded, dan retry pada render-frame berikutnya tetap
-   memakai backoff.
-7. Frame hook valid pertama membuat context ImGui, mematikan persistence `.ini`
-   ImGui, me-resolve path config dari nama package game, memuat konfigurasi
-   proyek jika tersedia, memuat font, dan menerapkan theme serta style settings.
+1. Constructor memastikan command line process berisi `:UnityKillsMe`.
+2. Setup thread terpisah dimulai setelah process gate tanpa sleep di
+   constructor.
+3. Setup thread memiliki startup wait, lalu resolve dan hook `eglSwapBuffers`
+   agar rendering menjadi frame loop utama.
+4. Setup thread menunggu `liblogic.so`, resolve export IL2CPP Unity
+   `2019.4.33f1`, dan attach ke domain IL2CPP.
+5. Setup thread resolve dan hook `UnityEngine.Input.GetTouch` saat metadata
+   method tersedia.
+6. `RuntimeState::Il2CppReady` diset, binding pass pertama berjalan secara
+   guarded, dan retry render-frame berikutnya tetap memakai backoff.
+7. Frame hooked pertama yang valid membuat context ImGui, mematikan persistence
+   `.ini`, resolve path config dari package game, load config saat tersedia,
+   load font, lalu menerapkan theme dan style.
 8. Setiap hooked frame attach render thread ke IL2CPP bila memungkinkan sebelum
-   pekerjaan fitur managed berjalan.
-9. `TickFeatures()` mencoba ulang binding yang belum tersedia, me-refresh battle
-   bridge dan shop panel reference melalui GC handle yang dipin saat match
-   aktif, me-refresh state match, dan mencoba ulang loading table cache.
-10. Diagnostik Info, Shop, Arena, Auto-Play, HUD Settings, dan Test hanya
-    me-refresh data runtime yang dibutuhkan.
-11. Auto-Play, Arena, Shop, Combat, dan riwayat opponent berjalan pada tick
-    bounded masing-masing, bukan pada setiap render pass; Auto-Play menjaga
-    cooldown built-in deploy, smart formation, refresh AI, level-up, dan auction
-    tetap independen. Frame yang sibuk menunda tick fitur prioritas lebih rendah
-    daripada menjalankan semua pekerjaan managed yang tertunda sekaligus.
-12. Input touch Unity diteruskan ke input mouse ImGui melalui path hook
-    `GetTouch`.
-13. Saat state match berpindah ke ended, semua handle object managed yang dipin
-    selama match dilepas bersama dan pointer managed reference cache dibersihkan.
+   managed feature work berjalan.
+9. `TickFeatures()` retry binding yang hilang, refresh battle bridge dan shop
+   panel melalui pinned GC handle saat match aktif, refresh match state, dan
+   retry table cache loading.
+10. Diagnostik Info, Shop, Arena, HUD Settings, dan Test hanya me-refresh data
+    runtime yang dibutuhkan.
+11. Arena, Shop, Combat, dan riwayat opponent berjalan pada tick bounded
+    masing-masing, bukan pada setiap render pass. Frame sibuk menunda feature
+    tick prioritas lebih rendah, bukan menjalankan semua pending managed work
+    sekaligus.
+12. Input touch Unity diteruskan ke input mouse ImGui melalui path `GetTouch`
+    yang di-hook.
+13. Saat match state berpindah ke ended, semua pinned managed-object handle yang
+    terkumpul untuk match dilepas bersama dan pointer cache managed reference
+    dibersihkan.
 
 Urutan ini disengaja. Render hook bisa aktif sebelum IL2CPP siap, sehingga logic
 fitur managed harus tetap berada di balik readiness check. Rendering, input, dan
@@ -681,162 +600,40 @@ Review terbaru terhadap `jni/Main.cpp`, `jni/structures/Structures.hpp`,
 `jni/Android.mk`, `.github/workflows/build.yml`, dan `dump/dump.cs` menyorot
 area yang rawan bug berikut:
 
-- Render hook dipasang sebelum `liblogic.so` dan IL2CPP siap. Kode frame-time
-  harus tahan terhadap runtime managed yang belum siap dan tidak boleh memanggil
-  API IL2CPP kecuali `AttachRenderIl2CppThread()` berhasil.
-- Startup wait harus tetap berada di setup thread detached, bukan constructor,
-  agar loading native library tidak memblokir startup Unity lebih lama dari yang
-  diperlukan.
-- Pekerjaan render-frame memiliki budget. Retry binding, loading tabel, refresh
-  HUD prediksi, serta scan board/opponent Auto-Play yang lebih berat boleh
-  menunda tick automation berikutnya ke frame selanjutnya, tetapi tick tersebut
-  tetap retryable.
-- Call IL2CPP, Unity, dan game managed juga dihitung per frame. Jangan
-  melewati budget managed-work di hot loop atau diagnostik Test hanya untuk
-  menghindari perubahan delay tick yang sudah ada.
-- Reference object managed yang persisten hanya dipublish setelah dipin dengan
-  `il2cpp_gchandle_new(obj, true)`. Registry handle bersifat match-scoped:
-  handle tetap hidup selama refresh object dan hanya dilepas saat match aktif
-  sudah berakhir, sehingga perubahan reference sementara tidak membuat raw
-  object cache rentan terhadap GC move atau collection.
-- Action group Auto-Play setelah planning juga dibatasi budget. Scoring card,
-  bid auction, built-in AI, smart formation, dan level-up tidak boleh menumpuk
-  dalam satu render pass ketika budget frame sudah terpakai.
-- Lookup method memakai hasil method yang sukses sebagai cache reusable dan
-  menyimpan scan kosong di balik miss backoff singkat. Lookup field juga hanya
-  meng-cache miss di balik backoff retry binding. Jangan mengubahnya menjadi
-  failure permanen.
-- Matching method memakai class name, method name, jumlah parameter, dan
-  containment nama parameter yang case-insensitive. Binding baru yang sensitif
-  terhadap overload harus dicek terhadap dump, bukan hanya compile sukses.
-- Publikasi table cache bersifat all-or-nothing untuk data hero, equipment, dan
-  GogoCard. Jika salah satu tabel belum tersedia setelah update game, UI
-  terkait harus tetap menampilkan `Waiting for ...`, bukan menganggap tabel game
-  kosong.
-- Automation Shop bergantung pada operability UI live, bukan hanya method battle
-  data. Aksi buy dan refresh harus tetap membutuhkan shop panel yang tidak
-  delay, tidak spectate, dan diterima oleh `CanOperate(Boolean)`.
-- Force hero termahal untuk Scavenger terikat ke auto-refresh regular shop dari
-  `MCBattleBridge.OnRefreshShop`. Fitur ini me-resolve relation
-  Scavenger/Shadow Mercenary dari metadata relation-tip, membutuhkan active
-  count 2 atau lebih, lalu membeli slot shop yang lebih murah sambil menghormati
-  affordability dan keep-gold.
-- Auto-Play sementara memiliki assist Shop, Arena, dan Combat melalui policy
-  backup yang di-capture. Edit user pada toggle assist saat Auto-Play aktif
-  dapat kembali ke nilai sebelum Auto-Play saat Auto-Play berhenti.
-- Koordinasi built-in AI bersifat opt-in. Jaga call langsung `StartAI` tetap di
-  luar fase fight, fight-result, dan monster, serta pertahankan default nonaktif
-  agar mengaktifkan Auto-Play tidak langsung memanggil entry point AI game.
-- Prediksi opponent menggabungkan pair data exact, state invasion manager,
-  urutan invader berbasis dump, siklus terbaru yang dipelajari, sinyal pola
-  siklus tujuh round yang dibatasi, fallback round-robin, jarak siklus terbaru,
-  dan riwayat pertemuan terbaru. Hanya current opponent lokal yang exact yang
-  boleh ditampilkan sebagai `100%`.
-- SpeedHack mengubah time scale Unity global. Fitur ini harus tetap reset ke
-  `1.0x` saat dinonaktifkan, saat state battle aktif hilang, atau saat feature
-  state di-reset.
-- Force Complete Achievements Task bergantung pada
-  `MCLogicAchievementRecordComp.AchievementDataBase.GetResult`,
-  `canRecordAchievementData`, `JudgeFinalRelation`,
-  `JudgeReachCondition(List<MCLogicPlayer>)`,
-  `MCLogicAchievementRecordComp.AchievementRoundData.GetResult`,
-  `AchievementRoundData.RefreshData`, dan field counter round
-  `m_roundAchievementCount`/`m_roundSuccessCount`. Verifikasi semuanya terhadap
-  `dump/dump.cs` sebelum mengubah hook achievement atau write counter.
-- Update checker hanya informatif. Pertahankan prosesnya asynchronous, simpan
-  metadata rilis di cache dengan `RuntimeMutex::UpdateMutex`, throttle retry,
-  dan jangan menambahkan download otomatis, deployment, forced update, bypass,
-  atau upload data gameplay. Request saat ini menonaktifkan verifikasi
-  certificate peer dan host libcurl, jadi jangan gunakan ulang path ini untuk
-  payload sensitif atau fitur network yang lebih luas tanpa memulihkan validasi
-  certificate.
-- Komentar fungsi kini mencakup semua definisi native function milik proyek di
-  `jni/Main.cpp` dan `jni/structures/Structures.hpp`; helper baru harus menjaga
-  coverage tersebut, bukan hanya mengandalkan komentar section.
+- Render hook dipasang sebelum `liblogic.so` dan IL2CPP siap, jadi code per
+  frame harus aman saat managed runtime belum ready.
+- Retry binding, table load, refresh HUD prediksi, dan diagnostik dibatasi
+  budget. Work yang tertunda harus retry di frame berikutnya, bukan menumpuk
+  managed call dalam satu render pass.
+- Managed-object reference persistent harus dipin dengan
+  `il2cpp_gchandle_new(obj, true)` dan dilepas hanya saat match selesai.
+- Publikasi table cache tetap all-or-nothing untuk hero, equipment, dan
+  GogoCard. UI terkait harus tetap menampilkan `Waiting for ...` saat table
+  yang dibutuhkan belum tersedia.
+- Automasi shop bergantung pada operability UI live, termasuk delay, spectate,
+  dan check `CanOperate(Boolean)` saat binding tersedia.
+- Label bot pada Info berasal dari `SystemData.RoomData.bRobot` melalui
+  `ILOGIC_GetStPlayerData(UInt64)` dan harus turun ke nama player biasa saat
+  binding atau metadata field belum tersedia.
+- Prediksi opponent harus menggabungkan exact pair data terlebih dahulu, lalu
+  invader order, recent-cycle learning, histori pola tujuh round, fallback
+  round-robin, dan histori per-player. Hanya exact current opponent player
+  lokal yang boleh tampil `100%`.
+- SpeedHack harus mereset Unity time scale ke `1.0x` saat disable, battle tidak
+  aktif, dan feature reset.
 
 ## Catatan Development
 
-- Jaga perubahan native tetap fokus dan mudah di-review.
-- Validasi class name, method name, jumlah parameter, return type, dan field layout terhadap local reference artifacts sebelum menambahkan IL2CPP call.
-- Gunakan helper typed field bersama untuk field instance reguler agar hot path
-  memakai akses offset, dan pertahankan helper raw IL2CPP/static untuk field
-  static atau setter yang membutuhkan behavior runtime-managed.
-- Pertahankan runtime code fitur di `jni/Main.cpp` kecuali refactor memang diminta secara eksplisit.
-- Gunakan section lokal yang jelas dan jaga komentar fungsi tetap sesuai,
-  terutama di sekitar IL2CPP call berisiko, hook, layout value-type, dan batas
-  timing.
-- Pertahankan urutan boot saat ini: process gate, setup thread, hook
-  `eglSwapBuffers` lebih awal, tunggu `liblogic.so`, resolve export IL2CPP,
-  attach setup thread, hook `GetTouch`, lalu inisialisasi overlay di render
-  thread.
-- Jaga pekerjaan constructor tetap non-blocking: process gate, jalankan setup
-  thread, lalu return.
-- Gunakan tab Test, termasuk section Runtime Status di dalamnya, saat
-  memvalidasi binding baru atau menelusuri runtime state yang terlambat tersedia.
-- Untuk perubahan Arena Skip Round, verifikasi
-  `MCLogicBattleData.get_logicRoundMgr`, `LogicRoundMgr.SetRound(UInt32)`, dan
-  `LogicRoundMgr.NextRound(Boolean)` terhadap `dump/dump.cs`; bagian yang belum
-  siap harus tetap muncul sebagai `Waiting for ...`.
-- Untuk perubahan Arena SpeedHack, verifikasi
-  `UnityEngine.Time.set_timeScale(Single)` terhadap `dump/dump.cs` dan reset
-  scale ke normal saat fitur dinonaktifkan.
-- Untuk perubahan Info GGC, verifikasi
-  `MCLogicBattleData.ILOGIC_GetCrystalQualityByRound(UInt64, Int32)` terhadap
-  `dump/dump.cs`, jaga scan round tetap bounded, dan pertahankan readout pada
-  cadence refresh yang di-throttle.
-- Prediksi opponent sebaiknya memprioritaskan runtime state berbasis dump
-  seperti `LogicInvasionMgr`, `LogicRealPlayerInvader.lbmList`,
-  `PairGenRoundTable`/`PairGenTwoPlayerMode`, `lastRoundEnemy`, dan
-  `prevRealPlayerEnemy` sebelum fallback ke urutan heuristik.
-- Sinyal pola siklus tujuh round berasal dari history per-player yang sudah
-  selesai dan dipelajari dari `../MCGG_Predictor`; jaga posisinya di bawah bukti
-  pair exact dan invader-order, serta abaikan entry current-round agar prediksi
-  tidak memakai observasi live sebagai history yang sudah selesai.
-- Guide publik tentang scouting dan positioning mendukung heuristik siklus
-  terbaru dan board-read, tetapi tidak boleh mengalahkan data runtime exact
-  current-opponent.
-- Pertahankan diagnostik Test sebagai read-only kecuali task secara eksplisit
-  meminta aksi, dan verifikasi setiap binding tambahan terhadap `dump/dump.cs`.
-- Jaga overlay utama tetap mudah diakses pada display mobile sambil
-  mempertahankan navigasi utama berbasis TabBar.
-- Pertahankan persistence Settings tetap memakai file config milik proyek, bukan mengaktifkan persistence `.ini` ImGui.
-- Pertahankan retryable binding behavior. Jangan menyimpan method atau field unresolved secara permanen sebagai missing.
-- Pertahankan tick terpisah 100 ms untuk shop automation dan arena effects,
-  tick 250 ms untuk Combat dan Auto-Play, serta cadence 500 ms untuk Info GGC,
-  riwayat opponent, dan HUD kecuali perubahan timing memang bagian dari task.
-- Pertahankan kontrol burst di dalam cadence tersebut. Gunakan budget
-  managed-work dan deferral frame untuk reader IL2CPP/game yang mahal, bukan
-  memperpanjang delay yang sudah ada.
-- Pertahankan built-in AI sebagai assist Auto-Play opt-in yang phase-gated dan
-  stateful; jangan membuat aktivasi Auto-Play langsung memanggil `StartAI`.
-- Pertahankan throttle shop automation untuk buy, repeat-buy, refresh, target-worth, dan pengecekan Recommendation Lineup.
-- Jaga loading table cache tetap demand-driven dan clip tabel data panjang agar
-  UI tabel tidak memproses setiap row pada setiap frame.
-- Jaga row tabel hero tetap difilter dari ID invalid, commander, dan nama
-  placeholder yang dikenal sebelum publish cache tabel.
-- Lindungi akses langsung ke `FeatureState::Heroes`, `FeatureState::Equips`,
-  `FeatureState::Cards`, `FeatureState::ShopSelectedHeroes`, target count
-  Recommendation Lineup, dan cache hero Recommendation Lineup dengan
-  `RuntimeMutex::FeatureMutex` atau helper snapshot/access yang sudah ada.
-- Hindari menahan `RuntimeMutex::FeatureMutex` saat melakukan call IL2CPP
-  managed. Kumpulkan data lokal terlebih dahulu, lalu publish hasilnya di
-  bawah lock.
-- Jaga perubahan cache method dan field tetap berada di bawah
-  `RuntimeMutex::CacheMutex`, dan lindungi string UI/config dengan
-  `RuntimeMutex::UiMutex`. Metadata release untuk update check berada di bawah
-  `RuntimeMutex::UpdateMutex`.
-- Pertahankan scan selected-target shop tetap bounded dan berbasis snapshot.
-- Pastikan nama theme Appearance dan entry palette tetap sejajar saat
-  menambahkan theme. Config lama mengharapkan Catppuccin Mocha tetap berada di
-  theme index `1`.
-- Pertahankan default ABI sebagai `arm64-v8a`.
-- Jaga kompatibilitas Unity tetap selaras dengan `2019.4.33f1`.
-- Jaga mode bahasa native tetap selaras dengan `c++26` kecuali konfigurasi build memang diubah secara sengaja.
-- Pertahankan submodule curl, libpsl `0.21.5`, dan OpenSSL tetap dipin, lalu rebuild
-  `obj/openssl-install/`, `obj/libpsl-install/`, serta `obj/curl-install/` dengan
-  `jni/build-curl-android.sh` sebelum menjalankan `ndk-build`.
-- Jangan commit output generated `obj/` atau `libs/`.
-- Hindari menambahkan instruksi deployment runtime atau instruksi yang berorientasi penyalahgunaan ke dokumentasi proyek.
+- Jaga feature work tetap di `jni/Main.cpp` kecuali task secara eksplisit
+  meminta refactor multi-file.
+- Verifikasi method IL2CPP, signature hook, value type, dan field baru terhadap
+  `dump/dump.cs`; RVA dump adalah diagnostik, bukan kontrak binding.
+- Pertahankan perilaku lookup method dan field yang retryable. Metadata yang
+  belum tersedia harus memakai backoff singkat dan bisa resolve belakangan.
+- Jaga UI tabel panjang tetap memakai clipping dan load table cache hanya untuk
+  tab berbasis tabel atau automasi aktif yang memakai metadata tabel.
+- Jalankan `git diff --check` untuk perubahan native atau campuran. Repository
+  ini tidak memiliki framework unit test khusus.
 
 ## Troubleshooting
 
