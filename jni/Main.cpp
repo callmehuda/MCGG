@@ -8086,6 +8086,7 @@ struct PlayerInfoRow {
     std::string playerName;
     std::string sortName;
     std::string enemyName;
+    std::string displayName;
 };
 
 struct GgcQualityRow {
@@ -8325,6 +8326,10 @@ void RefreshInfoPlayerRows(bool force = false) {
             return left.accountId < right.accountId;
         }
     );
+
+    for (PlayerInfoRow& row : UiCache::InfoPlayerRows) {
+        row.displayName = FormatInfoPlayerName(row);
+    }
 
     UiCache::InfoPlayersReady = true;
 }
@@ -8780,8 +8785,7 @@ void DrawInfoPlayersTable() {
         ImGui::TableNextRow();
 
         ImGui::TableSetColumnIndex(0);
-        std::string playerDisplay = FormatInfoPlayerName(row);
-        ImGui::TextUnformatted(playerDisplay.c_str());
+        ImGui::TextUnformatted(row.displayName.c_str());
 
         ImGui::TableSetColumnIndex(1);
         ImGui::TextUnformatted(row.enemyName.empty() ? "-" : row.enemyName.c_str());
@@ -10070,6 +10074,7 @@ struct OpponentPredictionRow {
     bool lockedPercent = false;
     int recentMeetings = 0;
     std::string currentEnemyName;
+    std::string displayName;
 };
 
 struct OpponentForecastRow {
@@ -11505,6 +11510,9 @@ bool RefreshCachedOpponentPredictionRows(
 
     PredictionCache::CachedRows = BuildOpponentPredictions(selfAccountId);
     SortOpponentPredictionRows(PredictionCache::CachedRows);
+    for (OpponentPredictionRow& row : PredictionCache::CachedRows) {
+        row.displayName = row.mirror ? row.name + " (Mirror)" : row.name;
+    }
     PredictionCache::CachedRowsReady = true;
     PredictionCache::CachedRowsSelfAccountId = selfAccountId;
     PredictionCache::LastRowsRefresh = now;
@@ -11669,11 +11677,7 @@ void DrawOpponentPredictionTable(uint64_t selfAccountId) {
     for (const OpponentPredictionRow& row : rows) {
         ImGui::TableNextRow();
         ImGui::TableSetColumnIndex(0);
-        std::string playerName = row.name;
-        if (row.mirror) {
-            playerName += " (Mirror)";
-        }
-        ImGui::TextUnformatted(playerName.c_str());
+        ImGui::TextUnformatted(row.displayName.c_str());
         ImGui::TableSetColumnIndex(1);
         ImGui::Text("%d%%", row.percent);
         ImGui::TableSetColumnIndex(2);
