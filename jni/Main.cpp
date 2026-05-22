@@ -218,6 +218,7 @@ namespace RuntimeConfig {
     constexpr int ReferenceRefreshMs = 100;
     constexpr int MatchStateCheckMs = 500;
     constexpr int TableRetryMs = 2000;
+    constexpr int MaxHeroTableId = 10'000'000;
     constexpr int ArenaTickMs = 100;
     constexpr int ShopTickMs = 100;
     constexpr int CombatTickMs = 250;
@@ -483,6 +484,18 @@ constexpr const char* kMenuLanguages[] = {
 
 constexpr int kMenuLanguageCount =
     static_cast<int>(sizeof(kMenuLanguages) / sizeof(kMenuLanguages[0]));
+
+// Placeholder/non-hero names that must be filtered out of automation lists.
+constexpr const char* kForbiddenHeroNames[] = {
+    "Dijiang",
+    "Johnny",
+    "Bot",
+    "Physical ATK",
+    "Magic ATK"
+};
+
+constexpr int kForbiddenHeroNameCount =
+    static_cast<int>(sizeof(kForbiddenHeroNames) / sizeof(kForbiddenHeroNames[0]));
 
 struct MenuI18nEntry {
     const char* key;
@@ -3158,12 +3171,13 @@ std::string ManagedStringToStd(Il2CppString* value) {
 
 // Filters placeholder and non-hero table names from automation lists.
 bool IsForbidHeroName(const std::string& name) {
-    return name.empty() ||
-        name == "Dijiang" ||
-        name == "Johnny" ||
-        name == "Bot" ||
-        name == "Physical ATK" ||
-        name == "Magic ATK";
+    if (name.empty()) {
+        return true;
+    }
+    return std::any_of(
+        std::begin(kForbiddenHeroNames),
+        std::end(kForbiddenHeroNames),
+        [&](const char* forbidden) { return name == forbidden; });
 }
 
 // Checks whether a hero table row is a playable shop/arena hero, not a commander or placeholder entity.
@@ -3173,7 +3187,7 @@ bool IsPlayableHeroTableEntry(
     bool isCommander
 ) {
     return heroId > 0 &&
-        heroId <= 10000000 &&
+        heroId <= RuntimeConfig::MaxHeroTableId &&
         !isCommander &&
         !IsForbidHeroName(heroName);
 }
